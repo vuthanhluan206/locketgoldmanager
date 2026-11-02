@@ -5,13 +5,11 @@ import json
 
 app = FastAPI()
 
-# Cấu hình bảo mật Trusted Hosts cho phép domain của bạn và Vercel
 app.add_middleware(
     TrustedHostMiddleware, 
     allowed_hosts=["locketgold.vuthanhluan.bond", "*.vercel.app", "localhost", "127.0.0.1"]
 )
 
-# Cấu hình CORS mở rộng
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,9 +18,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Endpoint giả lập bản quyền RevenueCat để kích hoạt Gold
 @app.get("/v1/subscribers/{app_user_id}")
 async def get_subscriber(app_user_id: str):
-    # Cấu trúc JSON giả lập gói Gold với thời hạn vĩnh viễn (năm 2099)
     response_data = {
         "request_date": "2026-11-03T00:00:00Z",
         "request_date_ms": 1793750400000,
