@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     mongodb_database: str = 'locket_manager'
     nextdns_id: str = Field(default='', pattern=r'^([a-fA-F0-9]{6})?$')
     root_ca_path: str = ''
+    root_ca_pem: str = Field(default='', max_length=65536, repr=False)
     allowed_hosts: list[str] = ['localhost', '127.0.0.1', '[::1]']
     require_https: bool = False
     session_ttl_seconds: int = Field(default=3600, ge=300, le=86400)

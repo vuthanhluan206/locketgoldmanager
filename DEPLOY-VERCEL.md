@@ -33,10 +33,11 @@ Nhập các giá trị dưới đây vào Vercel Project Settings → Environmen
 | `REQUIRE_HTTPS` | `true` |
 | `SESSION_TTL_SECONDS` | `3600` |
 | `ROOT_CA_PATH` | Để trống nếu chỉ cấp cấu hình DNS |
+| `ROOT_CA_PEM` | Chứng chỉ Root CA công khai dạng PEM, dùng thay cho `ROOT_CA_PATH` |
 
 Với preview, thêm đúng hostname preview vào `ALLOWED_HOSTS` cho môi trường đó hoặc chỉ triển khai production ban đầu. Không dùng wildcard để bỏ kiểm tra Host. Một deployment URL ngẫu nhiên không nằm trong allowlist sẽ trả 400, dù production domain vẫn hoạt động.
 
-Để `ROOT_CA_PATH` trống cho lần triển khai đầu. `.vercelignore` cố ý loại chứng chỉ và khóa; không trỏ đường dẫn `E:\...` trên cloud. Nếu cần CA sau này, phải cấp chứng chỉ công khai cho runtime theo cơ chế riêng, không đưa private key vào bundle.
+Để thêm Root CA trên Vercel, đặt `ROOT_CA_PATH` trống và dán toàn bộ chứng chỉ công khai vào giá trị `ROOT_CA_PEM`, từ `-----BEGIN CERTIFICATE-----` đến `-----END CERTIFICATE-----`, giữ các dòng hoặc dùng chuỗi `\n`. Không bọc dấu nháy trong giao diện Vercel. Chọn Production, Save và Redeploy, rồi tải/cài lại profile. Chỉ dùng một chứng chỉ Root CA tự ký còn hạn, không dùng intermediate, chuỗi chứng chỉ hoặc private key. `.vercelignore` cố ý loại file chứng chỉ và khóa; đường dẫn `E:\...` không tồn tại trên cloud. Nếu cả hai biến trống thì profile chỉ có DNS. Việc cài chứng chỉ thủ công không tự bật tin cậy SSL/TLS.
 
 Đánh dấu biến bí mật là sensitive nếu Vercel hỗ trợ trong môi trường tương ứng. Mỗi lần đổi biến môi trường phải redeploy. Không đặt cấu hình bí mật trong frontend hoặc `vercel.json`.
 

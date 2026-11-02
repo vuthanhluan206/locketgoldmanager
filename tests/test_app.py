@@ -37,6 +37,7 @@ def client(monkeypatch, password_pair):
     monkeypatch.setenv('REQUIRE_HTTPS', 'false')
     monkeypatch.setenv('NEXTDNS_ID', 'abc123')
     monkeypatch.setenv('ROOT_CA_PATH', '')
+    monkeypatch.setenv('ROOT_CA_PEM', '')
     get_settings.cache_clear()
     app = create_app()
     accounts, admins, sessions = AsyncMock(), AsyncMock(), AsyncMock()

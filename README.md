@@ -16,7 +16,9 @@ python -m app.bootstrap
 
 Không ghi đè `.env` đã có nếu muốn giữ cấu hình. `app.bootstrap` hỏi email và mật khẩu hai lần (ẩn khi nhập), chỉ lưu email và hash có salt vào `.env`. Nhập tài khoản bạn muốn sử dụng; không có email/mật khẩu quản trị mặc định trong source. Bản local trong phiên làm việc này đã được cấu hình bằng tài khoản bạn yêu cầu.
 
-Điền `MONGODB_URI` và `NEXTDNS_ID` của bạn trong `.env`. `NEXTDNS_ID` gồm 6 ký tự hex; bỏ trống thì API tải profile trả 503. `ROOT_CA_PATH` tùy chọn là đường dẫn file chứng chỉ CA công khai PEM/DER. Không cung cấp private key. Đường dẫn này chỉ do người triển khai cấu hình, không nhận từ HTTP request.
+Điền `MONGODB_URI` và `NEXTDNS_ID` của bạn trong `.env`. `NEXTDNS_ID` gồm 6 ký tự hex; bỏ trống thì API tải profile trả 503. Để profile chứa cả DNS và Root CA, cấu hình **một** trong hai biến: `ROOT_CA_PATH` (file chứng chỉ công khai PEM/DER có trên server) hoặc `ROOT_CA_PEM` (nội dung PEM, hỗ trợ xuống dòng thật hoặc chuỗi `\n`). Không cung cấp private key. Cấu hình chỉ do người triển khai đặt, không nhận từ HTTP request. Nếu bỏ trống cả hai biến, profile vẫn chỉ chứa DNS.
+
+Profile xuất XML plist với `PayloadScope=System`, UUID riêng cho profile và từng payload; chứng chỉ được chuẩn hóa thành DER, kiểm tra tự ký, CA và thời hạn. XML này **chưa được ký CMS**; iOS có thể hiển thị “Not Signed”. Không có bảo đảm cài thành công trên mọi thiết bị/chính sách MDM. Sau khi cài thủ công, người dùng vẫn phải bật tin cậy tại **Cài đặt → Cài đặt chung → Giới thiệu → Cài đặt tin cậy chứng chỉ**. DNS không ép chuyển tiếp HTTPS và profile không tự cấp quyền Locket Gold.
 
 ```powershell
 docker compose up -d
