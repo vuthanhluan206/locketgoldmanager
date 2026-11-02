@@ -1,0 +1,35 @@
+import plistlib
+from pathlib import Path
+from uuid import NAMESPACE_URL, uuid5
+from cryptography import x509
+from cryptography.hazmat.primitives.serialization import Encoding
+from fastapi import HTTPException
+from .config import Settings
+
+
+def payload(kind: str, name: str) -> dict:
+    identifier = 'local.license-manager.' + name
+    return {'PayloadType': kind, 'PayloadVersion': 1, 'PayloadIdentifier': identifier,
+            'PayloadUUID': str(uuid5(NAMESPACE_URL, identifier)), 'PayloadDisplayName': name}
+
+
+def build_profile(settings: Settings) -> bytes:
+    if not settings.nextdns_id:
+        raise HTTPException(503, 'Chưa cấu hình NEXTDNS_ID trên server.')
+    dns = payload('com.apple.dnsSettings.managed', 'NextDNS')
+    dns['DNSSettings'] = {'DNSProtocol': 'HTTPS',
+                          'ServerURL': f'https://dns.nextdns.io/{settings.nextdns_id}'}
+    contents = [dns]
+    if settings.root_ca_path:
+        raw = Path(settings.root_ca_path).read_bytes()
+        cert = (x509.load_pem_x509_certificate(raw) if b'-----BEGIN CERTIFICATE' in raw
+                else x509.load_der_x509_certificate(raw))
+        if not cert.extensions.get_extension_for_class(x509.BasicConstraints).value.ca:
+            raise ValueError('ROOT_CA_PATH must contain a CA certificate')
+        ca = payload('com.apple.security.root', 'Root CA')
+        ca['PayloadContent'] = cert.public_bytes(Encoding.DER)
+        contents.append(ca)
+    profile = payload('Configuration', 'Locket Gold DNS')
+    profile.update(PayloadContent=contents, PayloadRemovalDisallowed=False,
+                   PayloadDescription='Cấu hình NextDNS. Không tự cấp quyền trong ứng dụng Locket.')
+    return plistlib.dumps(profile)

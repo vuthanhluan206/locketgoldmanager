@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><title>Locket Gold • Cấu hình</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#101310;color:#eef2e9}*{box-sizing:border-box}body{margin:0}main{max-width:980px;margin:auto;padding:32px 22px}header{display:flex;justify-content:space-between;align-items:center;color:#e2c477}small,.muted{color:#a4afa2}article{padding:70px 0}h1{font-size:clamp(38px,7vw,72px);line-height:1.08;max-width:750px;margin:24px 0}p{line-height:1.7;max-width:650px}button{background:#e2c477;color:#171b13;border:0;border-radius:12px;padding:14px 22px;font-weight:700;cursor:pointer}button:disabled{opacity:.5;cursor:wait}button.secondary{background:#30392e;color:#fff}.card{border:1px solid #354130;border-radius:20px;background:#192018;padding:24px;margin:20px 0}.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:15px}label{display:block;margin:14px 0}input{display:block;width:100%;margin-top:8px;padding:12px;border-radius:8px;border:1px solid #59644f;background:#101310;color:white}table{width:100%;border-collapse:collapse;text-align:left}td,th{padding:14px 8px;border-bottom:1px solid #354130}td{overflow-wrap:anywhere}.scroll{overflow:auto}#message,#adminMessage{min-height:24px;color:#e2c477}footer{padding:24px 0;border-top:1px solid #354130}a{color:#e2c477}
+</style>
+</head>
+<body><main>
+<header><strong>◈ LOCKET GOLD</strong><small>CỔNG CẤU HÌNH DỊCH VỤ</small></header>
+<article><small>THIẾT LẬP TRÊN iPHONE / iPAD</small><h1>Một cấu hình.<br>Kết nối đơn giản.</h1>
+<p class="muted">Tải cấu hình DNS NextDNS dành cho thiết bị của bạn. Hãy xem nội dung cấu hình trong Cài đặt trước khi cài đặt.</p>
+<button id="download">Tải về cấu hình ngay ↓</button><p id="message" role="status" aria-live="polite"></p>
+<div class="steps"><section class="card"><strong>01 · Tải cấu hình</strong><p class="muted">Mở trang bằng Safari rồi bấm tải về.</p></section><section class="card"><strong>02 · Mở Cài đặt</strong><p class="muted">Vào Cài đặt → Cài đặt chung → VPN &amp; Quản lý thiết bị.</p></section><section class="card"><strong>03 · Xem và cài đặt</strong><p class="muted">Kiểm tra DNS và chứng chỉ đi kèm, sau đó xác nhận nếu bạn tin tưởng đơn vị cung cấp.</p></section></div>
+<p class="muted">Cấu hình DNS không tự kích hoạt thuê bao Gold trong ứng dụng Locket chính thức. Nếu có chứng chỉ CA đi kèm, chứng chỉ đó có thể mở rộng nguồn tin cậy của thiết bị; chỉ cài khi bạn biết rõ mục đích sử dụng.</p>
+</article>
+<!-- ADMIN_PANEL -->
+<footer><small>Cổng quản lý độc lập · Không phải trang chính thức của Locket hoặc RevenueCat.</small></footer>
+</main>
+<script>
+document.getElementById('download').onclick=async function(){
+ this.disabled=true;const message=document.getElementById('message');
+ try{const r=await fetch('/profile.mobileconfig');if(!r.ok){const e=await r.json();throw Error(e.detail||'Không thể tải cấu hình.');}
+ const url=URL.createObjectURL(await r.blob());const a=document.createElement('a');a.href=url;a.download='locket.mobileconfig';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);message.textContent='Đã tải cấu hình. Tiếp tục trong ứng dụng Cài đặt.';
+ }catch(e){message.textContent=e.message;}finally{this.disabled=false;}
+};
+</script></body></html>
