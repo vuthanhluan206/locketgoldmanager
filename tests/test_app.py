@@ -153,6 +153,21 @@ def test_bad_login_and_rate_limit(client):
     assert response.status_code == 429 and response.headers['retry-after'] == '60'
 
 
+def test_login_reports_configuration_drift_without_issuing_session(client, caplog):
+    http, _, admins, sessions, _, password, _ = client
+    admins.find_one.side_effect = None
+    for document in [None, {'email': 'old@example.test', 'password_hash': 'old-hash'}]:
+        admins.find_one.return_value = document
+        response = http.post('/api/admin/login', json={
+            'email': 'admin@example.test', 'password': password,
+        })
+        assert response.status_code == 503
+        assert 'ADMIN_CONFIG_MISMATCH' in response.text
+    assert 'ADMIN_CONFIG_MISMATCH' in caplog.text
+    assert password not in caplog.text
+    sessions.insert_one.assert_not_awaited()
+
+
 def test_upsert_injection_and_subscriber(client):
     http, accounts, *_ = client
     _, headers = sign_in(client)
