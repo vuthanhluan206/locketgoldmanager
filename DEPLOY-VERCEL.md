@@ -2,7 +2,7 @@
 
 Repository này có entrypoint `index.py` theo cơ chế FastAPI native của Vercel và chọn Python 3.12 qua `.python-version`. `vercel.json` chỉ định FastAPI và đặt lại Build Command/Output Directory về mặc định, tránh phục vụ riêng HTML tĩnh. Giữ nguyên backend; Vercel hỗ trợ lifespan. Không chạy Dockerfile, `uvicorn --reload` hoặc `docker compose` trong Vercel Build Command.
 
-`pyproject.toml` khai báo tường minh `[tool.vercel] entrypoint = "app.main:app"`, tránh phụ thuộc vào việc tự dò file import lại app hoặc app được khởi tạo qua factory. Runtime dependencies tiếp tục nằm trong `requirements.txt`.
+`pyproject.toml` khai báo tường minh `[tool.vercel] entrypoint = "app.main:app"`, tránh phụ thuộc vào việc tự dò file import lại app hoặc app được khởi tạo qua factory. Vercel cài runtime dependencies từ `[project].dependencies` trong file này; danh sách đồng bộ với `requirements.txt` cho local và Docker, có test kiểm tra không bị lệch.
 
 ## 1. Chuẩn bị database và tài khoản
 
@@ -44,6 +44,7 @@ Với preview, thêm đúng hostname preview vào `ALLOWED_HOSTS` cho môi trư�
 
 - Nếu trang chủ hiện cả login và API trả Vercel `NOT_FOUND`: kiểm tra Settings → Build and Deployment, Root Directory phải là gốc repo (`./` hoặc để trống), không phải `web`. Framework là FastAPI; tắt override Output Directory và Build Command, không xuất riêng `web`. Sau đó tạo deployment từ commit mới nhất trên `main`. HTML thô có `__NONCE__` nghĩa là request chưa qua FastAPI.
 - Nếu build báo `FASTAPI_ENTRYPOINT_NOT_FOUND`, xác nhận deployment dùng commit có `pyproject.toml` và Root Directory là gốc repository. Không redeploy mã cũ chỉ có cấu hình tự dò.
+- Nếu runtime báo `ModuleNotFoundError: No module named 'fastapi'` sau dòng build `Installing required dependencies from pyproject.toml`, phải deploy commit có `[project].dependencies` đầy đủ. File chỉ khai báo `[tool.vercel]` không đủ để cài dependencies khi Vercel chọn pyproject thay requirements.
 
 - Thiết lập rate limit chung tại Vercel Firewall/WAF hoặc dịch vụ edge cho `POST /api/admin/login` theo khả năng gói của bạn. Limiter hiện có nằm trong từng instance và không chống được brute-force phân tán trên nhiều instance.
 - Xác minh HTTPS scheme/IP proxy thực tế; không tùy tiện tin `X-Forwarded-For` từ client. Nếu gặp 400, kiểm tra detail trong JSON và log: phân biệt lỗi Host với `HTTPS is required`; không tắt các kiểm tra một cách mặc định.

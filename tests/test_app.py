@@ -263,3 +263,20 @@ def test_https_enforcement(client, monkeypatch):
     response = http.get('https://localhost/')
     assert response.status_code == 200
     assert response.headers['strict-transport-security'] == 'max-age=31536000'
+
+
+def test_vercel_manifest_has_runtime_dependencies():
+    from pathlib import Path
+    import importlib
+    import tomllib
+    from fastapi import FastAPI
+
+    root = Path(__file__).resolve().parent.parent
+    config = tomllib.loads((root / 'pyproject.toml').read_text(encoding='utf-8'))
+    requirements = {
+        line.strip() for line in (root / 'requirements.txt').read_text().splitlines()
+        if line.strip() and not line.lstrip().startswith('#')
+    }
+    assert set(config['project']['dependencies']) == requirements
+    module, name = config['tool']['vercel']['entrypoint'].split(':')
+    assert isinstance(getattr(importlib.import_module(module), name), FastAPI)
