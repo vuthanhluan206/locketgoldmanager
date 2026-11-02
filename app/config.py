@@ -16,6 +16,16 @@ class Settings(BaseSettings):
     allowed_hosts: list[str] = ['localhost', '127.0.0.1', '[::1]']
     require_https: bool = False
     session_ttl_seconds: int = Field(default=3600, ge=300, le=86400)
+    subscriber_api_token: SecretStr | None = None
+
+    @field_validator('subscriber_api_token')
+    @classmethod
+    def validate_subscriber_token(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None:
+            raw = value.get_secret_value()
+            if not 32 <= len(raw) <= 256 or not raw.isascii() or any(c.isspace() for c in raw):
+                raise ValueError('SUBSCRIBER_API_TOKEN must be a random ASCII token of 32-256 characters')
+        return value
 
     @field_validator('superadmin_password_hash')
     @classmethod

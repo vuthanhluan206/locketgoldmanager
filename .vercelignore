@@ -14,3 +14,4 @@ source-code.zip
 *.p12
 *.pfx
 *.log
+generate_root_ca.py

@@ -45,6 +45,7 @@
     <p class="quiet" id="identity"></p>
     <form id="accountForm">
       <div class="row"><div class="field"><label for="accountId">Locket ID</label><input id="accountId" required maxlength="128" pattern="[A-Za-z0-9_$:@.\-]+" autocomplete="off"></div><div class="field"><label for="expiry">Hết hạn (giờ trên thiết bị)</label><input id="expiry" type="datetime-local" required></div></div>
+      <p class="note">Dùng ID nội bộ mà ứng dụng gửi tới API thuê bao, không dán link chia sẻ. Lưu ID không tự kích hoạt Gold trong ứng dụng Locket chính thức.</p>
       <button id="save" type="submit">Lưu / gia hạn tài khoản</button>
     </form>
     <p class="status" id="adminMessage" role="status" aria-live="polite"></p>
@@ -101,7 +102,16 @@
           catch (error) { $('adminMessage').textContent = error.message; }
           finally { remove.disabled = false; }
         };
-        actions.append(edit, remove); tr.append(actions); body.append(tr);
+        const check = document.createElement('button'); check.type = 'button'; check.className = 'secondary'; check.textContent = 'Kiểm tra API';
+        check.onclick = async () => {
+          check.disabled = true;
+          try {
+            const result = await api('/v1/subscribers/' + encodeURIComponent(row.locket_id));
+            $('adminMessage').textContent = 'API xác nhận ' + row.locket_id + ': ' + (result.subscriber.entitlements.Gold ? 'còn hạn cấp phép.' : 'không có quyền hoặc đã hết hạn.');
+          } catch (error) { $('adminMessage').textContent = error.message; }
+          finally { check.disabled = false; }
+        };
+        actions.append(edit, check, remove); tr.append(actions); body.append(tr);
       }
       if (!rows.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 4; td.textContent = 'Chưa có tài khoản.'; tr.append(td); body.append(tr); }
       $('previous').disabled = skip === 0; $('next').disabled = rows.length < limit || skip + limit > 10000;

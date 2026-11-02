@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse
 from pymongo.errors import DuplicateKeyError
 from .database import get_accounts
 from .models import AccountId, AccountInput, AccountOutput, subscriber_response
-from .security import require_admin
+from .security import require_admin, require_subscriber_access
 
 router = APIRouter()
 WEB = Path(__file__).resolve().parent.parent / 'web'
@@ -38,12 +38,12 @@ async def admin_login(request: Request):
 @router.get('/profile.mobileconfig')
 async def download_profile(request: Request):
     if not request.app.state.profile:
-        raise HTTPException(503, 'Chưa cấu hình NEXTDNS_ID trên server.')
+        raise HTTPException(503, 'Cấu hình DNS hoặc chứng chỉ chưa sẵn sàng. Kiểm tra NEXTDNS_ID và ROOT_CA_PEM trong server logs.')
     return Response(request.app.state.profile, media_type='application/x-apple-aspen-config',
                     headers={'Content-Disposition': 'attachment; filename="locket.mobileconfig"'})
 
 
-@router.get('/v1/subscribers/{account_id}')
+@router.get('/v1/subscribers/{account_id}', dependencies=[Depends(require_subscriber_access)])
 async def subscriber(account_id: AccountId, accounts: Accounts):
     account = await accounts.find_one({'locket_id': account_id}, {'_id': 0})
     return subscriber_response(account_id, account, datetime.now(timezone.utc))

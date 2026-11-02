@@ -9,7 +9,7 @@ Repository này có entrypoint `index.py` theo cơ chế FastAPI native của Ve
 - Tạo MongoDB Atlas hoặc dùng MongoDB có thể kết nối từ Vercel qua TLS. URI `localhost` của máy bạn không hoạt động trên Vercel.
 - Tạo database user quyền `readWrite` chỉ trên database của ứng dụng. Cấu hình Atlas Network Access theo mạng/IP egress của môi trường deploy; không mặc định mở database cho mọi IP. Nếu cần egress cố định/private network, kiểm tra tính năng và gói nền tảng hỗ trợ trước.
 - Trước khi public, đổi mật khẩu đã gửi trong hội thoại bằng lệnh local `python -m app.bootstrap`. Mật khẩu được nhập ẩn; chỉ hash có salt được lưu trong `.env`. Lấy giá trị hash từ `.env` để nhập vào Vercel; không đưa file này lên Git.
-- Production và Preview nên dùng database/tài khoản admin riêng. Nếu dùng chung DB, startup của preview với cấu hình hash khác có thể thay đổi tài khoản admin production.
+- Production và Preview nên dùng database/tài khoản DB riêng. Code mới chỉ tạo Admin lần đầu, không ghi đè tài khoản khi startup. Các deployment chạy code cũ vẫn có thể ghi đè: ngừng sử dụng/thu hồi quyền truy cập database của các bản cũ, hoặc chuyển production sang database riêng với thông tin truy cập mới. Đổi code mới không vô hiệu hóa tiến trình cũ đang giữ thông tin đăng nhập DB.
 
 ## 2. Import repository
 
@@ -34,6 +34,9 @@ Nhập các giá trị dưới đây vào Vercel Project Settings → Environmen
 | `SESSION_TTL_SECONDS` | `3600` |
 | `ROOT_CA_PATH` | Để trống nếu chỉ cấp cấu hình DNS |
 | `ROOT_CA_PEM` | Chứng chỉ Root CA công khai dạng PEM, dùng thay cho `ROOT_CA_PATH` |
+| `SUBSCRIBER_API_TOKEN` | Tùy chọn: token ngẫu nhiên 32–256 ký tự ASCII để server tin cậy gọi API thuê bao. Bỏ biến nếu không dùng; không nhúng vào app di động |
+
+`SUPERADMIN_EMAIL`/`SUPERADMIN_PASSWORD_HASH` chỉ seed lần đầu khi DB chưa có Admin. Để cập nhật tài khoản đã tồn tại, chuẩn bị `.env` local với URI Atlas và tên database production chính xác, email/hash mong muốn, rồi chạy `python -m app.bootstrap --sync-db`. Lệnh thay đổi tài khoản DB đó và vô hiệu hóa phiên cũ nếu hash đổi. Không dùng URI localhost khi muốn cập nhật tài khoản Vercel. Nếu không đổi mật khẩu, không cần chạy lệnh này khi nâng cấp.
 
 Với preview, thêm đúng hostname preview vào `ALLOWED_HOSTS` cho môi trường đó hoặc chỉ triển khai production ban đầu. Không dùng wildcard để bỏ kiểm tra Host. Một deployment URL ngẫu nhiên không nằm trong allowlist sẽ trả 400, dù production domain vẫn hoạt động.
 
@@ -47,10 +50,10 @@ Với preview, thêm đúng hostname preview vào `ALLOWED_HOSTS` cho môi trư�
 - Nếu build báo `FASTAPI_ENTRYPOINT_NOT_FOUND`, xác nhận deployment dùng commit có `pyproject.toml` và Root Directory là gốc repository. Không redeploy mã cũ chỉ có cấu hình tự dò.
 - Nếu runtime báo `ModuleNotFoundError: No module named 'fastapi'` sau dòng build `Installing required dependencies from pyproject.toml`, phải deploy commit có `[project].dependencies` đầy đủ. File chỉ khai báo `[tool.vercel]` không đủ để cài dependencies khi Vercel chọn pyproject thay requirements.
 
-- Thiết lập rate limit chung tại Vercel Firewall/WAF hoặc dịch vụ edge cho `POST /api/admin/login` theo khả năng gói của bạn. Limiter hiện có nằm trong từng instance và không chống được brute-force phân tán trên nhiều instance.
+- Đăng nhập đã có bộ đếm chung MongoDB ngoài limiter từng instance. Dùng thêm Vercel Firewall/WAF theo khả năng gói để lọc lưu lượng trước khi tới function/database. Xác minh IP proxy để giới hạn theo IP chính xác.
 - Xác minh HTTPS scheme/IP proxy thực tế; không tùy tiện tin `X-Forwarded-For` từ client. Nếu gặp 400, kiểm tra detail trong JSON và log: phân biệt lỗi Host với `HTTPS is required`; không tắt các kiểm tra một cách mặc định.
 - Sau deploy, kiểm tra `/`, `/admin`, đăng nhập, thêm/gia hạn một ID thử, tải profile, đăng xuất và thử gọi lại với token cũ.
-- Kiểm tra MongoDB có `admins`, `sessions`, `accounts` và index TTL trên `sessions.expires_at`.
+- Kiểm tra MongoDB có `admins`, `sessions`, `accounts`, `login_limits` và index TTL trên `sessions.expires_at`, `login_limits.expires_at`.
 - Không đưa `.env`, `.venv`, token, password hash hoặc log request vào Git. `.vercelignore` và `.gitignore` đã loại các file runtime/bí mật.
 
 Chưa deploy Vercel bằng tài khoản của bạn trong phiên này. Tài liệu chính thức: [FastAPI on Vercel](https://vercel.com/docs/frameworks/backend/fastapi), [Python runtime](https://vercel.com/docs/functions/runtimes/python).

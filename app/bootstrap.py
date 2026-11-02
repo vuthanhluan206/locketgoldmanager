@@ -3,8 +3,23 @@ from getpass import getpass
 from pathlib import Path
 import re
 import sys
+import asyncio
 
 from .passwords import hash_password, verify_password
+
+
+async def sync_admin(settings):
+    from pymongo import AsyncMongoClient
+    from .database import admin_document
+
+    client = AsyncMongoClient(settings.mongodb_uri.get_secret_value(),
+                              serverSelectionTimeoutMS=5000, timeoutMS=10000)
+    try:
+        await client[settings.mongodb_database].admins.update_one(
+            {'_id': 'superadmin'}, {'$set': admin_document(settings)}, upsert=True,
+        )
+    finally:
+        await client.close()
 
 
 def update_env(values: dict[str, str]):
@@ -19,6 +34,15 @@ def update_env(values: dict[str, str]):
 
 
 if __name__ == '__main__':
+    if sys.argv[1:] == ['--sync-db']:
+        from .config import get_settings
+
+        try:
+            asyncio.run(sync_admin(get_settings()))
+        except Exception as exc:
+            raise SystemExit('Admin update failed: ' + type(exc).__name__) from None
+        print('Updated admin in the configured MongoDB. Previous password sessions are invalidated.')
+        raise SystemExit(0)
     if sys.argv[1:] == ['--check']:
         from .config import get_settings
 
@@ -37,4 +61,4 @@ if __name__ == '__main__':
     if password != getpass('Confirm password: '):
         raise SystemExit('Passwords do not match')
     update_env({'SUPERADMIN_EMAIL': email, 'SUPERADMIN_PASSWORD_HASH': hash_password(password)})
-    print('Updated .env with email and salted password hash. Restart the server.')
+    print('Updated .env. For an existing database, run python -m app.bootstrap --sync-db to apply credentials.')

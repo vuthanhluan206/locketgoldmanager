@@ -1,16 +1,31 @@
 import hashlib
 import re
+import secrets
 from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from .config import get_settings
 
 bearer = HTTPBearer(auto_error=False)
 
 
 def token_digest(token: str) -> str:
     return hashlib.sha256(token.encode("ascii")).hexdigest()
+
+
+async def require_subscriber_access(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
+):
+    configured = get_settings().subscriber_api_token
+    if credentials is not None and configured is not None:
+        if secrets.compare_digest(credentials.credentials.encode('utf-8'),
+                                  configured.get_secret_value().encode('ascii')):
+            return
+    # Admin sessions can inspect records; a separate token is only for trusted servers.
+    await require_admin(request, credentials)
 
 
 async def require_admin(

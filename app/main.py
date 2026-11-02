@@ -2,11 +2,14 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pymongo.errors import PyMongoError
+import logging
 
 from .database import lifespan
 from .middleware import SecurityMiddleware, security_headers
 from .routes import admin_router, router
 from .auth import router as auth_router
+
+logger = logging.getLogger(__name__)
 
 
 def create_app() -> FastAPI:
@@ -18,6 +21,7 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(PyMongoError)
     async def database_error(request: Request, exc: PyMongoError):
+        logger.error('DATABASE_REQUEST_FAILED: %s', type(exc).__name__)
         return JSONResponse(status_code=503, content={"detail": "Database temporarily unavailable"})
 
     @app.exception_handler(RequestValidationError)
@@ -28,6 +32,7 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(Exception)
     async def unexpected_error(request: Request, exc: Exception):
+        logger.error('UNEXPECTED_REQUEST_FAILED: %s', type(exc).__name__)
         return JSONResponse(
             status_code=500, content={"detail": "Internal server error"},
             headers=security_headers(

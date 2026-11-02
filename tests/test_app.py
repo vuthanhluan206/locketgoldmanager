@@ -69,6 +69,15 @@ def client(monkeypatch, password_pair):
     accounts.find = MagicMock(return_value=cursor)
     app.dependency_overrides[get_accounts] = lambda: accounts
     app.state.admins, app.state.sessions = admins, sessions
+    app.state.login_limits = AsyncMock()
+    buckets = {}
+
+    async def count_login(query, update, **kwargs):
+        key = query['_id']
+        buckets[key] = buckets.get(key, 0) + 1
+        return {'count': buckets[key]}
+
+    app.state.login_limits.find_one_and_update.side_effect = count_login
     app.state.profile = build_profile(get_settings())
     # HTTP tests deliberately skip real MongoDB lifespan.
     http = TestClient(app, base_url='http://localhost', raise_server_exceptions=False)
@@ -121,6 +130,20 @@ def test_all_admin_data_routes_require_session(client, method, path):
     accounts.delete_one.assert_not_called()
 
 
+def test_subscriber_requires_admin_or_separate_service_token(client, monkeypatch):
+    http, accounts, *_ = client
+    assert http.get('/v1/subscribers/alice').status_code == 401
+    accounts.find_one.assert_not_awaited()
+    token = secrets.token_urlsafe(48)
+    monkeypatch.setenv('SUBSCRIBER_API_TOKEN', token)
+    get_settings.cache_clear()
+    accounts.find_one.return_value = None
+    response = http.get('/v1/subscribers/alice', headers={'Authorization': 'Bearer ' + token})
+    assert response.status_code == 200
+    assert response.json()['subscriber']['entitlements'] == {}
+    assert http.get('/v1/subscribers/alice', headers={'Authorization': 'Bearer wrong'}).status_code == 401
+
+
 def test_session_login_expiry_revocation(client):
     http, _, _, _, stored, *_ = client
     token, headers = sign_in(client)
@@ -154,18 +177,31 @@ def test_bad_login_and_rate_limit(client):
     assert response.status_code == 429 and response.headers['retry-after'] == '60'
 
 
-def test_login_reports_configuration_drift_without_issuing_session(client, caplog):
+def test_shared_login_limit_blocks_before_password_verification(client):
+    http, _, admins, sessions, *_ = client
+    client[-1].state.login_limits.find_one_and_update.side_effect = None
+    client[-1].state.login_limits.find_one_and_update.return_value = {'count': 11}
+    result = http.post('/api/admin/login', json={
+        'email': 'admin@example.test', 'password': client[-2],
+    })
+    assert result.status_code == 429
+    admins.find_one.assert_not_awaited()
+    sessions.insert_one.assert_not_awaited()
+
+
+def test_login_uses_database_credentials_after_environment_changes(client, monkeypatch):
     http, _, admins, sessions, _, password, _ = client
+    monkeypatch.setenv('SUPERADMIN_PASSWORD_HASH', hash_password('different-config-password'))
+    monkeypatch.setenv('SUPERADMIN_EMAIL', 'other@example.test')
+    get_settings.cache_clear()
+    sign_in(client)
     admins.find_one.side_effect = None
-    for document in [None, {'email': 'old@example.test', 'password_hash': 'old-hash'}]:
-        admins.find_one.return_value = document
-        response = http.post('/api/admin/login', json={
-            'email': 'admin@example.test', 'password': password,
-        })
-        assert response.status_code == 503
-        assert 'ADMIN_CONFIG_MISMATCH' in response.text
-    assert 'ADMIN_CONFIG_MISMATCH' in caplog.text
-    assert password not in caplog.text
+    admins.find_one.return_value = None
+    sessions.insert_one.reset_mock()
+    response = http.post('/api/admin/login', json={
+        'email': 'admin@example.test', 'password': password,
+    })
+    assert response.status_code == 401
     sessions.insert_one.assert_not_awaited()
 
 
@@ -186,24 +222,25 @@ def test_upsert_injection_and_subscriber(client):
         body['expires_date'] = expiry
         assert http.post('/admin/add-account', headers=headers, json=body).status_code == 422
     accounts.find_one.return_value = {'locket_id': 'alice', 'expires_date': future}
-    assert 'Gold' in http.get('/v1/subscribers/alice').json()['subscriber']['entitlements']
+    assert 'Gold' in http.get('/v1/subscribers/alice', headers=headers).json()['subscriber']['entitlements']
     accounts.find_one.return_value = None
-    assert http.get('/v1/subscribers/missing').json()['subscriber']['entitlements'] == {}
+    assert http.get('/v1/subscribers/missing', headers=headers).json()['subscriber']['entitlements'] == {}
     assert http.get('/admin/accounts?skip=10001', headers=headers).status_code == 422
 
 
 def test_request_limits_hosts_and_errors(client):
     http, accounts, *_ = client
+    _, headers = sign_in(client)
     response = http.post('/api/admin/login', content=b'x' * 8193)
     assert response.status_code == 413 and response.headers['x-frame-options'] == 'DENY'
     response = http.post('/api/admin/login', content=iter([b'x' * 4000, b'y' * 5000]))
     assert response.status_code == 413
     assert http.get('/', headers={'Host': 'attacker.example'}).status_code == 400
     accounts.find_one.side_effect = PyMongoError('private-db-detail')
-    response = http.get('/v1/subscribers/alice')
+    response = http.get('/v1/subscribers/alice', headers=headers)
     assert response.status_code == 503 and 'private-db-detail' not in response.text
     accounts.find_one.side_effect = RuntimeError('private-traceback')
-    response = http.get('/v1/subscribers/alice')
+    response = http.get('/v1/subscribers/alice', headers=headers)
     assert response.status_code == 500 and 'private-traceback' not in response.text
     assert response.headers['x-frame-options'] == 'DENY'
 
@@ -246,25 +283,33 @@ def test_profile_and_missing_configuration(client):
     assert http.get('/profile.mobileconfig').status_code == 503
 
 
-def test_startup_creates_hashed_admin_and_session_ttl(client, monkeypatch):
+@pytest.mark.parametrize('invalid_profile', [False, True])
+def test_startup_creates_hashed_admin_and_session_ttl(client, monkeypatch, invalid_profile):
     app = client[-1]
     db = MagicMock()
     db.accounts = AsyncMock()
     db.admins = AsyncMock()
     db.sessions = AsyncMock()
+    db.login_limits = AsyncMock()
     mongo = MagicMock()
     mongo.admin = AsyncMock()
     mongo.close = AsyncMock()
     mongo.__getitem__.return_value = db
     monkeypatch.setattr('app.database.AsyncMongoClient', MagicMock(return_value=mongo))
+    if invalid_profile:
+        monkeypatch.setattr('app.database.build_profile', MagicMock(side_effect=ValueError('invalid CA')))
 
     async def run():
         async with lifespan(app):
-            assert app.state.profile
+            assert bool(app.state.profile) is not invalid_profile
+            assert client[0].get('/').status_code == 200
+            assert client[0].get('/profile.mobileconfig').status_code == (503 if invalid_profile else 200)
 
     asyncio.run(run())
     db.sessions.create_index.assert_awaited_once_with('expires_at', expireAfterSeconds=0)
-    document = db.admins.update_one.call_args.args[1]['$set']
+    update = db.admins.update_one.call_args.args[1]
+    assert '$set' not in update
+    document = update['$setOnInsert']
     assert document['password_hash'].startswith('pbkdf2_sha256$600000$')
     assert client[-2] not in str(document)
     mongo.close.assert_awaited_once()

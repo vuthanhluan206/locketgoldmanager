@@ -13,3 +13,5 @@ __pycache__/
 *.log
 *.zip
 SOURCE.md
+rootCA.key
+generate_root_ca.py

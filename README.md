@@ -4,7 +4,7 @@ FastAPI + MongoDB. Một file `web/index.html` chứa trang tải cấu hình v�
 
 Đây là hệ thống cấp phép độc lập cho ứng dụng bạn kiểm soát. DNS và CA không tự kích hoạt Gold trong Locket chính thức; JSON subscriber là hợp đồng nội bộ có dạng tương tự RevenueCat, không cam kết tương thích SDK RevenueCat.
 
-## Chạy local (Python 3.11+, Docker Desktop đang chạy)
+## Chạy local (Python 3.12+, Docker Desktop đang chạy)
 
 ```powershell
 python -m venv .venv
@@ -28,7 +28,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --no-access-log
 - Trang khách: `http://127.0.0.1:8000/`
 - Đăng nhập: `http://127.0.0.1:8000/admin`
 
-Khởi động sẽ kết nối MongoDB, tạo index và cập nhật một tài khoản superadmin theo cấu hình môi trường. Thiếu cấu hình, CA không hợp lệ hoặc database không kết nối được thì ứng dụng không khởi động. Đổi thông tin trong `.env` rồi khởi động lại để áp dụng.
+Khởi động sẽ kết nối MongoDB, tạo index và chỉ tạo superadmin từ môi trường khi tài khoản chưa tồn tại. Tài khoản trong MongoDB là nguồn xác thực sau lần tạo đầu; restart không đổi email/mật khẩu. Thiếu cấu hình bắt buộc hoặc DB không kết nối được thì startup thất bại. CA không hợp lệ chỉ vô hiệu hóa tải profile (503); Admin và API thuê bao vẫn hoạt động, log có `PROFILE_CONFIG_INVALID`.
 
 ## Tài khoản và phiên
 
@@ -36,7 +36,7 @@ Khởi động sẽ kết nối MongoDB, tạo index và cập nhật một tài
 - MongoDB `admins`: email, password hash và phiên bản xác thực; không lưu mật khẩu gốc.
 - Token: sinh ngẫu nhiên 48 byte (64 ký tự URL-safe); chỉ SHA256 của token được lưu trong `sessions`.
 - Phiên mặc định 1 giờ, không tự gia hạn. `SESSION_TTL_SECONDS` cho phép 300–86400 giây. Mỗi request kiểm tra hạn dùng ngay cả khi MongoDB TTL chưa kịp xóa bản ghi.
-- Đăng xuất xóa phiên ở server. Chạy lại `python -m app.bootstrap` rồi restart để đổi mật khẩu; hash mới làm mọi phiên cũ mất hiệu lực. Dùng cùng cấu hình trên tất cả instance.
+- Đăng xuất xóa phiên ở server. Để đổi mật khẩu: chạy `python -m app.bootstrap` để cập nhật `.env`, rồi `python -m app.bootstrap --sync-db` để áp dụng có chủ đích vào MongoDB đang cấu hình. Lệnh này thay email/hash và vô hiệu hóa phiên dùng hash cũ. Đổi biến môi trường rồi restart không ghi đè tài khoản đã có. `--check` chỉ xác minh mật khẩu với cấu hình local, không kiểm tra Vercel hay tài khoản DB.
 - Frontend lưu token vào `localStorage` theo yêu cầu. JavaScript có thể đọc storage, nên XSS vẫn có thể đánh cắp token. Với hệ thống nhạy cảm hơn, nên chuyển sang cookie `HttpOnly; Secure; SameSite` kèm bảo vệ CSRF. CSP không bảo đảm loại bỏ mọi XSS.
 - Không có endpoint đăng ký hoặc tài khoản mặc định công khai. Không lưu token trong URL, DOM hoặc log ứng dụng. Không cấu hình proxy ghi Authorization header hoặc request body đăng nhập.
 
@@ -53,7 +53,7 @@ Khởi động sẽ kết nối MongoDB, tạo index và cập nhật một tài
 | GET | `/admin/accounts?skip=0&limit=50` | Bearer session; limit ≤100, skip ≤10000 |
 | DELETE | `/admin/accounts/{account_id}` | Bearer session |
 | GET | `/profile.mobileconfig` | Công khai |
-| GET | `/v1/subscribers/{account_id}` | Công khai theo yêu cầu ban đầu |
+| GET | `/v1/subscribers/{account_id}` | Bearer phiên Admin hoặc token riêng cho server tin cậy |
 
 Đăng nhập:
 
@@ -69,13 +69,15 @@ Thêm/gia hạn, kèm `Authorization: Bearer ACCESS_TOKEN`:
 
 ID là chuỗi 1–128 ký tự ASCII thuộc `[A-Za-z0-9_$:@.\-]`. Không chấp nhận object MongoDB, HTML hay đường dẫn. Thời hạn phải có múi giờ và ở tương lai; lưu/so sánh UTC. MongoDB dùng unique index chống trùng ID. Giao diện hiển thị dữ liệu bằng `textContent`, không dùng `innerHTML`.
 
-API subscriber vẫn cho phép người biết/đoán ID tra cứu trạng thái. Nếu đây là dữ liệu riêng tư, cần bổ sung xác thực danh tính ứng dụng/người dùng trước khi public endpoint đó. Không dùng bí mật admin trong ứng dụng khách.
+API subscriber từ chối tra cứu ẩn danh (401). Server tích hợp có thể dùng `Authorization: Bearer SUBSCRIBER_API_TOKEN` khi đã cấu hình biến tùy chọn này bằng token ngẫu nhiên 32–256 ký tự ASCII, không có khoảng trắng. Không đặt biến rỗng; bỏ biến nếu không dùng. Token này chỉ dành cho server tin cậy và có quyền tra cứu mọi ID, không phải token cho người dùng cuối. Không nhúng token server/Admin vào ứng dụng di động. Phiên Admin cũng có thể dùng để kiểm tra API.
+
+Luồng tích hợp ứng dụng do bạn kiểm soát: ứng dụng đăng nhập hệ thống của bạn → server xác minh danh tính và lấy ID nội bộ từ phiên → server gọi API thuê bao bằng token riêng → trả trạng thái được phép cho chính người dùng đó. Chưa có mã nguồn client/nhà cung cấp danh tính trong repo; không thể tự suy ra ID từ link chia sẻ hoặc bật Gold trong Locket chính thức bằng DNS/CA. Không coi username trong link là ID nội bộ nếu chưa xác minh.
 
 ## Giới hạn và headers
 
 - Request body tối đa 8 KiB kể cả chunked; tối đa 5 giây đọc body.
 - 120 request/IP/phút, 10 login/IP/phút và 30 login/phút toàn tiến trình. Trả 429 và `Retry-After`. Bộ nhớ bộ đếm có giới hạn.
-- Limiter nằm trong bộ nhớ từng process, reset khi restart. Chạy một worker; nhiều instance cần limiter chung ở reverse proxy/WAF/Redis. Không phải bảo vệ DDoS hoàn chỉnh.
+- Middleware giới hạn request theo từng process. Riêng đăng nhập có thêm bộ đếm nguyên tử dùng chung trong MongoDB `login_limits` (10/IP, 30/toàn hệ thống mỗi cửa sổ phút; TTL dọn dữ liệu). Bộ đếm dùng chung áp dụng cho request đúng schema trước khi xác minh mật khẩu; middleware vẫn chặn cả request sai schema. Giới hạn IP phụ thuộc proxy cung cấp IP chính xác; bảo vệ lưu lượng lớn cần WAF/edge, không phải cơ chế chống DDoS hoàn chỉnh.
 - Không tự đọc `X-Forwarded-For`. Uvicorn chỉ được tin các IP proxy thực tế; cấu hình sai làm tất cả khách bị tính cùng IP hoặc cho phép giả IP.
 - CSP nonce riêng mỗi response, không `unsafe-inline`; `nosniff`, `DENY`, `no-referrer`, `no-store`, Permissions-Policy; HSTS chỉ trên HTTPS.
 - Host phải nằm trong `ALLOWED_HOSTS`. Không bật CORS vì frontend cùng origin. CORS không thay thế xác thực API.
@@ -117,7 +119,14 @@ pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-Tests dùng MongoDB giả cho request HTTP và startup: login thành công/thất bại, token giả/hết hạn/thu hồi, đổi hash, mọi route admin, injection/XSS input, expiry UTC, body/chunked, rate limit, Host, HTTPS/HSTS, CSP nonce, lỗi DB và TTL index. Chúng không chứng minh kết nối hoặc độ bền dữ liệu của MongoDB thật.
+Kiểm thử đơn vị dùng MongoDB giả. Kiểm thử tích hợp tùy chọn dùng MongoDB thật, tạo database riêng tên `locket_test_<uuid>`, rồi xóa đúng database test trong phần dọn dẹp; không dùng collections sản xuất. Kiểm tra ghi/đọc/gia hạn/hết hạn/xóa tài khoản, đổi mật khẩu thu hồi phiên, đăng xuất và restart bằng cấu hình cũ không ghi đè Admin.
+
+```powershell
+$env:TEST_MONGODB_URI='mongodb://127.0.0.1:27017'
+python -m pytest -q
+```
+
+Để trống/bỏ `TEST_MONGODB_URI` thì kiểm thử tích hợp được bỏ qua. Kết quả local không chứng minh kết nối Atlas, cấu hình Vercel hay cài profile trên iPhone.
 
 `SOURCE.md` chứa nguyên văn các file để copy; `source-code.zip` chứa mã nguồn không kèm `.env`, `.venv` hoặc dữ liệu runtime.
 
