@@ -44,20 +44,39 @@ def subscriber_response(account_id: str, account: dict | None, now: datetime | N
         expiry = normalize_expiry(account['expires_date']) if account else None
     except (ValueError, TypeError, KeyError):
         expiry = None
+        
     active = expiry is not None and expiry > now
     entitlement_expires = expiry.isoformat().replace('+00:00', 'Z') if active else None
+    product_id = "locket_gold_monthly"
+    now_str = now.isoformat().replace('+00:00', 'Z')
 
     entitlement = {
         'expires_date': entitlement_expires,
-        'product_identifier': 'gold'
+        'grace_period_expires_date': None,
+        'product_identifier': product_id,
+        'purchase_date': now_str
     } if active else None
 
+    subscriptions = {
+        product_id: {
+            'expires_date': entitlement_expires,
+            'original_purchase_date': now_str,
+            'purchase_date': now_str,
+            'ownership_type': 'PURCHASED',
+            'store': 'app_store'
+        }
+    } if active else {}
+
     return {
-        'request_date': now.isoformat().replace('+00:00', 'Z'),
+        'request_date': now_str,
         'request_date_ms': int(now.timestamp() * 1000),
         'subscriber': {
             'original_app_user_id': account_id,
+            'non_subscriptions': {},
+            'first_seen': now_str,
             'entitlements': {'Gold': entitlement} if active else {},
-            'subscriptions': {}
+            'subscriptions': subscriptions,
+            'management_url': None,
+            'original_purchase_date': now_str
         }
     }
