@@ -262,6 +262,30 @@ def test_expiry_boundary():
         assert subscriber_response('id', account, now)['subscriber']['entitlements'] == {}
 
 
+def test_date_only_expiry_is_stored_as_mongodb_datetime(client):
+    http, accounts, *_ = client
+    _, headers = sign_in(client)
+    expiry = (datetime.now(timezone.utc) + timedelta(days=30)).date()
+    result = http.post('/admin/add-account', headers=headers, json={
+        'locket_id': 'date_only_user', 'expires_date': expiry.isoformat(),
+    })
+    assert result.status_code == 200
+    stored = accounts.update_one.call_args.args[1]['$set']['expires_date']
+    assert isinstance(stored, datetime) and stored.tzinfo is not None
+    assert stored.date() == expiry
+    assert (stored.hour, stored.minute, stored.second) == (23, 59, 59)
+    from bson import BSON
+    BSON.encode({'expires_date': stored})
+
+
+def test_legacy_expiry_and_invalid_records_fail_closed():
+    now = datetime(2026, 11, 3, 12, tzinfo=timezone.utc)
+    result = subscriber_response('id', {'expires_date': '2026-11-03'}, now)
+    assert result['subscriber']['entitlements']['Gold']['expires_date'] == '2026-11-03T23:59:59Z'
+    for value in ['not-a-date', None, '2026-11-03T12:00:00']:
+        assert subscriber_response('id', {'expires_date': value}, now)['subscriber']['entitlements'] == {}
+
+
 def test_rate_limiter_bound_and_expiry(monkeypatch):
     monkeypatch.setattr('app.middleware.time.monotonic', lambda: 100)
     limiter = RateLimiter(capacity=1)

@@ -1,53 +1,51 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 from typing import Annotated
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 AccountId = Annotated[str, Field(min_length=1, max_length=128, pattern=r'^[A-Za-z0-9_$:@.\-]+$')]
+
+
+def normalize_expiry(value) -> datetime:
+    if isinstance(value, str):
+        value = date.fromisoformat(value) if len(value) == 10 else datetime.fromisoformat(value.replace('Z', '+00:00'))
+    if isinstance(value, date) and not isinstance(value, datetime):
+        value = datetime.combine(value, time(23, 59, 59), tzinfo=timezone.utc)
+    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError('expires_date must be a date or a datetime with timezone')
+    return value.astimezone(timezone.utc)
 
 
 class AccountInput(BaseModel):
     model_config = ConfigDict(extra='forbid')
     locket_id: AccountId
-    expires_date: date
+    expires_date: AwareDatetime
+
+    @field_validator('expires_date', mode='before')
+    @classmethod
+    def parse_expiry(cls, value):
+        return normalize_expiry(value)
 
     @field_validator('expires_date')
     @classmethod
-    def future_date(cls, value: date) -> date:
-        if value < date.today():
-            raise ValueError('expires_date must be today or in the future')
+    def future_date(cls, value: datetime) -> datetime:
+        if value <= datetime.now(timezone.utc):
+            raise ValueError('expires_date must be in the future')
         return value
 
 
 class AccountOutput(BaseModel):
     locket_id: str
-    expires_date: date
+    expires_date: AwareDatetime
 
 
-def subscriber_response(account_id: str, account: dict | None) -> dict:
-    today = date.today()
-    active = False
-    exp_date_obj = None
-
-    if account and 'expires_date' in account:
-        exp = account['expires_date']
-        if isinstance(exp, datetime):
-            exp_date_obj = exp.date()
-        elif isinstance(exp, date):
-            exp_date_obj = exp
-        elif isinstance(exp, str):
-            exp_date_obj = date.fromisoformat(exp[:10])
-        
-        if exp_date_obj and exp_date_obj >= today:
-            active = True
-
-    now = datetime.now(timezone.utc)
-    
-    # Quy đổi ngày hết hạn thành cuối ngày (23:59:59 UTC) để khớp định dạng JSON trả về cho app Locket
-    if active and exp_date_obj:
-        exp_dt = datetime(exp_date_obj.year, exp_date_obj.month, exp_date_obj.day, 23, 59, 59, tzinfo=timezone.utc)
-        entitlement_expires = exp_dt.isoformat().replace('+00:00', 'Z')
-    else:
-        entitlement_expires = None
+def subscriber_response(account_id: str, account: dict | None, now: datetime | None = None) -> dict:
+    now = now if now is not None else datetime.now(timezone.utc)
+    try:
+        expiry = normalize_expiry(account['expires_date']) if account else None
+    except (ValueError, TypeError, KeyError):
+        expiry = None
+    active = expiry is not None and expiry > now
+    entitlement_expires = expiry.isoformat().replace('+00:00', 'Z') if active else None
 
     entitlement = {
         'expires_date': entitlement_expires,
