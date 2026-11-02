@@ -1,28 +1,154 @@
 <!doctype html>
 <html lang="vi">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="referrer" content="no-referrer"><title>Locket Gold • Cấu hình</title>
-<style>
-:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#101310;color:#eef2e9}*{box-sizing:border-box}body{margin:0}main{max-width:980px;margin:auto;padding:32px 22px}header{display:flex;justify-content:space-between;align-items:center;color:#e2c477}small,.muted{color:#a4afa2}article{padding:70px 0}h1{font-size:clamp(38px,7vw,72px);line-height:1.08;max-width:750px;margin:24px 0}p{line-height:1.7;max-width:650px}button{background:#e2c477;color:#171b13;border:0;border-radius:12px;padding:14px 22px;font-weight:700;cursor:pointer}button:disabled{opacity:.5;cursor:wait}button.secondary{background:#30392e;color:#fff}.card{border:1px solid #354130;border-radius:20px;background:#192018;padding:24px;margin:20px 0}.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:15px}label{display:block;margin:14px 0}input{display:block;width:100%;margin-top:8px;padding:12px;border-radius:8px;border:1px solid #59644f;background:#101310;color:white}table{width:100%;border-collapse:collapse;text-align:left}td,th{padding:14px 8px;border-bottom:1px solid #354130}td{overflow-wrap:anywhere}.scroll{overflow:auto}#message,#adminMessage{min-height:24px;color:#e2c477}footer{padding:24px 0;border-top:1px solid #354130}a{color:#e2c477}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="dark">
+  <title>Locket Gold · Cổng cấu hình</title>
+  <style nonce="__NONCE__">
+    :root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#eeeae0;background:#10110f;font-synthesis:none}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;min-height:100svh;display:grid;place-items:center;padding:24px;padding:max(24px,env(safe-area-inset-top)) max(20px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(20px,env(safe-area-inset-left))}
+    main{width:100%;max-width:440px}.admin main{max-width:900px}.card{padding:32px;border:1px solid #30322a;border-radius:24px;background:#191b16;box-shadow:0 24px 80px #0003}.public{text-align:center}.mark{display:inline-grid;place-items:center;width:56px;height:56px;border:1px solid #686045;border-radius:18px;background:#292719;color:#edcf83;font-size:30px}
+    .eyebrow{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:#d8bb76;margin:22px 0 12px}h1{font-size:32px;letter-spacing:-.04em;margin:0 0 14px;line-height:1.15}h2{font-size:24px;letter-spacing:-.03em;margin:0 0 12px}p{font-size:14px;color:#b1b5a6;line-height:1.65}.note{font-size:12px;color:#969b8b}.button,button{font:inherit;font-size:15px;font-weight:650;text-decoration:none;display:inline-flex;justify-content:center;align-items:center;min-height:48px;padding:12px 18px;border:1px solid transparent;border-radius:12px;color:#1b1a12;background:#e7c779;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}.download{width:100%;margin:14px 0 8px}.secondary{background:#272b23;border-color:#414735;color:#e5e9db}button:disabled{opacity:.5;cursor:default}:focus-visible{outline:2px solid #f6d889;outline-offset:4px}input{display:block;width:100%;min-height:48px;margin:8px 0 18px;padding:12px;border:1px solid #454a3c;border-radius:10px;background:#10120e;color:#fff;font:inherit;font-size:16px}label{font-size:13px;color:#c8cdbd}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.row.between{justify-content:space-between}.field{flex:1;min-width:190px}.status{min-height:24px;margin:14px 0;font-size:13px;color:#edcf83;overflow-wrap:anywhere}.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}table{width:100%;border-collapse:collapse;text-align:left;font-size:13px}td,th{padding:15px 8px;border-bottom:1px solid #353a2e;overflow-wrap:anywhere}td button{font-size:12px;padding:8px;min-height:44px;margin:3px}th{color:#a7af99;font-weight:500}.pager{margin-top:18px}[hidden]{display:none!important}.login{max-width:420px;margin:auto}.quiet{font-size:12px;color:#969b8b}footer{margin-top:20px}a{color:#e7c779}
+    @media(max-width:520px){.card{padding:24px 20px;border-radius:20px}h1{font-size:29px}.admin .card{padding:22px 16px}body{padding-left:16px;padding-right:16px}}
+  </style>
 </head>
-<body><main>
-<header><strong>◈ LOCKET GOLD</strong><small>CỔNG CẤU HÌNH DỊCH VỤ</small></header>
-<article><small>THIẾT LẬP TRÊN iPHONE / iPAD</small><h1>Một cấu hình.<br>Kết nối đơn giản.</h1>
-<p class="muted">Tải cấu hình DNS NextDNS dành cho thiết bị của bạn. Hãy xem nội dung cấu hình trong Cài đặt trước khi cài đặt.</p>
-<button id="download">Tải về cấu hình ngay ↓</button><p id="message" role="status" aria-live="polite"></p>
-<div class="steps"><section class="card"><strong>01 · Tải cấu hình</strong><p class="muted">Mở trang bằng Safari rồi bấm tải về.</p></section><section class="card"><strong>02 · Mở Cài đặt</strong><p class="muted">Vào Cài đặt → Cài đặt chung → VPN &amp; Quản lý thiết bị.</p></section><section class="card"><strong>03 · Xem và cài đặt</strong><p class="muted">Kiểm tra DNS và chứng chỉ đi kèm, sau đó xác nhận nếu bạn tin tưởng đơn vị cung cấp.</p></section></div>
-<p class="muted">Cấu hình DNS không tự kích hoạt thuê bao Gold trong ứng dụng Locket chính thức. Nếu có chứng chỉ CA đi kèm, chứng chỉ đó có thể mở rộng nguồn tin cậy của thiết bị; chỉ cài khi bạn biết rõ mục đích sử dụng.</p>
-</article>
-<!-- ADMIN_PANEL -->
-<footer><small>Cổng quản lý độc lập · Không phải trang chính thức của Locket hoặc RevenueCat.</small></footer>
+<body class="__VIEW__">
+<main>
+<!-- PUBLIC_START -->
+  <section class="card" aria-labelledby="title">
+    <div class="mark" aria-hidden="true">◇</div>
+    <p class="eyebrow">Locket Gold · Cấu hình thiết bị</p>
+    <h1 id="title">Sẵn sàng kết nối.</h1>
+    <p>Cấu hình DNS NextDNS cho iPhone và iPad.<br>Mở bằng Safari để tải và cài đặt.</p>
+    <a class="button download" href="/profile.mobileconfig">Tải về cấu hình ngay ↓</a>
+    <p class="note">Sau khi tải: Cài đặt → Cài đặt chung →<br>VPN &amp; Quản lý thiết bị.</p>
+    <footer><p class="note">Xem nội dung trước khi cài. Nếu có CA đi kèm, chỉ tin cậy khi bạn biết rõ đơn vị cấp.<br>Cấu hình DNS không tự kích hoạt Locket Gold.</p></footer>
+  </section>
+<!-- PUBLIC_END -->
+<!-- ADMIN_START -->
+  <section class="card login" id="loginScreen" aria-labelledby="loginTitle">
+    <p class="eyebrow">Locket Gold Manager</p>
+    <h1 id="loginTitle">Đăng nhập quản trị</h1>
+    <p>Quản lý tài khoản và thời hạn dịch vụ.</p>
+    <form id="loginForm">
+      <label for="email">Email</label><input id="email" type="email" autocomplete="username" required maxlength="254">
+      <label for="password">Mật khẩu</label><input id="password" type="password" autocomplete="current-password" required maxlength="256">
+      <button class="download" id="signIn" type="submit">Đăng nhập</button>
+    </form>
+    <p class="status" id="loginMessage" role="status" aria-live="polite"></p>
+    <a class="quiet" href="/">← Trang tải cấu hình</a>
+  </section>
+  <section class="card" id="dashboard" hidden aria-labelledby="adminTitle">
+    <div class="row between"><div><p class="eyebrow">Quản trị dịch vụ</p><h2 id="adminTitle">Tài khoản được cấp phép</h2></div><button class="secondary" id="logout" type="button">Đăng xuất</button></div>
+    <p class="quiet" id="identity"></p>
+    <form id="accountForm">
+      <div class="row"><div class="field"><label for="accountId">Locket ID</label><input id="accountId" required maxlength="128" pattern="[A-Za-z0-9_$:@.\-]+" autocomplete="off"></div><div class="field"><label for="expiry">Hết hạn (giờ trên thiết bị)</label><input id="expiry" type="datetime-local" required></div></div>
+      <button id="save" type="submit">Lưu / gia hạn tài khoản</button>
+    </form>
+    <p class="status" id="adminMessage" role="status" aria-live="polite"></p>
+    <div class="scroll"><table><thead><tr><th>ID</th><th>Hết hạn</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody id="accounts"></tbody></table></div>
+    <div class="row between pager"><button class="secondary" id="previous" type="button">← Trước</button><span class="quiet" id="page"></span><button class="secondary" id="next" type="button">Sau →</button></div>
+  </section>
+  <script nonce="__NONCE__">
+  (() => {
+    'use strict';
+    const key = 'locket_admin_session';
+    const $ = id => document.getElementById(id);
+    let session = null, skip = 0, timer;
+    const limit = 50;
+    function clearSession() {
+      clearTimeout(timer); session = null;
+      try { localStorage.removeItem(key); } catch {}
+      $('dashboard').hidden = true; $('loginScreen').hidden = false;
+      $('accounts').replaceChildren(); $('identity').textContent = '';
+      $('accountForm').reset(); $('adminMessage').textContent = '';
+    }
+    async function api(path, options = {}, auth = true) {
+      const headers = {'Content-Type': 'application/json'};
+      if (auth && session) headers.Authorization = 'Bearer ' + session.access_token;
+      const response = await fetch(path, {...options, headers, cache: 'no-store', credentials: 'omit'});
+      if (!response.ok) {
+        let data; try { data = await response.json(); } catch {}
+        if (response.status === 401 && auth) clearSession();
+        throw Error(typeof data?.detail === 'string' ? data.detail : 'Yêu cầu thất bại (' + response.status + '). Kiểm tra dữ liệu nhập.');
+      }
+      return response.status === 204 ? null : response.json();
+    }
+    async function load() {
+      const rows = await api('/admin/accounts?skip=' + skip + '&limit=' + limit);
+      if (!session) return;
+      const body = $('accounts'); body.replaceChildren();
+      for (const row of rows) {
+        const tr = document.createElement('tr');
+        for (const value of [row.locket_id, new Date(row.expires_date).toLocaleString(), new Date(row.expires_date) > new Date() ? 'Gold' : 'Hết hạn']) {
+          const td = document.createElement('td'); td.textContent = value; tr.append(td);
+        }
+        const actions = document.createElement('td');
+        const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary'; edit.textContent = 'Sửa';
+        edit.onclick = () => {
+          $('accountId').value = row.locket_id;
+          const date = new Date(row.expires_date);
+          $('expiry').value = new Date(date - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+          $('accountId').focus();
+        };
+        const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary'; remove.textContent = 'Xóa';
+        remove.onclick = async () => {
+          if (!confirm('Xóa tài khoản ' + row.locket_id + '?')) return;
+          remove.disabled = true;
+          try { await api('/admin/accounts/' + encodeURIComponent(row.locket_id), {method: 'DELETE'}); await load(); }
+          catch (error) { $('adminMessage').textContent = error.message; }
+          finally { remove.disabled = false; }
+        };
+        actions.append(edit, remove); tr.append(actions); body.append(tr);
+      }
+      if (!rows.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 4; td.textContent = 'Chưa có tài khoản.'; tr.append(td); body.append(tr); }
+      $('previous').disabled = skip === 0; $('next').disabled = rows.length < limit || skip + limit > 10000;
+      $('page').textContent = 'Trang ' + (skip / limit + 1);
+    }
+    async function enter() {
+      if (!session || !Number.isFinite(Date.parse(session.expires_at)) || Date.parse(session.expires_at) <= Date.now()) { clearSession(); return; }
+      const admin = await api('/api/admin/me');
+      $('identity').textContent = admin.email;
+      await load();
+      if (!session) return;
+      $('loginScreen').hidden = true; $('dashboard').hidden = false;
+      clearTimeout(timer);
+      timer = setTimeout(() => { clearSession(); $('loginMessage').textContent = 'Phiên đã hết hạn. Vui lòng đăng nhập lại.'; }, Math.max(0, Date.parse(session.expires_at) - Date.now()));
+    }
+    $('loginForm').onsubmit = async event => {
+      event.preventDefault(); $('signIn').disabled = true; $('loginMessage').textContent = '';
+      let password = $('password').value; $('password').value = '';
+      try {
+        session = await api('/api/admin/login', {method: 'POST', body: JSON.stringify({email: $('email').value.trim(), password})}, false);
+        try { localStorage.setItem(key, JSON.stringify(session)); } catch { $('loginMessage').textContent = 'Trình duyệt chặn lưu phiên. Phiên chỉ dùng trong tab hiện tại.'; }
+        skip = 0; await enter();
+      } catch (error) { clearSession(); $('loginMessage').textContent = error.message; }
+      finally { password = ''; $('signIn').disabled = false; }
+    };
+    $('accountForm').onsubmit = async event => {
+      event.preventDefault(); $('save').disabled = true;
+      try {
+        await api('/admin/add-account', {method: 'POST', body: JSON.stringify({locket_id: $('accountId').value, expires_date: new Date($('expiry').value).toISOString()})});
+        $('adminMessage').textContent = 'Đã lưu tài khoản.'; await load();
+      } catch (error) { $('adminMessage').textContent = error.message; }
+      finally { $('save').disabled = false; }
+    };
+    $('previous').onclick = async () => { skip = Math.max(0, skip - limit); try { await load(); } catch (error) { $('adminMessage').textContent = error.message; } };
+    $('next').onclick = async () => { skip += limit; try { await load(); } catch (error) { $('adminMessage').textContent = error.message; } };
+    $('logout').onclick = async () => {
+      $('logout').disabled = true;
+      try { await api('/api/admin/logout', {method: 'POST'}); clearSession(); $('loginMessage').textContent = 'Đã đăng xuất.'; }
+      catch (error) { if (session) $('adminMessage').textContent = 'Chưa thu hồi được phiên: ' + error.message + '. Hãy thử lại.'; }
+      finally { $('logout').disabled = false; }
+    };
+    window.addEventListener('storage', event => { if (event.key === key && event.newValue === null) clearSession(); });
+    try { session = JSON.parse(localStorage.getItem(key)); } catch { clearSession(); }
+    enter().catch(error => { clearSession(); $('loginMessage').textContent = error.message; });
+  })();
+  </script>
+<!-- ADMIN_END -->
 </main>
-<script>
-document.getElementById('download').onclick=async function(){
- this.disabled=true;const message=document.getElementById('message');
- try{const r=await fetch('/profile.mobileconfig');if(!r.ok){const e=await r.json();throw Error(e.detail||'Không thể tải cấu hình.');}
- const url=URL.createObjectURL(await r.blob());const a=document.createElement('a');a.href=url;a.download='locket.mobileconfig';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);message.textContent='Đã tải cấu hình. Tiếp tục trong ứng dụng Cài đặt.';
- }catch(e){message.textContent=e.message;}finally{this.disabled=false;}
-};
-</script></body></html>
+</body>
+</html>

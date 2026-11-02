@@ -1,25 +1,44 @@
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pymongo.errors import PyMongoError
+
 from .database import lifespan
+from .middleware import SecurityMiddleware, security_headers
 from .routes import admin_router, router
-
-app = FastAPI(title='License Manager', lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
-
-
-@app.middleware('http')
-async def security_headers(request: Request, call_next):
-    response = await call_next(request)
-    response.headers.update({'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer',
-                             'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY',
-                             'Content-Security-Policy': "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"})
-    return response
+from .auth import router as auth_router
 
 
-@app.exception_handler(PyMongoError)
-async def database_error(request: Request, exc: PyMongoError):
-    return JSONResponse(status_code=503, content={'detail': 'Database temporarily unavailable'})
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title="License Manager", lifespan=lifespan,
+        docs_url=None, redoc_url=None, openapi_url=None,
+    )
+    app.add_middleware(SecurityMiddleware)
+
+    @app.exception_handler(PyMongoError)
+    async def database_error(request: Request, exc: PyMongoError):
+        return JSONResponse(status_code=503, content={"detail": "Database temporarily unavailable"})
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request: Request, exc: RequestValidationError):
+        # Do not echo arbitrary input or internal exception context.
+        errors = [{"loc": error["loc"], "type": error["type"]} for error in exc.errors()]
+        return JSONResponse(status_code=422, content={"detail": errors})
+
+    @app.exception_handler(Exception)
+    async def unexpected_error(request: Request, exc: Exception):
+        return JSONResponse(
+            status_code=500, content={"detail": "Internal server error"},
+            headers=security_headers(
+                getattr(request.state, "csp_nonce", ""), request.url.scheme == "https",
+            ),
+        )
+
+    app.include_router(router)
+    app.include_router(admin_router)
+    app.include_router(auth_router)
+    return app
 
 
-app.include_router(router)
-app.include_router(admin_router)
+app = create_app()

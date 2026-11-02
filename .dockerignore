@@ -1,0 +1,16 @@
+.git
+.env
+.env.*
+.venv
+__pycache__
+.pytest_cache
+*.pem
+*.key
+*.cer
+*.der
+*.p12
+*.pfx
+*.zip
+*.log
+tests
+SOURCE.md

@@ -1,14 +1,12 @@
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, Request
 from fastapi.responses import HTMLResponse
 from pymongo.errors import DuplicateKeyError
-from .config import get_settings
 from .database import get_accounts
 from .models import AccountId, AccountInput, AccountOutput, subscriber_response
-from .profile import build_profile
-from .security import require_admin, valid_token
+from .security import require_admin
 
 router = APIRouter()
 WEB = Path(__file__).resolve().parent.parent / 'web'
@@ -16,18 +14,32 @@ Accounts = Annotated[object, Depends(get_accounts)]
 
 
 @router.get('/', response_class=HTMLResponse, include_in_schema=False)
-async def home(admin: str | None = None):
-    if admin is not None and not valid_token(admin):
-        raise HTTPException(404, 'Not found')
-    # The admin markup is never included in the public response.
+async def home(request: Request):
+    if 'admin' in request.query_params:
+        raise HTTPException(400, 'URL tokens are disabled. Open /admin to sign in.')
+    return render_page(False, request)
+
+
+def render_page(admin: bool, request: Request) -> HTMLResponse:
     page = (WEB / 'index.html').read_text(encoding='utf-8')
-    panel = (WEB / 'admin.html').read_text(encoding='utf-8') if admin is not None else ''
-    return HTMLResponse(page.replace('<!-- ADMIN_PANEL -->', panel))
+    # Static markers remove the other view before sending HTML to the browser.
+    start, end = ('<!-- PUBLIC_START -->', '<!-- PUBLIC_END -->') if admin else ('<!-- ADMIN_START -->', '<!-- ADMIN_END -->')
+    before, rest = page.split(start)
+    _, after = rest.split(end)
+    page = before + after
+    return HTMLResponse(page.replace('__NONCE__', request.state.csp_nonce).replace('__VIEW__', 'admin' if admin else 'public'))
+
+
+@router.get('/admin', response_class=HTMLResponse, include_in_schema=False)
+async def admin_login(request: Request):
+    return render_page(True, request)
 
 
 @router.get('/profile.mobileconfig')
-async def download_profile():
-    return Response(build_profile(get_settings()), media_type='application/x-apple-aspen-config',
+async def download_profile(request: Request):
+    if not request.app.state.profile:
+        raise HTTPException(503, 'Chưa cấu hình NEXTDNS_ID trên server.')
+    return Response(request.app.state.profile, media_type='application/x-apple-aspen-config',
                     headers={'Content-Disposition': 'attachment; filename="locket.mobileconfig"'})
 
 
@@ -51,7 +63,7 @@ async def upsert_account(data: AccountInput, accounts: Accounts):
 
 
 @admin_router.get('/accounts', response_model=list[AccountOutput])
-async def list_accounts(accounts: Accounts, skip: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=100)):
+async def list_accounts(accounts: Accounts, skip: int = Query(0, ge=0, le=10000), limit: int = Query(50, ge=1, le=100)):
     return await accounts.find({}, {'_id': 0}).sort('locket_id', 1).skip(skip).limit(limit).to_list(length=limit)
 
 

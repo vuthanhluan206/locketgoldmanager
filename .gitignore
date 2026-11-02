@@ -1,7 +1,15 @@
 .env
+.env.*
+!.env.example
 .venv/
 __pycache__/
 .pytest_cache/
 *.pem
 *.key
 *.cer
+*.der
+*.p12
+*.pfx
+*.log
+*.zip
+SOURCE.md

@@ -1,16 +1,32 @@
-import secrets
+import hashlib
+import re
+from datetime import datetime, timezone
 from typing import Annotated
-from fastapi import Depends, HTTPException
+
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from .config import get_settings
 
 bearer = HTTPBearer(auto_error=False)
 
 
-def valid_token(value: str) -> bool:
-    return secrets.compare_digest(value.encode('utf-8'), get_settings().admin_token.encode('utf-8'))
+def token_digest(token: str) -> str:
+    return hashlib.sha256(token.encode("ascii")).hexdigest()
 
 
-def require_admin(credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)]):
-    if credentials is None or not valid_token(credentials.credentials):
-        raise HTTPException(401, 'Invalid admin token', headers={'WWW-Authenticate': 'Bearer'})
+async def require_admin(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
+):
+    unauthorized = HTTPException(401, "Invalid or expired session", headers={"WWW-Authenticate": "Bearer"})
+    if credentials is None or not re.fullmatch(r"[A-Za-z0-9_-]{64}", credentials.credentials):
+        raise unauthorized
+    session = await request.app.state.sessions.find_one({
+        "_id": token_digest(credentials.credentials),
+        "expires_at": {"$gt": datetime.now(timezone.utc)},
+    })
+    if session is None or session.get("admin_id") != "superadmin":
+        raise unauthorized
+    admin = await request.app.state.admins.find_one({"_id": session["admin_id"]})
+    if admin is None or admin.get("auth_version") != session["auth_version"]:
+        raise unauthorized
+    return {"session_id": session["_id"], "email": admin["email"]}
