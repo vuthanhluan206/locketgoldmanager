@@ -2,8 +2,9 @@
 from getpass import getpass
 from pathlib import Path
 import re
+import sys
 
-from .passwords import hash_password
+from .passwords import hash_password, verify_password
 
 
 def update_env(values: dict[str, str]):
@@ -18,6 +19,17 @@ def update_env(values: dict[str, str]):
 
 
 if __name__ == '__main__':
+    if sys.argv[1:] == ['--check']:
+        from .config import get_settings
+
+        settings = get_settings()
+        print('Configured email: ' + settings.superadmin_email)
+        valid = verify_password(
+            getpass('Password to verify (hidden): '),
+            settings.superadmin_password_hash.get_secret_value(),
+        )
+        print('Password matches local configuration.' if valid else 'Password does NOT match local configuration.')
+        raise SystemExit(0 if valid else 1)
     email = input('Superadmin email: ').strip().lower()
     if not re.fullmatch(r"[A-Za-z0-9._+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}", email):
         raise SystemExit('Invalid email')

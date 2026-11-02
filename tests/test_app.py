@@ -280,3 +280,19 @@ def test_vercel_manifest_has_runtime_dependencies():
     assert set(config['project']['dependencies']) == requirements
     module, name = config['tool']['vercel']['entrypoint'].split(':')
     assert isinstance(getattr(importlib.import_module(module), name), FastAPI)
+
+
+@pytest.mark.parametrize('correct', [True, False])
+def test_check_password_command(client, monkeypatch, capsys, correct):
+    import runpy
+    import sys
+
+    password = client[-2]
+    monkeypatch.setattr(sys, 'argv', ['app.bootstrap', '--check'])
+    monkeypatch.setattr('getpass.getpass', lambda prompt: password if correct else 'wrong-password')
+    with pytest.raises(SystemExit) as result:
+        runpy.run_module('app.bootstrap', run_name='__main__')
+    assert result.value.code == (0 if correct else 1)
+    output = capsys.readouterr().out
+    assert password not in output
+    assert 'pbkdf2_sha256$' not in output
