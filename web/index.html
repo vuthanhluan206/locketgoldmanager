@@ -4,27 +4,98 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="referrer" content="no-referrer">
-  <meta name="color-scheme" content="dark">
+  <meta name="color-scheme" content="light dark">
   <title>Locket Gold · Cổng cấu hình</title>
   <style nonce="__NONCE__">
-    :root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#eeeae0;background:#10110f;font-synthesis:none}
-    *{box-sizing:border-box}body{margin:0;min-height:100vh;min-height:100svh;display:grid;place-items:center;padding:24px;padding:max(24px,env(safe-area-inset-top)) max(20px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(20px,env(safe-area-inset-left))}
-    main{width:100%;max-width:440px}.admin main{max-width:900px}.card{padding:32px;border:1px solid #30322a;border-radius:24px;background:#191b16;box-shadow:0 24px 80px #0003}.public{text-align:center}.mark{display:inline-grid;place-items:center;width:56px;height:56px;border:1px solid #686045;border-radius:18px;background:#292719;color:#edcf83;font-size:30px}
-    .eyebrow{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:#d8bb76;margin:22px 0 12px}h1{font-size:32px;letter-spacing:-.04em;margin:0 0 14px;line-height:1.15}h2{font-size:24px;letter-spacing:-.03em;margin:0 0 12px}p{font-size:14px;color:#b1b5a6;line-height:1.65}.note{font-size:12px;color:#969b8b}.button,button{font:inherit;font-size:15px;font-weight:650;text-decoration:none;display:inline-flex;justify-content:center;align-items:center;min-height:48px;padding:12px 18px;border:1px solid transparent;border-radius:12px;color:#1b1a12;background:#e7c779;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}.download{width:100%;margin:14px 0 8px}.secondary{background:#272b23;border-color:#414735;color:#e5e9db}button:disabled{opacity:.5;cursor:default}:focus-visible{outline:2px solid #f6d889;outline-offset:4px}input{display:block;width:100%;min-height:48px;margin:8px 0 18px;padding:12px;border:1px solid #454a3c;border-radius:10px;background:#10120e;color:#fff;font:inherit;font-size:16px}label{font-size:13px;color:#c8cdbd}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.row.between{justify-content:space-between}.field{flex:1;min-width:190px}.status{min-height:24px;margin:14px 0;font-size:13px;color:#edcf83;overflow-wrap:anywhere}.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}table{width:100%;border-collapse:collapse;text-align:left;font-size:13px}td,th{padding:15px 8px;border-bottom:1px solid #353a2e;overflow-wrap:anywhere}td button{font-size:12px;padding:8px;min-height:44px;margin:3px}th{color:#a7af99;font-weight:500}.pager{margin-top:18px}[hidden]{display:none!important}.login{max-width:420px;margin:auto}.quiet{font-size:12px;color:#969b8b}footer{margin-top:20px}a{color:#e7c779}
-    @media(max-width:520px){.card{padding:24px 20px;border-radius:20px}h1{font-size:29px}.admin .card{padding:22px 16px}body{padding-left:16px;padding-right:16px}}
+    :root {
+      color-scheme: light dark;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --background: #f2f2f7; --card: #fff; --text: #1c1c1e; --muted: #63636b;
+      --line: #e5e5ea; --field: #f8f8fa; --accent: #007aff; --soft: #eef5ff;
+      background: var(--background); color: var(--text); font-synthesis: none;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; min-height: 100svh; display: grid; place-items: center;
+      padding: max(32px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+    }
+    main { width: 100%; max-width: 420px; }
+    .admin main { max-width: 900px; }
+    .card { background: var(--card); padding: 30px 24px; border-radius: 20px; box-shadow: 0 4px 20px #00000008; }
+    .public { text-align: center; }
+    h1, h2 { margin: 0 0 12px; font-size: 24px; line-height: 1.25; letter-spacing: -.025em; }
+    p { margin: 0 0 20px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+    a { color: var(--accent); }
+    .button, button {
+      display: inline-flex; align-items: center; justify-content: center; min-height: 48px;
+      padding: 13px 18px; border: 0; border-radius: 12px; background: var(--accent); color: white;
+      font: inherit; font-size: 16px; font-weight: 600; text-decoration: none; cursor: pointer;
+      -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+    }
+    .button:active, button:active { filter: brightness(.9); }
+    .download { width: 100%; margin: 0 0 16px; }
+    .secondary { background: var(--field); color: var(--text); border: 1px solid var(--line); }
+    button:disabled { opacity: .5; cursor: default; }
+    :focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+    .note, .quiet { font-size: 12px; color: var(--muted); }
+    .eyebrow { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 12px; }
+    .guide { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 24px; text-align: left; }
+    .guide h2 { font-size: 17px; }
+    .steps { margin: 16px 0 0; padding-left: 21px; font-size: 14px; line-height: 1.6; }
+    .steps li { padding-left: 4px; margin-bottom: 16px; }
+    .steps strong, .steps span { display: block; }
+    .steps span { color: var(--muted); margin-top: 3px; }
+    details { margin-top: 20px; padding: 14px; background: var(--field); border-radius: 12px; text-align: left; font-size: 13px; }
+    summary { cursor: pointer; font-weight: 600; min-height: 24px; }
+    details p { font-size: 12px; margin: 12px 0 0; }
+    .tip { background: var(--soft); border-radius: 10px; padding: 12px; margin-bottom: 0; }
+    input { display: block; width: 100%; min-height: 48px; margin: 8px 0 18px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--field); color: var(--text); font: inherit; font-size: 16px; }
+    label { font-size: 13px; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .between { justify-content: space-between; }
+    .field { flex: 1; min-width: 190px; }
+    .status { min-height: 24px; margin: 14px 0; font-size: 13px; color: var(--text); overflow-wrap: anywhere; }
+    .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
+    td, th { padding: 14px 8px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+    td button { font-size: 12px; padding: 8px; min-height: 44px; margin: 3px; }
+    th { color: var(--muted); font-weight: 500; }
+    .pager { margin-top: 18px; }
+    [hidden] { display: none !important; }
+    .login { max-width: 420px; margin: auto; }
+    @media (prefers-color-scheme: dark) {
+      :root { --background: #111114; --card: #1c1c1e; --text: #f5f5f7; --muted: #b0b0b8; --line: #38383a; --field: #28282c; --accent: #0a84ff; --soft: #162b43; }
+    }
+    @media (max-width: 520px) { .card { padding: 28px 20px; } .admin .card { padding: 24px 16px; } }
   </style>
 </head>
 <body class="__VIEW__">
 <main>
 <!-- PUBLIC_START -->
-  <section class="card" aria-labelledby="title">
-    <div class="mark" aria-hidden="true">◇</div>
-    <p class="eyebrow">Locket Gold · Cấu hình thiết bị</p>
-    <h1 id="title">Sẵn sàng kết nối.</h1>
-    <p>Cấu hình DNS NextDNS cho iPhone và iPad.<br>Mở bằng Safari để tải và cài đặt.</p>
-    <a class="button download" href="/profile.mobileconfig">Tải về cấu hình ngay ↓</a>
-    <p class="note">Sau khi tải: Cài đặt → Cài đặt chung →<br>VPN &amp; Quản lý thiết bị.</p>
-    <footer><p class="note">Xem nội dung trước khi cài. Nếu có CA đi kèm, chỉ tin cậy khi bạn biết rõ đơn vị cấp.<br>Cấu hình DNS không tự kích hoạt Locket Gold.</p></footer>
+  <section class="card public" aria-labelledby="title">
+    <h1 id="title">Locket Gold Premium</h1>
+    <p>Tải cấu hình DNS cho iPhone và iPad.<br>Mở trang này bằng Safari để cài đặt.</p>
+    <a class="button download" href="/profile.mobileconfig">Tải về cấu hình ngay</a>
+    <p class="note">iPhone sẽ hỏi quyền tải hồ sơ. Chọn “Cho phép”, rồi làm theo hướng dẫn bên dưới.</p>
+
+    <section class="guide" aria-labelledby="guideTitle">
+      <h2 id="guideTitle">Hướng dẫn cài đặt và bật cấu hình</h2>
+      <ol class="steps">
+        <li><strong>Tải bằng Safari</strong><span>Bấm “Tải về cấu hình ngay” ở trên → chọn “Cho phép”.</span></li>
+        <li><strong>Cài hồ sơ</strong><span>Mở Cài đặt → Cài đặt chung → VPN &amp; Quản lý thiết bị → chọn hồ sơ vừa tải → Cài đặt. Nhập mật mã thiết bị nếu được hỏi, rồi xác nhận.</span></li>
+        <li><strong>Bật tin cậy chứng chỉ, nếu có</strong><span>Vào Cài đặt → Cài đặt chung → Giới thiệu → Cài đặt tin cậy chứng chỉ. Bật tin cậy hoàn toàn cho đúng tên CA trong hồ sơ bạn vừa cài, rồi xác nhận.</span></li>
+      </ol>
+      <p class="note tip">Không thấy chứng chỉ để bật? Kiểm tra hồ sơ có mục “Chứng chỉ” hay không. Hồ sơ chỉ có DNS sẽ không có CA để bật tin cậy.</p>
+    </section>
+
+    <details>
+      <summary>Thông tin cấu hình và bảo mật</summary>
+      <p>Hồ sơ thiết lập DNS qua HTTPS tới NextDNS. Nếu có Root CA, iOS sẽ cài thêm chứng chỉ gốc. Chỉ bật tin cậy khi bạn biết và tin đơn vị cấp chứng chỉ.</p>
+      <p>Không cần nhập mật khẩu Locket hay Apple ID trên website này. Mật mã cài hồ sơ chỉ nhập trong ứng dụng Cài đặt của iPhone.</p>
+      <p>Hồ sơ hiện chưa ký số nên có thể hiển thị “Chưa được ký”. DNS và chứng chỉ không tự kích hoạt Locket Gold; quyền thuê bao phải được ứng dụng tích hợp kiểm tra với hệ thống.</p>
+      <p>Để gỡ: Cài đặt → Cài đặt chung → VPN &amp; Quản lý thiết bị → chọn hồ sơ này → Xóa cấu hình.</p>
+      <p><a href="https://support.apple.com/en-us/102390" target="_blank" rel="noopener noreferrer">Hướng dẫn tin cậy chứng chỉ của Apple</a></p>
+    </details>
   </section>
 <!-- PUBLIC_END -->
 <!-- ADMIN_START -->
