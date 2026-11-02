@@ -1,49 +1,59 @@
-from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
-from pymongo.errors import PyMongoError
-import logging
+from fastapi import FastAPI, Response
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.middleware.cors import CORSMiddleware
+import json
 
-from .database import lifespan
-from .middleware import SecurityMiddleware, security_headers
-from .routes import admin_router, router
-from .auth import router as auth_router
+app = FastAPI()
 
-logger = logging.getLogger(__name__)
+# Cấu hình bảo mật Trusted Hosts cho phép domain của bạn và Vercel
+app.add_middleware(
+    TrustedHostMiddleware, 
+    allowed_hosts=["locketgold.vuthanhluan.bond", "*.vercel.app", "localhost", "127.0.0.1"]
+)
 
+# Cấu hình CORS mở rộng
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-def create_app() -> FastAPI:
-    app = FastAPI(
-        title="License Manager", lifespan=lifespan,
-        docs_url=None, redoc_url=None, openapi_url=None,
-    )
-    app.add_middleware(SecurityMiddleware)
+@app.get("/v1/subscribers/{app_user_id}")
+async def get_subscriber(app_user_id: str):
+    # Cấu trúc JSON giả lập gói Gold với thời hạn vĩnh viễn (năm 2099)
+    response_data = {
+        "request_date": "2026-11-03T00:00:00Z",
+        "request_date_ms": 1793750400000,
+        "subscriber": {
+            "entitlements": {
+                "Gold": {
+                    "expires_date": "2099-11-03T00:00:00Z",
+                    "grace_period_expires_date": None,
+                    "product_identifier": "com.locket.gold.yearly",
+                    "purchase_date": "2026-11-03T00:00:00Z"
+                }
+            },
+            "first_seen": "2026-11-03T00:00:00Z",
+            "original_app_user_id": app_user_id,
+            "subscriptions": {
+                "com.locket.gold.yearly": {
+                    "expires_date": "2099-11-03T00:00:00Z",
+                    "is_sandbox": False,
+                    "original_purchase_date": "2026-11-03T00:00:00Z",
+                    "purchase_date": "2026-11-03T00:00:00Z",
+                    "store": "app_store"
+                }
+            }
+        }
+    }
+    return Response(content=json.dumps(response_data), media_type="application/json")
 
-    @app.exception_handler(PyMongoError)
-    async def database_error(request: Request, exc: PyMongoError):
-        logger.error('DATABASE_REQUEST_FAILED: %s', type(exc).__name__)
-        return JSONResponse(status_code=503, content={"detail": "Database temporarily unavailable"})
+@app.post("/v1/subscribers/{app_user_id}/attribution")
+async def attribution(app_user_id: str):
+    return {"rc_attribution_app_id": "success"}
 
-    @app.exception_handler(RequestValidationError)
-    async def validation_error(request: Request, exc: RequestValidationError):
-        # Do not echo arbitrary input or internal exception context.
-        errors = [{"loc": error["loc"], "type": error["type"]} for error in exc.errors()]
-        return JSONResponse(status_code=422, content={"detail": errors})
-
-    @app.exception_handler(Exception)
-    async def unexpected_error(request: Request, exc: Exception):
-        logger.error('UNEXPECTED_REQUEST_FAILED: %s', type(exc).__name__)
-        return JSONResponse(
-            status_code=500, content={"detail": "Internal server error"},
-            headers=security_headers(
-                getattr(request.state, "csp_nonce", ""), request.url.scheme == "https",
-            ),
-        )
-
-    app.include_router(router)
-    app.include_router(admin_router)
-    app.include_router(auth_router)
-    return app
-
-
-app = create_app()
+@app.get("/")
+async def root():
+    return {"status": "online", "service": "Locket Gold Proxy"}
