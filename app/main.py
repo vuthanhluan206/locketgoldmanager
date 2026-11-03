@@ -9,10 +9,10 @@ from .auth import router as auth_router
 # Khởi tạo ứng dụng kết nối trực tiếp với MongoDB
 app = FastAPI(lifespan=lifespan)
 
-# Bật hệ thống bảo vệ chống Spam và DDoS
+# Bật hệ thống bảo vệ chống Spam và giới hạn tốc độ request
 app.add_middleware(SecurityMiddleware)
 
-# Cấu hình CORS
+# Cấu hình CORS mở rộng cho phép mọi nguồn gọi API
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,7 +21,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Kết nối các đường dẫn Web, API và Admin
+# Kết nối các đường dẫn Web, API cấp phát Gold và Trang quản trị Admin
 app.include_router(router)
 app.include_router(admin_router)
 app.include_router(auth_router)
