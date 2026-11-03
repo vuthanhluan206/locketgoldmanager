@@ -50,6 +50,9 @@ async def download_profile(request: Request):
 @router.get('/v1/subscribers/{account_id}', dependencies=[Depends(require_subscriber_access)])
 async def subscriber(account_id: AccountId, accounts: Accounts):
     account = await accounts.find_one({'locket_id': account_id}, {'_id': 0})
+    # Nếu tài khoản đã bị xóa khỏi database, trả về phản hồi rỗng ngay lập tức để thu hồi quyền Gold
+    if not account:
+        return subscriber_response(account_id, None)
     return subscriber_response(account_id, account)
 
 
