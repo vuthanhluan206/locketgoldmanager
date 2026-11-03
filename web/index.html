@@ -387,6 +387,10 @@
     .admin .theme-toggle svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
     .admin .theme-toggle[data-mode="light"] svg { fill: currentColor; fill-opacity: .22; filter: drop-shadow(0 0 3px #d9b65c66); }
     .admin .theme-toggle[data-mode="dark"] { color: var(--muted); }
+    .admin .theme-toggle[data-mode="system"] svg { display: none; }
+    .admin .theme-toggle[data-mode="light"] [data-theme-label],
+    .admin .theme-toggle[data-mode="dark"] [data-theme-label] { display: none; }
+    .admin .theme-toggle { min-width: 46px; }
     .admin .theme-toggle span { min-width: 30px; font-size: 12px; }
     .admin .session-actions { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
     .admin .workspace-bar { background: var(--field); }
