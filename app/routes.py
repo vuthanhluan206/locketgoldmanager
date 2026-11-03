@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 from pymongo.errors import DuplicateKeyError
 from .database import get_accounts
 from .models import AccountId, AccountInput, AccountOutput, subscriber_response
@@ -12,6 +12,17 @@ from .config import get_settings
 router = APIRouter()
 WEB = Path(__file__).resolve().parent.parent / 'web'
 Accounts = Annotated[object, Depends(get_accounts)]
+
+
+@router.get('/favicon.ico', include_in_schema=False)
+async def favicon():
+    return FileResponse(WEB / 'favicon.ico', media_type='image/vnd.microsoft.icon')
+
+
+@router.get('/apple-touch-icon.png', include_in_schema=False)
+@router.get('/apple-touch-icon-precomposed.png', include_in_schema=False)
+async def apple_touch_icon():
+    return FileResponse(WEB / 'apple-touch-icon.png', media_type='image/png')
 
 
 @router.get('/', response_class=HTMLResponse, include_in_schema=False)

@@ -34,7 +34,7 @@ def security_headers(nonce: str, https: bool) -> dict[str, str]:
         'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
         'Content-Security-Policy': (
             f"default-src 'none'; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; "
-            "connect-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; "
+            "img-src 'self'; connect-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; "
             "form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
         ),
     }
