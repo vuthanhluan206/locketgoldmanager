@@ -443,6 +443,59 @@
       .admin #save { width: 100%; }
       .admin #identity { max-width: 180px; }
     }
+    .admin #dashboard { position: relative; isolation: isolate; background: var(--background); border-radius: 24px; }
+    .admin #dashboard > :not(.gold-rain) { position: relative; z-index: 1; }
+    .admin .gold-rain { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; color: var(--gold); }
+    .admin .gold-rain > svg { position: absolute; top: -80px; width: 34px; height: 34px; fill: none; stroke: currentColor; stroke-width: 1.2; opacity: 0; animation: gold-fall 24s linear infinite; }
+    .admin .gold-rain > svg:nth-child(1) { left: 3%; animation-delay: -3s; }
+    .admin .gold-rain > svg:nth-child(2) { left: 14%; animation-delay: -16s; width: 24px; }
+    .admin .gold-rain > svg:nth-child(3) { left: 27%; animation-delay: -8s; animation-duration: 29s; }
+    .admin .gold-rain > svg:nth-child(4) { left: 39%; animation-delay: -20s; }
+    .admin .gold-rain > svg:nth-child(5) { left: 51%; animation-delay: -12s; width: 22px; }
+    .admin .gold-rain > svg:nth-child(6) { left: 63%; animation-delay: -5s; animation-duration: 31s; }
+    .admin .gold-rain > svg:nth-child(7) { left: 75%; animation-delay: -19s; }
+    .admin .gold-rain > svg:nth-child(8) { left: 88%; animation-delay: -10s; width: 26px; }
+    @keyframes gold-fall {
+      0% { transform: translate3d(0, 0, 0) rotate(-15deg); opacity: 0; }
+      12%, 82% { opacity: .13; }
+      100% { transform: translate3d(24px, 1100px, 0) rotate(65deg); opacity: 0; }
+    }
+    .admin #dashboard .workspace-bar { background: var(--card); padding: 20px 28px; }
+    .admin #dashboard .workspace-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; border: 0; padding: 28px; margin: 0; }
+    .admin #dashboard .workspace-heading h2 { font-size: clamp(25px, 3vw, 34px); margin-bottom: 0; }
+    .admin .gold-emblem { display: grid; place-items: center; width: 64px; height: 64px; flex-shrink: 0; border-radius: 20px; background: linear-gradient(135deg, #ffe7a4, #c9943d); color: #654317; box-shadow: 0 8px 24px #b88a3026; transform: rotate(8deg); }
+    .admin .gold-emblem svg { width: 34px; height: 34px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+    .admin #dashboard .workspace-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+    .admin #dashboard .editor-panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 24px; box-shadow: 0 4px 16px #00000003; }
+    .admin #dashboard #accountForm .row { display: flex; align-items: flex-end; gap: 16px; }
+    .admin #dashboard #accountForm .field { flex: 1 1 200px; }
+    .admin #dashboard #accountForm input { margin-bottom: 0; background: var(--field); }
+    .admin #dashboard #save { width: auto; min-height: 48px; padding-inline: 22px; background: linear-gradient(120deg, #f0d38c, #d9ad58); color: #3c2c0c; }
+    .admin .section-title { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
+    .admin .section-title h3 { margin: 0; font-size: 15px; }
+    .admin .ui-icon { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .admin .section-title > .ui-icon { color: var(--gold); }
+    .admin #dashboard .directory-panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 24px; }
+    .admin #dashboard .directory-heading { padding: 0; }
+    .admin #dashboard .directory-heading .section-title { margin-bottom: 20px; }
+    .admin #dashboard .scroll { border-radius: 12px; }
+    .admin #dashboard th { padding-block: 14px; }
+    .admin #dashboard td { padding-block: 16px; }
+    .admin #dashboard td:last-child { min-width: 156px; }
+    .admin #dashboard td button { min-width: 40px; gap: 6px; }
+    .admin #dashboard .pager { margin-top: 20px; }
+    .admin #dashboard #logout { gap: 8px; }
+    @media (max-width: 540px) {
+      .admin #dashboard .workspace-bar { padding: 18px; }
+      .admin #dashboard .workspace-heading { padding: 24px 18px; }
+      .admin .gold-emblem { width: 48px; height: 48px; border-radius: 16px; }
+      .admin #dashboard .editor-panel, .admin #dashboard .directory-panel { padding: 18px; }
+      .admin #dashboard #accountForm .field, .admin #dashboard #save { flex-basis: 100%; width: 100%; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .admin .gold-rain { display: none; }
+      .admin button, .admin input { transition: none; }
+    }
   </style>
 </head>
 
@@ -593,6 +646,18 @@
       <div class="login-footer"><a class="quiet" href="/">← Về trang tải cấu hình</a></div>
     </section>
     <section class="card" id="dashboard" hidden aria-labelledby="adminTitle">
+      <svg width="0" height="0" aria-hidden="true" focusable="false"><defs>
+        <symbol id="gold-crown" viewBox="0 0 32 32"><path d="m4 9 6 5 6-9 6 9 6-5-3 15H7ZM8 28h16"/></symbol>
+        <symbol id="gold-gem" viewBox="0 0 32 32"><path d="m3 12 6-7h14l6 7-13 16ZM3 12h26M9 5l7 23L23 5"/></symbol>
+        <symbol id="gold-spark" viewBox="0 0 32 32"><path d="m16 3 4 9 9 4-9 4-4 9-4-9-9-4 9-4Z"/></symbol>
+        <symbol id="gold-heart" viewBox="0 0 32 32"><path d="M16 27 5 16C-3 6 10 0 16 9c6-9 19-3 11 7Z"/></symbol>
+      </defs></svg>
+      <div class="gold-rain" aria-hidden="true">
+        <svg><use href="#gold-crown"/></svg><svg><use href="#gold-spark"/></svg>
+        <svg><use href="#gold-gem"/></svg><svg><use href="#gold-heart"/></svg>
+        <svg><use href="#gold-crown"/></svg><svg><use href="#gold-gem"/></svg>
+        <svg><use href="#gold-spark"/></svg><svg><use href="#gold-heart"/></svg>
+      </div>
       <header class="row between workspace-bar">
         <div class="row">
           <span class="brand-mark" aria-hidden="true">✦</span>
@@ -608,32 +673,28 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 17h6m-6 3h6m-5 2h4M8.5 14.5a6 6 0 1 1 7 0c-.9.7-1.5 1.5-1.5 2.5h-4c0-1-.6-1.8-1.5-2.5Z"/></svg>
           <span data-theme-label>Auto</span>
         </button>
-          <button class="secondary" id="logout" type="button">Đăng xuất</button>
+          <button class="secondary" id="logout" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v16h5m6-12 4 4-4 4m-6-4h10"/></svg>Đăng xuất</button>
           </div>
         </div>
       </header>
       <div class="workspace-heading">
-        <p class="eyebrow">Quản lý dịch vụ</p>
-        <h2 id="adminTitle">Tài khoản được cấp phép</h2>
-        <p>Theo dõi thời hạn, cấp quyền và quản lý tài khoản tại một nơi.</p>
+        <div><p class="eyebrow">GOLD WORKSPACE</p><h2 id="adminTitle">Quản lý tài khoản</h2></div>
+        <span class="gold-emblem" aria-hidden="true"><svg viewBox="0 0 32 32"><use href="#gold-crown"/></svg></span>
       </div>
       <div class="workspace-layout">
       <form id="accountForm" class="editor-panel" aria-labelledby="editorTitle">
-        <h3 id="editorTitle">Cấp / gia hạn tài khoản</h3>
-        <p class="panel-caption">Nhập thông tin bên dưới để lưu quyền sử dụng.</p>
+        <div class="section-title"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><h3 id="editorTitle">Cấp / gia hạn</h3></div>
         <div class="row">
           <div class="field"><label for="accountId">Locket ID</label><input id="accountId" required maxlength="128"
               pattern="[A-Za-z0-9_$:@.\-]+" autocomplete="off"></div>
-          <div class="field"><label for="expiry">Hết hạn (giờ trên thiết bị)</label><input id="expiry"
+          <div class="field"><label for="expiry">Hết hạn · giờ thiết bị</label><input id="expiry"
               type="datetime-local" required></div>
+          <button id="save" type="submit"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>&nbsp; Lưu tài khoản</button>
         </div>
-        <p class="note">Dùng ID nội bộ mà ứng dụng gửi tới API thuê bao, không dán link chia sẻ.</p>
-        <button id="save" type="submit">Lưu / gia hạn tài khoản</button>
       </form>
       <section class="directory-panel" aria-labelledby="directoryTitle">
       <div class="directory-heading">
-        <h3 id="directoryTitle">Danh sách tài khoản</h3>
-        <p>Chọn Sửa để cập nhật thông tin hoặc gia hạn.</p>
+        <div class="section-title"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 20v-3a6 6 0 0 1 12 0v3m2-16a3 3 0 0 1 0 6m2 10v-3a6 6 0 0 0-2-4"/></svg><h3 id="directoryTitle">Tài khoản</h3></div>
       </div>
       <p class="status" id="adminMessage" role="status" aria-live="polite"></p>
       <div class="scroll">
@@ -760,6 +821,18 @@
               } catch (error) { $('adminMessage').textContent = error.message; }
               finally { check.disabled = false; }
             };
+            for (const [button, pathData] of [
+              [edit, 'm15 4 5 5M4 20l5-1L21 7l-5-5L4 14Z'],
+              [check, 'm9 8-4 4 4 4m6-8 4 4-4 4'],
+              [remove, 'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7'],
+            ]) {
+              button.title = button.textContent;
+              button.setAttribute('aria-label', button.textContent + ' · ' + row.locket_id);
+              const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+              icon.setAttribute('viewBox', '0 0 24 24'); icon.setAttribute('class', 'ui-icon'); icon.setAttribute('aria-hidden', 'true');
+              const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+              path.setAttribute('d', pathData); icon.append(path); button.replaceChildren(icon);
+            }
             actions.append(edit, check, remove); tr.append(actions); body.append(tr);
           }
           if (!rows.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 4; td.textContent = 'Chưa có tài khoản.'; tr.append(td); body.append(tr); }
