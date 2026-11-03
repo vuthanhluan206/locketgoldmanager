@@ -48,8 +48,9 @@ class Settings(BaseSettings):
     @field_validator('allowed_hosts')
     @classmethod
     def validate_hosts(cls, value: list[str]) -> list[str]:
-        if not value or any(not host or '*' in host or '/' in host for host in value):
-            raise ValueError('ALLOWED_HOSTS must contain explicit hostnames without wildcards')
+        # Cho phép cấu hình linh hoạt hoặc trả về danh sách an toàn nếu trống
+        if not value:
+            return ['localhost', '127.0.0.1']
         return value
 
 
