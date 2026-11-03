@@ -303,6 +303,97 @@
         --accent: #0a84ff;
       }
     }
+    /* Admin workspace */
+    body.admin {
+      --background: #f4f5f8;
+      --card: #fff;
+      --text: #202938;
+      --muted: #657185;
+      --line: #e3e7ee;
+      --field: #f8f9fc;
+      --accent: #25344c;
+      color-scheme: light;
+      background: radial-gradient(ellipse at 15% 0%, #e8edf5, transparent 55%), var(--background);
+      color: var(--text);
+      padding: max(32px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+    }
+
+    .admin main { max-width: 1240px; min-width: 0; }
+    .admin .card { border: 1px solid var(--line); box-shadow: 0 16px 48px #18283f08; border-radius: 20px; }
+    .admin .login { max-width: 460px; padding: 40px; }
+    .admin .brand-mark {
+      display: inline-grid; place-items: center; width: 48px; height: 48px;
+      border-radius: 14px; background: #25344c; color: #f5d486;
+      font-size: 23px; font-weight: 700; flex-shrink: 0;
+    }
+    .admin .login .brand-mark { margin-bottom: 28px; }
+    .admin .eyebrow { color: #8b6b2d; font-size: 10px; font-weight: 750; letter-spacing: .16em; }
+    .admin h1 { font-size: 30px; margin-bottom: 12px; }
+    .admin h2 { font-size: 27px; }
+    .admin h3 { font-size: 16px; letter-spacing: -.02em; margin: 0 0 8px; }
+    .admin label { font-weight: 650; color: var(--text); }
+    .admin input { border-radius: 10px; background: var(--card); margin-top: 9px; transition: border-color .15s; }
+    .admin input:hover { border-color: #acb6c5; }
+    .admin input:focus-visible { outline: 3px solid #b8cae65c; outline-offset: 1px; border-color: #7087aa; }
+    .admin button { border-radius: 10px; min-height: 46px; font-size: 14px; box-shadow: none; }
+    .admin button:hover:not(:disabled) { filter: brightness(.94); }
+    .admin button:disabled { cursor: not-allowed; }
+    .admin .secondary { background: var(--card); }
+    .admin #signIn { margin-top: 18px; }
+    .admin #turnstile { max-width: 100%; overflow-x: auto; }
+    .admin .login-footer { border-top: 1px solid var(--line); padding-top: 20px; text-align: center; }
+    .admin .login-footer a { color: var(--muted); }
+    .admin #dashboard { padding: 0; overflow: hidden; }
+    .admin .workspace-bar { padding: 22px 28px; border-bottom: 1px solid var(--line); }
+    .admin .brand-name { font-weight: 750; font-size: 15px; letter-spacing: -.02em; }
+    .admin .brand-name small { display: block; color: var(--muted); font-size: 11px; font-weight: 450; margin-top: 4px; }
+    .admin .workspace-heading { padding: 30px 28px 24px; }
+    .admin .workspace-heading p:last-child { margin: 0; font-size: 14px; }
+    .admin .workspace-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 24px; padding: 0 28px 28px; align-items: start; }
+    .admin .editor-panel { padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--field); }
+    .admin .panel-caption { font-size: 13px; margin-bottom: 24px; }
+    .admin #accountForm .row { display: block; }
+    .admin #accountForm .field { min-width: 0; }
+    .admin #accountForm .note { font-size: 12px; line-height: 1.7; margin: 0 0 20px; }
+    .admin .directory-panel { min-width: 0; }
+    .admin .directory-heading { padding: 4px 0 16px; }
+    .admin .directory-heading p { font-size: 12px; margin: 0; }
+    .admin .scroll { border: 1px solid var(--line); border-radius: 12px; }
+    .admin table { min-width: 580px; }
+    .admin th { background: var(--field); font-size: 11px; letter-spacing: .03em; white-space: nowrap; padding: 15px; }
+    .admin td { padding: 18px 15px; line-height: 1.6; }
+    .admin tbody tr:last-child td { border-bottom: 0; }
+    .admin tbody tr:hover { background: var(--field); }
+    .admin td:first-child { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-weight: 600; max-width: 180px; }
+    .admin td:nth-child(3) { font-weight: 650; white-space: nowrap; }
+    .admin td:last-child { min-width: 190px; }
+    .admin td button { min-height: 40px; padding: 7px 10px; font-size: 11px; border-radius: 7px; }
+    .admin td button:nth-child(3) { color: #b13d46; border-color: #ecd4d6; }
+    .admin .pager { padding-top: 4px; }
+    .admin .pager button { font-size: 12px; padding: 10px 14px; }
+    .admin .status { margin: 12px 0; min-height: 0; }
+    .admin .status:not(:empty) { padding: 12px 14px; background: var(--field); border: 1px solid var(--line); border-radius: 10px; }
+    .admin #identity { margin: 0; max-width: 280px; overflow-wrap: anywhere; }
+
+    @media (max-width: 960px) {
+      .admin .workspace-layout { grid-template-columns: 1fr; }
+      .admin #accountForm .row { display: flex; }
+      .admin #accountForm .field { flex: 1 1 230px; }
+      .admin #save { width: auto; }
+    }
+
+    @media (max-width: 540px) {
+      body.admin { padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+      .admin .login { padding: 28px 20px; }
+      .admin h1 { font-size: 26px; }
+      .admin h2 { font-size: 24px; }
+      .admin .workspace-bar { padding: 18px; gap: 18px; }
+      .admin .workspace-heading { padding: 24px 18px; }
+      .admin .workspace-layout { padding: 0 18px 20px; gap: 22px; }
+      .admin .editor-panel { padding: 18px; }
+      .admin #save { width: 100%; }
+      .admin #identity { max-width: 180px; }
+    }
   </style>
 </head>
 
@@ -430,28 +521,40 @@
     <!-- PUBLIC_END -->
     <!-- ADMIN_START -->
     <section class="card login" id="loginScreen" aria-labelledby="loginTitle">
+      <span class="brand-mark" aria-hidden="true">✦</span>
       <p class="eyebrow">Locket Gold Manager</p>
       <h1 id="loginTitle">Đăng nhập quản trị</h1>
-      <p>Quản lý tài khoản và dịch vụ.</p>
+      <p>Chào mừng trở lại. Đăng nhập để quản lý tài khoản và thời hạn dịch vụ.</p>
       <form id="loginForm">
         <label for="email">Email</label><input id="email" type="email" autocomplete="username" required maxlength="254">
         <label for="password">Mật khẩu</label><input id="password" type="password" autocomplete="current-password"
           required maxlength="256">
         <div id="turnstile" data-sitekey="__TURNSTILE_SITE_KEY__"></div>
-        <button style="margin-top: 15px;" id="signIn" type="submit">Đăng nhập</button>
+        <button id="signIn" type="submit">Đăng nhập</button>
       </form>
       <p class="status" id="loginMessage" role="status" aria-live="polite"></p>
-      <a class="quiet" href="/">← Trang tải cấu hình</a>
+      <div class="login-footer"><a class="quiet" href="/">← Về trang tải cấu hình</a></div>
     </section>
     <section class="card" id="dashboard" hidden aria-labelledby="adminTitle">
-      <div class="row between">
-        <div>
-          <p class="eyebrow">Quản trị dịch vụ</p>
-          <h2 id="adminTitle">Tài khoản được cấp phép</h2>
-        </div><button class="secondary" id="logout" type="button">Đăng xuất</button>
+      <header class="row between workspace-bar">
+        <div class="row">
+          <span class="brand-mark" aria-hidden="true">✦</span>
+          <div class="brand-name">Locket Gold<small>Không gian quản trị</small></div>
+        </div>
+        <div class="row">
+          <p class="quiet" id="identity"></p>
+          <button class="secondary" id="logout" type="button">Đăng xuất</button>
+        </div>
+      </header>
+      <div class="workspace-heading">
+        <p class="eyebrow">Quản lý dịch vụ</p>
+        <h2 id="adminTitle">Tài khoản được cấp phép</h2>
+        <p>Theo dõi thời hạn, cấp quyền và quản lý tài khoản tại một nơi.</p>
       </div>
-      <p class="quiet" id="identity"></p>
-      <form id="accountForm">
+      <div class="workspace-layout">
+      <form id="accountForm" class="editor-panel" aria-labelledby="editorTitle">
+        <h3 id="editorTitle">Cấp / gia hạn tài khoản</h3>
+        <p class="panel-caption">Nhập thông tin bên dưới để lưu quyền sử dụng.</p>
         <div class="row">
           <div class="field"><label for="accountId">Locket ID</label><input id="accountId" required maxlength="128"
               pattern="[A-Za-z0-9_$:@.\-]+" autocomplete="off"></div>
@@ -459,8 +562,13 @@
               type="datetime-local" required></div>
         </div>
         <p class="note">Dùng ID nội bộ mà ứng dụng gửi tới API thuê bao, không dán link chia sẻ.</p>
-        <button style="margin-top: 15px;" id="save" type="submit">Lưu / gia hạn tài khoản</button>
+        <button id="save" type="submit">Lưu / gia hạn tài khoản</button>
       </form>
+      <section class="directory-panel" aria-labelledby="directoryTitle">
+      <div class="directory-heading">
+        <h3 id="directoryTitle">Danh sách tài khoản</h3>
+        <p>Chọn Sửa để cập nhật thông tin hoặc gia hạn.</p>
+      </div>
       <p class="status" id="adminMessage" role="status" aria-live="polite"></p>
       <div class="scroll">
         <table>
@@ -477,6 +585,8 @@
       </div>
       <div class="row between pager"><button class="secondary" id="previous" type="button">← Trước</button><span
           class="quiet" id="page"></span><button class="secondary" id="next" type="button">Sau →</button></div>
+      </section>
+      </div>
     </section>
     <script nonce="__NONCE__">
       (() => {
