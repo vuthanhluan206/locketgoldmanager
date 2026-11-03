@@ -312,8 +312,12 @@
       --line: #e3e7ee;
       --field: #f8f9fc;
       --accent: #25344c;
+      --halo: #e8edf5;
+      --gold: #8b6b2d;
+      --danger: #b13d46;
+      --danger-line: #ecd4d6;
       color-scheme: light;
-      background: radial-gradient(ellipse at 15% 0%, #e8edf5, transparent 55%), var(--background);
+      background: radial-gradient(ellipse at 15% 0%, var(--halo), transparent 55%), var(--background);
       color: var(--text);
       padding: max(32px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
     }
@@ -327,7 +331,7 @@
       font-size: 23px; font-weight: 700; flex-shrink: 0;
     }
     .admin .login .brand-mark { margin-bottom: 28px; }
-    .admin .eyebrow { color: #8b6b2d; font-size: 10px; font-weight: 750; letter-spacing: .16em; }
+    .admin .eyebrow { color: var(--gold); font-size: 10px; font-weight: 750; letter-spacing: .16em; }
     .admin h1 { font-size: 30px; margin-bottom: 12px; }
     .admin h2 { font-size: 27px; }
     .admin h3 { font-size: 16px; letter-spacing: -.02em; margin: 0 0 8px; }
@@ -368,12 +372,49 @@
     .admin td:nth-child(3) { font-weight: 650; white-space: nowrap; }
     .admin td:last-child { min-width: 190px; }
     .admin td button { min-height: 40px; padding: 7px 10px; font-size: 11px; border-radius: 7px; }
-    .admin td button:nth-child(3) { color: #b13d46; border-color: #ecd4d6; }
+    .admin td button:nth-child(3) { color: var(--danger); border-color: var(--danger-line); }
     .admin .pager { padding-top: 4px; }
     .admin .pager button { font-size: 12px; padding: 10px 14px; }
     .admin .status { margin: 12px 0; min-height: 0; }
     .admin .status:not(:empty) { padding: 12px 14px; background: var(--field); border: 1px solid var(--line); border-radius: 10px; }
     .admin #identity { margin: 0; max-width: 280px; overflow-wrap: anywhere; }
+
+    .admin .appearance-bar { display: flex; justify-content: flex-end; margin-bottom: 16px; gap: 10px; align-items: center; }
+    .admin .appearance-bar label { color: var(--muted); font-size: 12px; }
+    .admin select {
+      font: inherit; font-size: 13px; padding: 10px 32px 10px 12px; min-height: 44px;
+      border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--text);
+    }
+    .admin .workspace-bar { background: var(--field); }
+    .admin .profile { gap: 10px; }
+    .admin .avatar {
+      display: grid; place-items: center; width: 38px; height: 38px; flex-shrink: 0;
+      border: 1px solid var(--line); border-radius: 50%; background: var(--card);
+      font-size: 12px; font-weight: 750; color: var(--gold);
+    }
+    .admin .profile-name { display: block; font-size: 13px; font-weight: 650; margin-bottom: 4px; }
+    .admin .profile #identity { font-size: 11px; }
+    .admin .workspace-heading { border-left: 3px solid var(--gold); margin: 28px 28px 24px; padding: 0 0 0 18px; }
+    .admin .editor-panel { border-top: 3px solid var(--gold); }
+    .admin .directory-heading h3 { font-size: 18px; }
+    .admin #signIn, .admin #save { background: linear-gradient(120deg, #334766, #25344c); color: #fff; }
+
+    .admin[data-theme="dark"] {
+      color-scheme: dark;
+      --background: #0d131e; --card: #151e2c; --field: #1a2535;
+      --text: #e7edf6; --muted: #a1afc3; --line: #2c3a4e;
+      --accent: #bdd1ef; --halo: #203048; --gold: #e3c17e;
+      --danger: #ffa6ac; --danger-line: #65404a;
+    }
+    @media (prefers-color-scheme: dark) {
+      .admin:not([data-theme="light"]) {
+        color-scheme: dark;
+        --background: #0d131e; --card: #151e2c; --field: #1a2535;
+        --text: #e7edf6; --muted: #a1afc3; --line: #2c3a4e;
+        --accent: #bdd1ef; --halo: #203048; --gold: #e3c17e;
+        --danger: #ffa6ac; --danger-line: #65404a;
+      }
+    }
 
     @media (max-width: 960px) {
       .admin .workspace-layout { grid-template-columns: 1fr; }
@@ -388,7 +429,7 @@
       .admin h1 { font-size: 26px; }
       .admin h2 { font-size: 24px; }
       .admin .workspace-bar { padding: 18px; gap: 18px; }
-      .admin .workspace-heading { padding: 24px 18px; }
+      .admin .workspace-heading { margin: 24px 18px; padding: 0 0 0 14px; }
       .admin .workspace-layout { padding: 0 18px 20px; gap: 22px; }
       .admin .editor-panel { padding: 18px; }
       .admin #save { width: 100%; }
@@ -520,6 +561,14 @@
     </section>
     <!-- PUBLIC_END -->
     <!-- ADMIN_START -->
+    <div class="appearance-bar">
+      <label for="adminTheme">Giao diện</label>
+      <select id="adminTheme">
+        <option value="system">Theo thiết bị</option>
+        <option value="light">Sáng</option>
+        <option value="dark">Tối</option>
+      </select>
+    </div>
     <section class="card login" id="loginScreen" aria-labelledby="loginTitle">
       <span class="brand-mark" aria-hidden="true">✦</span>
       <p class="eyebrow">Locket Gold Manager</p>
@@ -542,7 +591,10 @@
           <div class="brand-name">Locket Gold<small>Không gian quản trị</small></div>
         </div>
         <div class="row">
-          <p class="quiet" id="identity"></p>
+          <div class="row profile">
+            <span class="avatar" aria-hidden="true">VL</span>
+            <div><span class="profile-name">Vũ Thành Luân dzais1tg</span><p class="quiet" id="identity"></p></div>
+          </div>
           <button class="secondary" id="logout" type="button">Đăng xuất</button>
         </div>
       </header>
@@ -591,6 +643,20 @@
     <script nonce="__NONCE__">
       (() => {
         'use strict';
+        const themePicker = document.getElementById('adminTheme');
+        function applyTheme(value) {
+          if (value === 'light' || value === 'dark') document.body.dataset.theme = value;
+          else delete document.body.dataset.theme;
+        }
+        try {
+          const savedTheme = localStorage.getItem('locket_admin_theme');
+          if (savedTheme === 'light' || savedTheme === 'dark') themePicker.value = savedTheme;
+        } catch { }
+        applyTheme(themePicker.value);
+        themePicker.addEventListener('change', () => {
+          applyTheme(themePicker.value);
+          try { localStorage.setItem('locket_admin_theme', themePicker.value); } catch { }
+        });
         const key = 'locket_admin_session';
         const $ = id => document.getElementById(id);
         let session = null, skip = 0, timer;
