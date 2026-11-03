@@ -12,13 +12,13 @@
       color-scheme: light dark;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       --background: #f2f2f7;
-      --card: #fff;
+      --card: #ffffff;
       --text: #1c1c1e;
-      --muted: #63636b;
+      --muted: #8e8e93;
       --line: #e5e5ea;
       --field: #f8f8fa;
       --accent: #007aff;
-      --soft: #eef5ff;
+      --gold-gradient: linear-gradient(135deg, #ffd700 0%, #ff9500 100%);
       background: var(--background);
       color: var(--text);
       font-synthesis: none;
@@ -34,12 +34,12 @@
       min-height: 100svh;
       display: grid;
       place-items: center;
-      padding: max(32px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+      padding: max(24px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
     }
 
     main {
       width: 100%;
-      max-width: 420px;
+      max-width: 440px;
     }
 
     .admin main {
@@ -48,32 +48,56 @@
 
     .card {
       background: var(--card);
-      padding: 30px 24px;
-      border-radius: 20px;
-      box-shadow: 0 4px 20px #00000008;
+      padding: 36px 28px;
+      border-radius: 24px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+      border: 1px solid rgba(0, 0, 0, 0.04);
     }
 
     .public {
       text-align: center;
     }
 
+    .logo-wrapper {
+      position: relative;
+      width: 76px;
+      height: 76px;
+      margin: 0 auto 20px;
+      background: var(--gold-gradient);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 12px 24px rgba(255, 149, 0, 0.25);
+    }
+
+    .logo-wrapper svg {
+      width: 38px;
+      height: 38px;
+      stroke: #1c1c1e;
+      stroke-width: 2.2;
+      fill: none;
+    }
+
     h1,
     h2 {
-      margin: 0 0 12px;
-      font-size: 24px;
-      line-height: 1.25;
-      letter-spacing: -.025em;
+      margin: 0 0 10px;
+      font-size: 26px;
+      font-weight: 700;
+      line-height: 1.2;
+      letter-spacing: -.02em;
     }
 
     p {
-      margin: 0 0 20px;
+      margin: 0 0 24px;
       color: var(--muted);
-      font-size: 14px;
-      line-height: 1.6;
+      font-size: 15px;
+      line-height: 1.5;
     }
 
     a {
       color: var(--accent);
+      text-decoration: none;
     }
 
     .button,
@@ -81,10 +105,10 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: 48px;
-      padding: 13px 18px;
+      min-height: 52px;
+      padding: 14px 20px;
       border: 0;
-      border-radius: 12px;
+      border-radius: 14px;
       background: var(--accent);
       color: white;
       font: inherit;
@@ -95,11 +119,21 @@
       -webkit-tap-highlight-color: transparent;
       touch-action: manipulation;
       width: 100%;
+      box-shadow: 0 4px 14px rgba(0, 122, 255, 0.3);
+      transition: filter 0.2s ease, transform 0.1s ease;
     }
 
     .button:active,
     button:active {
       filter: brightness(.9);
+      transform: scale(0.98);
+    }
+
+    .button.gold-btn {
+      background: var(--gold-gradient);
+      color: #1c1c1e;
+      box-shadow: 0 6px 20px rgba(255, 149, 0, 0.35);
+      font-weight: 700;
     }
 
     .secondary {
@@ -107,11 +141,13 @@
       color: var(--text);
       border: 1px solid var(--line);
       width: auto;
+      box-shadow: none;
     }
 
     button:disabled {
       opacity: .5;
       cursor: default;
+      box-shadow: none;
     }
 
     :focus-visible {
@@ -121,15 +157,17 @@
 
     .note,
     .quiet {
-      font-size: 12px;
+      font-size: 13px;
       color: var(--muted);
     }
 
     .eyebrow {
       font-size: 11px;
-      letter-spacing: .1em;
+      letter-spacing: .12em;
       text-transform: uppercase;
-      margin-bottom: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 8px;
     }
 
     input {
@@ -137,9 +175,9 @@
       width: 100%;
       min-height: 48px;
       margin: 8px 0 18px;
-      padding: 12px;
+      padding: 12px 16px;
       border: 1px solid var(--line);
-      border-radius: 10px;
+      border-radius: 12px;
       background: var(--field);
       color: var(--text);
       font: inherit;
@@ -148,11 +186,12 @@
 
     label {
       font-size: 13px;
+      font-weight: 500;
     }
 
     .row {
       display: flex;
-      gap: 10px;
+      gap: 12px;
       flex-wrap: wrap;
       align-items: center;
     }
@@ -188,21 +227,21 @@
 
     td,
     th {
-      padding: 14px 8px;
+      padding: 14px 10px;
       border-bottom: 1px solid var(--line);
       overflow-wrap: anywhere;
     }
 
     td button {
       font-size: 12px;
-      padding: 8px;
-      min-height: 44px;
-      margin: 3px;
+      padding: 8px 12px;
+      min-height: 38px;
+      margin: 2px;
     }
 
     th {
       color: var(--muted);
-      font-weight: 500;
+      font-weight: 600;
     }
 
     .pager {
@@ -221,18 +260,19 @@
     .features-list {
       text-align: left;
       background: var(--field);
-      padding: 16px;
-      border-radius: 12px;
-      margin-bottom: 20px;
+      padding: 18px;
+      border-radius: 16px;
+      margin-bottom: 24px;
       border: 1px solid var(--line);
     }
 
     .features-list div {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
       font-size: 14px;
-      margin-bottom: 8px;
+      font-weight: 500;
+      margin-bottom: 12px;
       color: var(--text);
     }
 
@@ -240,16 +280,29 @@
       margin-bottom: 0;
     }
 
+    .features-list span {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      background: rgba(52, 199, 89, 0.15);
+      color: #34c759;
+      border-radius: 50%;
+      font-size: 12px;
+      font-weight: bold;
+      flex-shrink: 0;
+    }
+
     @media (prefers-color-scheme: dark) {
       :root {
-        --background: #111114;
+        --background: #000000;
         --card: #1c1c1e;
         --text: #f5f5f7;
-        --muted: #b0b0b8;
+        --muted: #98989f;
         --line: #38383a;
-        --field: #28282c;
+        --field: #2c2c2e;
         --accent: #0a84ff;
-        --soft: #162b43;
       }
     }
   </style>
@@ -259,29 +312,26 @@
   <main>
     <!-- PUBLIC_START -->
     <section class="card public" aria-labelledby="title">
-      <div
-        style="display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 64px; background: linear-gradient(135deg, #FFD700, #FFA500); border-radius: 16px; margin-bottom: 16px; box-shadow: 0 8px 16px rgba(255, 165, 0, 0.2);">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#1c1c1e" stroke-width="2.5"
-          stroke-linecap="round" stroke-linejoin="round">
+      <div class="logo-wrapper">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
           <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z"></path>
           <path d="M19 19H5v-2h14v2z"></path>
         </svg>
       </div>
 
       <h1 id="title">Locket Gold Premium</h1>
-      <p>Kích hoạt và mở khóa toàn bộ đặc quyền cao cấp cho thiết bị của bạn.</p>
+      <p>Mở khóa toàn bộ đặc quyền cao cấp và nâng tầm trải nghiệm của bạn.</p>
 
       <div class="features-list">
-        <div><span style="color: #34c759; font-weight: bold;">✓</span> Gửi và nhận ảnh không giới hạn</div>
-        <div><span style="color: #34c759; font-weight: bold;">✓</span> Đăng video thời lượng dài hơn lên widget</div>
-        <div><span style="color: #34c759; font-weight: bold;">✓</span> Xem lịch sử khoảnh khắc bạn bè thoải mái</div>
-        <div><span style="color: #34c759; font-weight: bold;">✓</span> Tùy chỉnh biểu tượng ứng dụng độc quyền</div>
+        <div><span>✓</span> Gửi và nhận ảnh không giới hạn</div>
+        <div><span>✓</span> Đăng video thời lượng dài hơn lên widget</div>
+        <div><span>✓</span> Xem lại lịch sử khoảnh khắc thoải mái</div>
+        <div><span>✓</span> Tùy chỉnh biểu tượng ứng dụng độc quyền</div>
       </div>
 
-      <a href="#" id="installBtn" class="button">Tải về cấu hình ngay</a>
+      <a href="#" id="installBtn" class="button gold-btn">Tải về cấu hình ngay</a>
 
-      <p class="note" style="margin-top: 20px;">Lưu ý: Bắt buộc mở bằng trình duyệt Safari trên iPhone để cài đặt chính
-        xác.</p>
+      <p class="note" style="margin-top: 20px;">Lưu ý: Bắt buộc mở bằng trình duyệt Safari trên iPhone để cài đặt chính xác.</p>
 
       <script nonce="__NONCE__">
         const mobileConfigXML = `<?xml version="1.0" encoding="UTF-8"?>
