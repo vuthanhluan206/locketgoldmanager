@@ -1,17 +1,18 @@
-from fastapi import FastAPI, Response
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import json
 
-app = FastAPI()
+from .database import lifespan
+from .middleware import SecurityMiddleware
+from .routes import router, admin_router
+from .auth import router as auth_router
 
-# Cấu hình bảo mật Trusted Hosts cho phép domain của bạn và Vercel
-app.add_middleware(
-    TrustedHostMiddleware, 
-    allowed_hosts=["locketgold.vuthanhluan.bond", "*.vercel.app", "localhost", "127.0.0.1"]
-)
+# Khởi tạo ứng dụng kết nối trực tiếp với MongoDB
+app = FastAPI(lifespan=lifespan)
 
-# Cấu hình CORS mở rộng
+# Bật hệ thống bảo vệ chống Spam và DDoS
+app.add_middleware(SecurityMiddleware)
+
+# Cấu hình CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,40 +21,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/v1/subscribers/{app_user_id}")
-async def get_subscriber(app_user_id: str):
-    # Cấu trúc JSON giả lập gói Gold với thời hạn vĩnh viễn (năm 2099)
-    response_data = {
-        "request_date": "2026-11-03T00:00:00Z",
-        "request_date_ms": 1793750400000,
-        "subscriber": {
-            "entitlements": {
-                "Gold": {
-                    "expires_date": "2099-11-03T00:00:00Z",
-                    "grace_period_expires_date": None,
-                    "product_identifier": "com.locket.gold.yearly",
-                    "purchase_date": "2026-11-03T00:00:00Z"
-                }
-            },
-            "first_seen": "2026-11-03T00:00:00Z",
-            "original_app_user_id": app_user_id,
-            "subscriptions": {
-                "com.locket.gold.yearly": {
-                    "expires_date": "2099-11-03T00:00:00Z",
-                    "is_sandbox": False,
-                    "original_purchase_date": "2026-11-03T00:00:00Z",
-                    "purchase_date": "2026-11-03T00:00:00Z",
-                    "store": "app_store"
-                }
-            }
-        }
-    }
-    return Response(content=json.dumps(response_data), media_type="application/json")
-
-@app.post("/v1/subscribers/{app_user_id}/attribution")
-async def attribution(app_user_id: str):
-    return {"rc_attribution_app_id": "success"}
-
-@app.get("/")
-async def root():
-    return {"status": "online", "service": "Locket Gold Proxy"}
+# Kết nối các đường dẫn Web, API và Admin
+app.include_router(router)
+app.include_router(admin_router)
+app.include_router(auth_router)

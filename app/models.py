@@ -44,10 +44,12 @@ def subscriber_response(account_id: str, account: dict | None, now: datetime | N
         expiry = normalize_expiry(account['expires_date']) if account else None
     except (ValueError, TypeError, KeyError):
         expiry = None
-        
+
     active = expiry is not None and expiry > now
     entitlement_expires = expiry.isoformat().replace('+00:00', 'Z') if active else None
-    product_id = "locket_gold_monthly"
+    
+    # Sửa lại đúng Product ID của Locket
+    product_id = "com.locket.gold.yearly"
     now_str = now.isoformat().replace('+00:00', 'Z')
 
     entitlement = {
@@ -60,6 +62,7 @@ def subscriber_response(account_id: str, account: dict | None, now: datetime | N
     subscriptions = {
         product_id: {
             'expires_date': entitlement_expires,
+            'is_sandbox': False,
             'original_purchase_date': now_str,
             'purchase_date': now_str,
             'ownership_type': 'PURCHASED',
