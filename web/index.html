@@ -372,8 +372,8 @@
     .admin td { padding: 18px 15px; line-height: 1.6; }
     .admin tbody tr:last-child td { border-bottom: 0; }
     .admin tbody tr:hover { background: var(--field); }
-    .admin td:first-child { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-weight: 600; max-width: 180px; }
-    .admin td:nth-child(3) { font-weight: 650; white-space: nowrap; }
+    .admin td:nth-child(2) { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-weight: 600; max-width: 180px; }
+    .admin td:nth-child(4) { font-weight: 650; white-space: nowrap; }
     .admin td:last-child { min-width: 190px; }
     .admin td button { min-height: 40px; padding: 7px 10px; font-size: 11px; border-radius: 7px; }
     .admin td button:nth-child(3) { color: var(--danger); border-color: var(--danger-line); }
@@ -510,6 +510,35 @@
     .admin #addAccount { background: linear-gradient(120deg, #f0d38c, #d9ad58); color: #3c2c0c; }
     .admin #dashboard .directory-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 20px; }
     .admin #dashboard .directory-heading .section-title { margin-bottom: 0; }
+    .admin #dashboard .directory-panel { padding: 0; overflow: hidden; box-shadow: 0 8px 30px #00000004; }
+    .admin #dashboard .directory-heading { padding: 22px 24px; margin: 0; border-bottom: 1px solid var(--line); }
+    .admin #dashboard .directory-panel > .status:not(:empty) { margin: 16px 24px; }
+    .admin #dashboard .scroll { border: 0; border-radius: 0; }
+    .admin #dashboard table { min-width: 660px; }
+    .admin #dashboard th { padding: 14px 24px; font-size: 10px; text-transform: uppercase; letter-spacing: .1em; font-weight: 700; }
+    .admin #dashboard td { padding: 20px 24px; vertical-align: middle; border-bottom: 1px solid var(--line); }
+    .admin #dashboard td:nth-child(2) { width: 32%; font-family: inherit; font-size: 13px; }
+    .admin #dashboard .row-number { width: 64px; min-width: 64px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .admin #dashboard th:last-child { width: 156px; }
+    .admin .account-name { display: inline-flex; align-items: center; gap: 10px; max-width: 100%; }
+    .admin .account-name::before { content: 'G'; display: grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0; border-radius: 10px; background: var(--field); border: 1px solid var(--line); color: var(--gold); font-size: 12px; font-weight: 750; }
+    .admin .account-name span { overflow-wrap: anywhere; }
+    .admin .account-expiry { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .admin .account-status { display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--field); color: var(--muted); font-size: 11px; font-weight: 650; }
+    .admin .account-status::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+    .admin .account-status.is-gold { color: var(--gold); border-color: currentColor; }
+    .admin #dashboard td:last-child:not([colspan]), .admin #dashboard th:last-child { text-align: right; white-space: nowrap; }
+    .admin #dashboard td button { border-color: transparent; background: transparent; margin: 0 1px; border-radius: 10px; }
+    .admin #dashboard td button:hover:not(:disabled) { border-color: var(--line); background: var(--field); filter: none; }
+    .admin #dashboard td button:nth-child(3) { border-color: transparent; }
+    .admin #dashboard .pager { margin: 0; padding: 18px 24px; border-top: 1px solid var(--line); background: var(--field); }
+    .admin #dashboard .pager #page { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .admin #dashboard td[colspan] { text-align: center; padding: 64px 24px; color: var(--muted); font-weight: 450; font-family: inherit; }
+    .admin #dashboard td[colspan]::before { content: '◇'; display: block; color: var(--gold); font-size: 34px; margin-bottom: 12px; }
+    @media (max-width: 540px) {
+      .admin #dashboard .directory-heading, .admin #dashboard .pager { padding: 16px; }
+      .admin #dashboard td, .admin #dashboard th { padding-left: 18px; padding-right: 18px; }
+    }
   </style>
 </head>
 
@@ -725,10 +754,11 @@
         <table>
           <thead>
             <tr>
-              <th>ID</th>
-              <th>Expires at</th>
-              <th>Status</th>
-              <th>Actions</th>
+              <th scope="col" aria-label="Row number">No.</th>
+              <th scope="col">Account</th>
+              <th scope="col">Expires at</th>
+              <th scope="col">Status</th>
+              <th scope="col">Actions</th>
             </tr>
           </thead>
           <tbody id="accounts"></tbody>
@@ -840,10 +870,21 @@
           const rows = await api('/admin/accounts?skip=' + skip + '&limit=' + limit);
           if (!session) return;
           const body = $('accounts'); body.replaceChildren();
-          for (const row of rows) {
+          for (const [rowIndex, row] of rows.entries()) {
             const tr = document.createElement('tr');
-            for (const value of [row.locket_id, new Date(row.expires_date).toLocaleString('en-US'), new Date(row.expires_date) > new Date() ? 'Gold' : 'Expired']) {
-              const td = document.createElement('td'); td.textContent = value; tr.append(td);
+            const number = document.createElement('td');
+            number.className = 'row-number'; number.textContent = String(skip + rowIndex + 1); tr.append(number);
+            for (const [index, value] of [row.locket_id, new Date(row.expires_date).toLocaleString('en-US'), new Date(row.expires_date) > new Date() ? 'Gold' : 'Expired'].entries()) {
+              const td = document.createElement('td');
+              const label = document.createElement('span'); label.textContent = value;
+              if (index === 0) {
+                const name = document.createElement('span'); name.className = 'account-name';
+                name.append(label); td.append(name);
+              } else {
+                label.className = index === 1 ? 'account-expiry' : 'account-status' + (value === 'Gold' ? ' is-gold' : '');
+                td.append(label);
+              }
+              tr.append(td);
             }
             const actions = document.createElement('td');
             const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary'; edit.textContent = 'Edit';
@@ -884,7 +925,7 @@
             }
             actions.append(edit, check, remove); tr.append(actions); body.append(tr);
           }
-          if (!rows.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 4; td.textContent = 'No accounts yet.'; tr.append(td); body.append(tr); }
+          if (!rows.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 5; td.textContent = 'No accounts yet.'; tr.append(td); body.append(tr); }
           $('previous').disabled = skip === 0; $('next').disabled = rows.length < limit || skip + limit > 10000;
           $('page').textContent = 'Page ' + (skip / limit + 1);
         }
