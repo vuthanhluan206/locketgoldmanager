@@ -24,17 +24,14 @@ async def require_subscriber_access(
     settings = get_settings()
     configured = settings.subscriber_api_token
     
-    # Nếu hệ thống có cấu hình token riêng cho subscriber thì kiểm tra
-    if configured is not None:
-        if credentials is not None and secrets.compare_digest(
-            credentials.credentials.encode('utf-8'),
-            configured.get_secret_value().encode('ascii')
-        ):
-            return
-        raise HTTPException(401, "Invalid or missing subscriber API token", headers={"WWW-Authenticate": "Bearer"})
-    
-    # Nếu không cấu hình token riêng, cho phép ứng dụng Locket gọi vào tự do để trả về trạng thái
-    return
+    if credentials is None:
+        raise HTTPException(401, 'Authentication required', headers={'WWW-Authenticate': 'Bearer'})
+    if configured is not None and secrets.compare_digest(
+        credentials.credentials.encode('utf-8'),
+        configured.get_secret_value().encode('ascii'),
+    ):
+        return
+    return await require_admin(request, credentials)
 
 
 async def require_admin(

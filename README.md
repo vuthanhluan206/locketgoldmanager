@@ -69,6 +69,10 @@ Khởi động sẽ kết nối MongoDB, tạo index và chỉ tạo superadmin 
 
 API thuê bao không lưu lịch sử mua hàng. Các trường `first_seen`, `purchase_date` và `original_purchase_date` trả `null` khi không có dữ liệu, thay vì tạo ngày mua bằng thời gian gọi API. `request_date` và `request_date_ms` vẫn là thời gian phản hồi; trạng thái Gold và ngày hết hạn không đổi. Đây là hợp đồng nội bộ, chưa xác minh tính tương thích với ứng dụng Locket chính thức.
 
+Nút tải trên trang chủ gọi trực tiếp `/profile.mobileconfig`, dùng `NEXTDNS_ID` và CA được server kiểm tra. Không còn DNS hoặc chứng chỉ nhúng trong HTML. Nếu thiếu cấu hình, endpoint trả 503; profile đã cài trên thiết bị không tự cập nhật.
+
+API subscriber luôn yêu cầu token server hợp lệ hoặc phiên Admin còn hạn, kể cả khi không đặt `SUBSCRIBER_API_TOKEN`. Các client trước đây gọi ẩn danh sẽ nhận 401 và cần tích hợp xác thực qua server tin cậy. Bản sửa không di chuyển, ghi lại hoặc xóa dữ liệu tài khoản hiện có.
+
 | Method | Endpoint | Quyền |
 |---|---|---|
 | GET | `/` | Công khai; không có markup/script admin |

@@ -147,7 +147,11 @@ def test_views_and_csp(client):
 
 
 def test_public_download_uses_server_profile(client):
-    assert 'href="/profile.mobileconfig"' in client[0].get('/').text
+    page = client[0].get('/').text
+    assert 'href="/profile.mobileconfig"' in page
+    assert 'mobileConfigXML' not in page
+    assert 'dns.nextdns.io/' not in page
+    assert 'BEGIN CERTIFICATE' not in page
 
 
 @pytest.mark.parametrize('method,path', [
@@ -176,6 +180,56 @@ def test_subscriber_requires_admin_or_separate_service_token(client, monkeypatch
     assert response.status_code == 200
     assert response.json()['subscriber']['entitlements'] == {}
     assert http.get('/v1/subscribers/alice', headers={'Authorization': 'Bearer wrong'}).status_code == 401
+
+
+def test_subscriber_accepts_admin_with_service_token_configured(client, monkeypatch):
+    http, accounts, _, _, stored, *_ = client
+    token, headers = sign_in(client)
+    monkeypatch.setenv('SUBSCRIBER_API_TOKEN', secrets.token_urlsafe(48))
+    get_settings.cache_clear()
+    account = {'locket_id': 'alice', 'expires_date': datetime.now(timezone.utc) + timedelta(days=30)}
+    original = deepcopy(account)
+    accounts.find_one.return_value = account
+    assert 'Gold' in http.get('/v1/subscribers/alice', headers=headers).json()['subscriber']['entitlements']
+    assert account == original
+    accounts.update_one.assert_not_awaited()
+    accounts.delete_one.assert_not_awaited()
+    stored[token_digest(token)]['expires_at'] = datetime.now(timezone.utc) - timedelta(seconds=1)
+    accounts.find_one.reset_mock()
+    assert http.get('/v1/subscribers/alice', headers=headers).status_code == 401
+    accounts.find_one.assert_not_awaited()
+
+
+def test_service_token_cannot_change_accounts(client, monkeypatch):
+    http, accounts, admins, sessions, *_ = client
+    token = secrets.token_urlsafe(48)
+    monkeypatch.setenv('SUBSCRIBER_API_TOKEN', token)
+    get_settings.cache_clear()
+    headers = {'Authorization': 'Bearer ' + token}
+    accounts.find_one.return_value = None
+    assert http.get('/v1/subscribers/alice', headers=headers).status_code == 200
+    admins.find_one.assert_not_awaited()
+    sessions.find_one.assert_not_awaited()
+    assert http.post('/admin/add-account', headers=headers, json={
+        'locket_id': 'alice', 'expires_date': '2099-01-01T00:00:00Z',
+    }).status_code == 401
+    assert http.delete('/admin/accounts/alice', headers=headers).status_code == 401
+    accounts.update_one.assert_not_awaited()
+    accounts.delete_one.assert_not_awaited()
+
+
+@pytest.mark.parametrize('configured', [False, True])
+@pytest.mark.parametrize('authorization', [None, 'Basic abc', 'Bearer wrong', 'Bearer ' + 'x' * 64])
+def test_invalid_subscriber_credentials_never_read_accounts(client, monkeypatch, configured, authorization):
+    http, accounts, *_ = client
+    if configured:
+        monkeypatch.setenv('SUBSCRIBER_API_TOKEN', secrets.token_urlsafe(48))
+        get_settings.cache_clear()
+    headers = {'Authorization': authorization} if authorization else {}
+    response = http.get('/v1/subscribers/alice', headers=headers)
+    assert response.status_code == 401
+    assert response.headers['www-authenticate'] == 'Bearer'
+    accounts.find_one.assert_not_awaited()
 
 
 def test_session_login_expiry_revocation(client):
@@ -262,6 +316,42 @@ def test_upsert_injection_and_subscriber(client):
     assert http.get('/admin/accounts?skip=10001', headers=headers).status_code == 422
 
 
+def test_renewal_preserves_other_accounts_and_existing_fields(client):
+    http, accounts, *_ = client
+    _, headers = sign_in(client)
+    expiry = datetime.now(timezone.utc) + timedelta(days=30)
+    records = {
+        'alice': {'locket_id': 'alice', 'expires_date': expiry, 'existing_note': 'keep'},
+        'bob': {'locket_id': 'bob', 'expires_date': expiry},
+    }
+    original_bob = deepcopy(records['bob'])
+
+    async def update(query, operation, **kwargs):
+        # Only an exact ID and field update may be used, never document replacement.
+        assert set(query) == {'locket_id'}
+        assert set(operation) == {'$set'}
+        records.setdefault(query['locket_id'], {}).update(deepcopy(operation['$set']))
+
+    async def find(query, projection):
+        return deepcopy(records.get(query['locket_id']))
+
+    accounts.update_one.side_effect = update
+    accounts.find_one.side_effect = find
+    for days in [60, 90]:
+        new_expiry = expiry + timedelta(days=days)
+        response = http.post('/admin/add-account', headers=headers, json={
+            'locket_id': 'alice', 'expires_date': new_expiry.isoformat(),
+        })
+        assert response.status_code == 200
+        assert records['alice']['expires_date'] == new_expiry
+        assert records['alice']['existing_note'] == 'keep'
+        assert records['bob'] == original_bob
+        assert set(records) == {'alice', 'bob'}
+        subscriber = http.get('/v1/subscribers/alice', headers=headers).json()['subscriber']
+        assert subscriber['entitlements']['Gold']['expires_date'] == new_expiry.isoformat().replace('+00:00', 'Z')
+    accounts.delete_one.assert_not_awaited()
+
+
 def test_request_limits_hosts_and_errors(client):
     http, accounts, *_ = client
     _, headers = sign_in(client)
@@ -277,6 +367,51 @@ def test_request_limits_hosts_and_errors(client):
     response = http.get('/v1/subscribers/alice', headers=headers)
     assert response.status_code == 500 and 'private-traceback' not in response.text
     assert response.headers['x-frame-options'] == 'DENY'
+
+
+@pytest.mark.parametrize('payload', [
+    {'email': 'admin@example.test', 'password': 'PRIVATE_TEST_PASSWORD' * 20},
+    {'email': 'INVALID_PRIVATE_EMAIL', 'password': 'PRIVATE_TEST_PASSWORD'},
+    {'email': 'admin@example.test', 'password': 'PRIVATE_TEST_PASSWORD', 'unexpected': 'PRIVATE_EXTRA'},
+    {'email': 'admin@example.test', 'password': 'PRIVATE_TEST_PASSWORD', 'turnstile_token': 'PRIVATE_TOKEN' * 200},
+])
+def test_validation_never_reflects_secrets_or_logs_them(client, payload, caplog):
+    http, _, admins, sessions, *_ = client
+    response = http.post('/api/admin/login', json=payload)
+    assert response.status_code == 422
+    assert response.json() == {'detail': 'Invalid request data'}
+    assert 'PRIVATE_' not in response.text
+    assert 'PRIVATE_' not in caplog.text
+    admins.find_one.assert_not_awaited()
+    sessions.insert_one.assert_not_awaited()
+
+
+@pytest.mark.parametrize('source', ['accounts', 'sessions', 'admins'])
+def test_database_failure_is_503_without_account_writes(client, source):
+    http, accounts, admins, sessions, *_ = client
+    _, headers = sign_in(client)
+    {'accounts': accounts, 'sessions': sessions, 'admins': admins}[source].find_one.side_effect = PyMongoError('PRIVATE_DATABASE_ERROR')
+    response = http.get('/v1/subscribers/alice', headers=headers)
+    assert response.status_code == 503
+    assert response.json() == {'detail': 'Database temporarily unavailable'}
+    assert response.headers['cache-control'] == 'no-store'
+    assert response.headers['x-frame-options'] == 'DENY'
+    accounts.update_one.assert_not_awaited()
+    accounts.delete_one.assert_not_awaited()
+
+
+def test_unexpected_error_keeps_json_and_https_security_headers(client):
+    http, accounts, *_ = client
+    _, headers = sign_in(client)
+    accounts.find_one.side_effect = RuntimeError('PRIVATE_TRACEBACK')
+    response = http.get('https://localhost/v1/subscribers/alice', headers=headers)
+    assert response.status_code == 500
+    assert response.json() == {'detail': 'Internal server error'}
+    assert response.headers['strict-transport-security'] == 'max-age=31536000'
+    assert response.headers['cache-control'] == 'no-store'
+    assert response.headers['x-content-type-options'] == 'nosniff'
+    accounts.update_one.assert_not_awaited()
+    accounts.delete_one.assert_not_awaited()
 
 
 def test_password_hash_and_settings(password_pair):
