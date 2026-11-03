@@ -29,7 +29,7 @@ def render_page(admin: bool, request: Request) -> HTMLResponse:
     return HTMLResponse(page.replace('__NONCE__', request.state.csp_nonce).replace('__VIEW__', 'admin' if admin else 'public'))
 
 
-@router.get('/admin', response_class=HTMLResponse, include_in_schema=False)
+@router.get('/admin-gmnWJ5nG3qZRcdku3eBtkIka', response_class=HTMLResponse, include_in_schema=False)
 async def admin_login(request: Request):
     return render_page(True, request)
 
