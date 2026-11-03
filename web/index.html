@@ -330,7 +330,8 @@
       border-radius: 14px; background: #25344c; color: #f5d486;
       font-size: 23px; font-weight: 700; flex-shrink: 0;
     }
-    .admin .login .brand-mark { margin-bottom: 28px; }
+    .admin .login-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 30px; }
+    .admin .login-brand .brand-name { font-size: 16px; }
     .admin .eyebrow { color: var(--gold); font-size: 10px; font-weight: 750; letter-spacing: .16em; }
     .admin h1 { font-size: 30px; margin-bottom: 12px; }
     .admin h2 { font-size: 27px; }
@@ -380,11 +381,12 @@
     .admin #identity { margin: 0; max-width: 280px; overflow-wrap: anywhere; }
 
     .admin .appearance-bar { display: flex; justify-content: flex-end; margin-bottom: 16px; gap: 10px; align-items: center; }
-    .admin .appearance-bar label { color: var(--muted); font-size: 12px; }
-    .admin select {
-      font: inherit; font-size: 13px; padding: 10px 32px 10px 12px; min-height: 44px;
-      border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--text);
-    }
+    .admin .theme-switch { display: inline-flex; padding: 4px; gap: 3px; border: 1px solid var(--line); border-radius: 30px; background: var(--card); }
+    .admin .theme-switch button { width: auto; min-width: 44px; min-height: 44px; padding: 10px 12px; border-radius: 24px; background: transparent; color: var(--muted); gap: 6px; font-size: 12px; }
+    .admin .theme-switch button[aria-pressed="true"] { background: var(--field); color: var(--gold); box-shadow: inset 0 0 0 1px var(--line); }
+    .admin .theme-switch svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .admin .theme-switch [data-theme-choice="light"] svg { fill: currentColor; fill-opacity: .18; }
+    .admin .theme-switch button:hover:not(:disabled) { background: var(--field); filter: none; }
     .admin .workspace-bar { background: var(--field); }
     .admin .profile { gap: 10px; }
     .admin .avatar {
@@ -562,16 +564,21 @@
     <!-- PUBLIC_END -->
     <!-- ADMIN_START -->
     <div class="appearance-bar">
-      <label for="adminTheme">Giao diện</label>
-      <select id="adminTheme">
-        <option value="system">Theo thiết bị</option>
-        <option value="light">Sáng</option>
-        <option value="dark">Tối</option>
-      </select>
+      <div class="theme-switch" role="group" aria-label="Giao diện sáng, tối hoặc tự động">
+        <button type="button" data-theme-choice="light" aria-label="Giao diện sáng" aria-pressed="false" title="Sáng">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 17h6m-6 3h6m-5 2h4M8.5 14.5a6 6 0 1 1 7 0c-.9.7-1.5 1.5-1.5 2.5h-4c0-1-.6-1.8-1.5-2.5Z"/><path d="M12 1V0M3 4l1 1M20 5l1-1M1 11h2m18 0h2"/></svg>
+        </button>
+        <button type="button" data-theme-choice="dark" aria-label="Giao diện tối" aria-pressed="false" title="Tối">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 17h6m-6 3h6m-5 2h4M8.5 14.5a6 6 0 1 1 7 0c-.9.7-1.5 1.5-1.5 2.5h-4c0-1-.6-1.8-1.5-2.5Z"/></svg>
+        </button>
+        <button type="button" data-theme-choice="system" aria-label="Giao diện tự động theo thiết bị" aria-pressed="true" title="Tự động theo thiết bị">Auto</button>
+      </div>
     </div>
     <section class="card login" id="loginScreen" aria-labelledby="loginTitle">
-      <span class="brand-mark" aria-hidden="true">✦</span>
-      <p class="eyebrow">Locket Gold Manager</p>
+      <div class="login-brand">
+        <span class="brand-mark" aria-hidden="true">✦</span>
+        <div class="brand-name">Locket Gold Manager</div>
+      </div>
       <h1 id="loginTitle">Đăng nhập quản trị</h1>
       <p>Chào mừng trở lại. Đăng nhập để quản lý tài khoản và thời hạn dịch vụ.</p>
       <form id="loginForm">
@@ -588,7 +595,7 @@
       <header class="row between workspace-bar">
         <div class="row">
           <span class="brand-mark" aria-hidden="true">✦</span>
-          <div class="brand-name">Locket Gold<small>Không gian quản trị</small></div>
+          <div class="brand-name">Locket Gold Manager<small>Không gian quản trị</small></div>
         </div>
         <div class="row">
           <div class="row profile">
@@ -643,20 +650,25 @@
     <script nonce="__NONCE__">
       (() => {
         'use strict';
-        const themePicker = document.getElementById('adminTheme');
+        const themeButtons = document.querySelectorAll('[data-theme-choice]');
         function applyTheme(value) {
           if (value === 'light' || value === 'dark') document.body.dataset.theme = value;
           else delete document.body.dataset.theme;
+          themeButtons.forEach(button => {
+            button.setAttribute('aria-pressed', String(button.dataset.themeChoice === value));
+          });
         }
+        let savedTheme = 'system';
         try {
-          const savedTheme = localStorage.getItem('locket_admin_theme');
-          if (savedTheme === 'light' || savedTheme === 'dark') themePicker.value = savedTheme;
+          const stored = localStorage.getItem('locket_admin_theme');
+          if (stored === 'light' || stored === 'dark') savedTheme = stored;
         } catch { }
-        applyTheme(themePicker.value);
-        themePicker.addEventListener('change', () => {
-          applyTheme(themePicker.value);
-          try { localStorage.setItem('locket_admin_theme', themePicker.value); } catch { }
-        });
+        applyTheme(savedTheme);
+        themeButtons.forEach(button => button.addEventListener('click', () => {
+          const value = button.dataset.themeChoice;
+          applyTheme(value);
+          try { localStorage.setItem('locket_admin_theme', value); } catch { }
+        }));
         const key = 'locket_admin_session';
         const $ = id => document.getElementById(id);
         let session = null, skip = 0, timer;
