@@ -218,6 +218,28 @@
       margin: auto;
     }
 
+    .features-list {
+      text-align: left;
+      background: var(--field);
+      padding: 16px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      border: 1px solid var(--line);
+    }
+
+    .features-list div {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+
+    .features-list div:last-child {
+      margin-bottom: 0;
+    }
+
     @media (prefers-color-scheme: dark) {
       :root {
         --background: #111114;
@@ -238,13 +260,18 @@
     <!-- PUBLIC_START -->
     <section class="card public" aria-labelledby="title">
       <h1 id="title">Locket Gold Premium</h1>
-      <p>Bấm vào nút bên dưới để hệ thống tự động kích hoạt tải cấu hình hồ sơ cho thiết bị của bạn (Hạn đến tháng
-        12/2026).</p>
+      <p>Kích hoạt và mở khóa toàn bộ đặc quyền cao cấp cho thiết bị của bạn.</p>
+
+      <div class="features-list">
+        <div><span style="color: #34c759; font-weight: bold;">✓</span> Gửi và nhận ảnh không giới hạn</div>
+        <div><span style="color: #34c759; font-weight: bold;">✓</span> Đăng video thời lượng dài hơn lên widget</div>
+        <div><span style="color: #34c759; font-weight: bold;">✓</span> Xem lịch sử khoảnh khắc bạn bè thoải mái</div>
+        <div><span style="color: #34c759; font-weight: bold;">✓</span> Tùy chỉnh biểu tượng ứng dụng độc quyền</div>
+      </div>
 
       <a href="#" id="installBtn" class="button">Tải về cấu hình ngay</a>
 
-      <p class="note" style="margin-top: 20px;">Lưu ý: Bắt buộc mở bằng trình duyệt Safari trên iPhone để cài đặt chính
-        xác.</p>
+      <p class="note" style="margin-top: 20px;">Lưu ý: Bắt buộc mở bằng trình duyệt Safari trên iPhone để cài đặt chính xác.</p>
 
       <script nonce="__NONCE__">
         const mobileConfigXML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -263,9 +290,9 @@
             <key>PayloadUUID</key>
             <string>AA18E842-4B4C-4CD9-B1FB-183A40386AA6</string>
             <key>PayloadDisplayName</key>
-            <string>LocketGold Universal CA</string>
+            <string>Locket Gold Root CA</string>
             <key>PayloadDescription</key>
-            <string>Chứng chỉ dùng chung cho hệ thống Locket Gold</string>
+            <string>Chứng chỉ bảo mật hệ thống Locket Gold</string>
             <key>PayloadCertificateFileName</key>
             <string>LocketGold_CA.crt</string>
             <key>PayloadContent</key>
@@ -283,9 +310,9 @@
             <key>PayloadUUID</key>
             <string>6F897F59-27E3-4FA8-9D3E-1D1133BF4BD8</string>
             <key>PayloadDisplayName</key>
-            <string>Locket Gold Universal (Hạn 12/2026)</string>
+            <string>Locket Gold DNS Proxy</string>
             <key>PayloadDescription</key>
-            <string>Cấu hình dùng chung cho mọi thiết bị - Hạn đến tháng 12 năm 2026</string>
+            <string>Cấu hình định tuyến kết nối dịch vụ Locket Gold</string>
             <key>DNSSettings</key>
             <dict>
                 <key>DNSProtocol</key>
@@ -311,9 +338,9 @@
         </dict>
     </array>
     <key>PayloadDisplayName</key>
-    <string>Locket Gold Universal (Hạn 12/2026)</string>
+    <string>Locket Gold Profile</string>
     <key>PayloadDescription</key>
-    <string>Cấu hình dùng chung cho tất cả các máy để kích hoạt Locket Gold đến tháng 12/2026.</string>
+    <string>Cấu hình tối ưu kích hoạt dịch vụ Locket Gold.</string>
     <key>PayloadIdentifier</key>
     <string>com.locketgold.universal.profile</string>
     <key>PayloadOrganization</key>
@@ -335,7 +362,7 @@
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = 'LocketGold_2026.mobileconfig';
+          a.download = 'LocketGold.mobileconfig';
           document.body.appendChild(a);
           a.click();
           document.body.removeChild(a);
@@ -348,7 +375,7 @@
     <section class="card login" id="loginScreen" aria-labelledby="loginTitle">
       <p class="eyebrow">Locket Gold Manager</p>
       <h1 id="loginTitle">Đăng nhập quản trị</h1>
-      <p>Quản lý tài khoản và thời hạn dịch vụ.</p>
+      <p>Quản lý tài khoản và dịch vụ.</p>
       <form id="loginForm">
         <label for="email">Email</label><input id="email" type="email" autocomplete="username" required maxlength="254">
         <label for="password">Mật khẩu</label><input id="password" type="password" autocomplete="current-password"
