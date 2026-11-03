@@ -642,22 +642,22 @@
           <span class="brand-mark" aria-hidden="true">✦</span>
           <div class="brand-name">Locket Gold Manager</div>
         </div>
-        <button class="secondary theme-toggle" type="button" data-theme-toggle aria-label="Giao diện Auto. Nhấn để chuyển sang Sáng" title="Auto → Sáng">
+        <button class="secondary theme-toggle" type="button" data-theme-toggle aria-label="Auto theme. Switch to Light" title="Auto → Light">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 17h6m-6 3h6m-5 2h4M8.5 14.5a6 6 0 1 1 7 0c-.9.7-1.5 1.5-1.5 2.5h-4c0-1-.6-1.8-1.5-2.5Z"/></svg>
           <span data-theme-label>Auto</span>
         </button>
       </div>
-      <h1 id="loginTitle">Đăng nhập quản trị</h1>
-      <p>Chào mừng trở lại. Đăng nhập để quản lý tài khoản và thời hạn dịch vụ.</p>
+      <h1 id="loginTitle">Admin sign in</h1>
+      <p>Welcome back. Sign in to your Gold workspace.</p>
       <form id="loginForm">
         <label for="email">Email</label><input id="email" type="email" autocomplete="username" required maxlength="254">
-        <label for="password">Mật khẩu</label><input id="password" type="password" autocomplete="current-password"
+        <label for="password">Password</label><input id="password" type="password" autocomplete="current-password"
           required maxlength="256">
         <div id="turnstile" data-sitekey="__TURNSTILE_SITE_KEY__"></div>
-        <button id="signIn" type="submit">Đăng nhập</button>
+        <button id="signIn" type="submit">Sign in</button>
       </form>
       <p class="status" id="loginMessage" role="status" aria-live="polite"></p>
-      <div class="login-footer"><a class="quiet" href="/">← Về trang tải cấu hình</a></div>
+      <div class="login-footer"><a class="quiet" href="/">← Back to downloads</a></div>
     </section>
     <section class="card" id="dashboard" hidden aria-labelledby="adminTitle">
       <svg width="0" height="0" aria-hidden="true" focusable="false"><defs>
@@ -675,7 +675,7 @@
       <header class="row between workspace-bar">
         <div class="row">
           <span class="brand-mark" aria-hidden="true">✦</span>
-          <div class="brand-name">Locket Gold Manager<small>Không gian quản trị</small></div>
+          <div class="brand-name">Locket Gold Manager<small>Admin workspace</small></div>
         </div>
         <div class="row">
           <div class="row profile">
@@ -683,42 +683,42 @@
             <div><span class="profile-name">Vũ Thành Luân dzais1tg</span><p class="quiet" id="identity"></p></div>
           </div>
           <div class="session-actions">
-          <button class="secondary theme-toggle" type="button" data-theme-toggle aria-label="Giao diện Auto. Nhấn để chuyển sang Sáng" title="Auto → Sáng">
+          <button class="secondary theme-toggle" type="button" data-theme-toggle aria-label="Auto theme. Switch to Light" title="Auto → Light">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 17h6m-6 3h6m-5 2h4M8.5 14.5a6 6 0 1 1 7 0c-.9.7-1.5 1.5-1.5 2.5h-4c0-1-.6-1.8-1.5-2.5Z"/></svg>
           <span data-theme-label>Auto</span>
         </button>
-          <button class="secondary" id="logout" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v16h5m6-12 4 4-4 4m-6-4h10"/></svg>Đăng xuất</button>
+          <button class="secondary" id="logout" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v16h5m6-12 4 4-4 4m-6-4h10"/></svg>Sign out</button>
           </div>
         </div>
       </header>
       <div class="workspace-heading">
-        <div><p class="eyebrow">GOLD WORKSPACE</p><h2 id="adminTitle">Quản lý tài khoản</h2></div>
+        <div><p class="eyebrow">GOLD WORKSPACE</p><h2 id="adminTitle">Account management</h2></div>
         <span class="gold-emblem" aria-hidden="true"><svg viewBox="0 0 32 32"><use href="#gold-crown"/></svg></span>
       </div>
       <div class="workspace-layout">
       <dialog id="accountDialog" class="account-dialog" aria-labelledby="editorTitle">
       <form id="accountForm" class="editor-panel" aria-labelledby="editorTitle">
         <div class="dialog-heading">
-        <div class="section-title"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><h3 id="editorTitle">Cấp / gia hạn</h3></div>
-        <button class="secondary" id="closeAccount" type="button" aria-label="Đóng popup">×</button>
+        <div class="section-title"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><h3 id="editorTitle">Add / renew account</h3></div>
+        <button class="secondary" id="closeAccount" type="button" aria-label="Close dialog">×</button>
         </div>
         <div class="row">
           <div class="field"><label for="accountId">Locket ID</label><input id="accountId" required maxlength="128"
               pattern="[A-Za-z0-9_$:@.\-]+" autocomplete="off"></div>
-          <div class="field"><label for="expiry">Hết hạn · giờ thiết bị</label><input id="expiry"
+          <div class="field"><label for="expiry">Expires at · local time</label><input id="expiry"
               type="datetime-local" required></div>
         </div>
         <p class="status" id="accountMessage" role="status" aria-live="polite"></p>
         <div class="dialog-actions">
-          <button class="secondary" id="cancelAccount" type="button">Hủy</button>
-          <button id="save" type="submit"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>&nbsp; Lưu tài khoản</button>
+          <button class="secondary" id="cancelAccount" type="button">Cancel</button>
+          <button id="save" type="submit"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>&nbsp; Save account</button>
         </div>
       </form>
       </dialog>
       <section class="directory-panel" aria-labelledby="directoryTitle">
       <div class="directory-heading">
-        <div class="section-title"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 20v-3a6 6 0 0 1 12 0v3m2-16a3 3 0 0 1 0 6m2 10v-3a6 6 0 0 0-2-4"/></svg><h3 id="directoryTitle">Tài khoản</h3></div>
-        <button id="addAccount" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Thêm tài khoản</button>
+        <div class="section-title"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 20v-3a6 6 0 0 1 12 0v3m2-16a3 3 0 0 1 0 6m2 10v-3a6 6 0 0 0-2-4"/></svg><h3 id="directoryTitle">Accounts</h3></div>
+        <button id="addAccount" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add account</button>
       </div>
       <p class="status" id="adminMessage" role="status" aria-live="polite"></p>
       <div class="scroll">
@@ -726,25 +726,26 @@
           <thead>
             <tr>
               <th>ID</th>
-              <th>Hết hạn</th>
-              <th>Trạng thái</th>
-              <th>Thao tác</th>
+              <th>Expires at</th>
+              <th>Status</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody id="accounts"></tbody>
         </table>
       </div>
-      <div class="row between pager"><button class="secondary" id="previous" type="button">← Trước</button><span
-          class="quiet" id="page"></span><button class="secondary" id="next" type="button">Sau →</button></div>
+      <div class="row between pager"><button class="secondary" id="previous" type="button">← Previous</button><span
+          class="quiet" id="page"></span><button class="secondary" id="next" type="button">Next →</button></div>
       </section>
       </div>
     </section>
     <script nonce="__NONCE__">
       (() => {
         'use strict';
+        document.documentElement.lang = 'en';
         const themeButtons = document.querySelectorAll('[data-theme-toggle]');
         const themeModes = ['system', 'light', 'dark'];
-        const themeNames = { system: 'Auto', light: 'Sáng', dark: 'Tối' };
+        const themeNames = { system: 'Auto', light: 'Light', dark: 'Dark' };
         let currentTheme = 'system';
         function applyTheme(value) {
           currentTheme = value;
@@ -754,7 +755,7 @@
           themeButtons.forEach(button => {
             button.dataset.mode = value;
             button.querySelector('[data-theme-label]').textContent = themeNames[value];
-            button.setAttribute('aria-label', 'Giao diện ' + themeNames[value] + '. Nhấn để chuyển sang ' + themeNames[next]);
+            button.setAttribute('aria-label', 'Theme: ' + themeNames[value] + '. Switch to ' + themeNames[next]);
             button.title = themeNames[value] + ' → ' + themeNames[next];
           });
         }
@@ -773,7 +774,7 @@
         const accountDialog = $('accountDialog');
         function openAccountDialog(editing = false) {
           if (!editing) $('accountForm').reset();
-          $('editorTitle').textContent = editing ? 'Sửa / gia hạn' : 'Thêm tài khoản';
+          $('editorTitle').textContent = editing ? 'Edit / renew account' : 'Add account';
           $('accountMessage').textContent = '';
           accountDialog.showModal();
           $('accountId').focus();
@@ -792,12 +793,12 @@
         if (siteKey) {
           window.onTurnstileReady = () => {
             widgetId = window.turnstile.render('#turnstile', {
-              sitekey: siteKey, action: 'admin-login',
+              sitekey: siteKey, action: 'admin-login', language: 'en',
               callback: token => { turnstileToken = token; $('loginMessage').textContent = ''; },
               'expired-callback': () => { turnstileToken = ''; },
               'error-callback': () => {
                 turnstileToken = '';
-                $('loginMessage').textContent = 'Không thể tải xác minh Cloudflare. Vui lòng thử lại.';
+                $('loginMessage').textContent = 'Unable to load Cloudflare verification. Please try again.';
               }
             });
           };
@@ -805,7 +806,7 @@
           script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileReady&render=explicit';
           script.nonce = document.currentScript.nonce;
           script.async = true;
-          script.onerror = () => { $('loginMessage').textContent = 'Không thể tải xác minh Cloudflare. Vui lòng tải lại trang.'; };
+          script.onerror = () => { $('loginMessage').textContent = 'Unable to load Cloudflare verification. Please reload the page.'; };
           document.head.append(script);
         }
         function clearSession() {
@@ -823,7 +824,15 @@
           if (!response.ok) {
             let data; try { data = await response.json(); } catch { }
             if (response.status === 401 && auth) clearSession();
-            throw Error(typeof data?.detail === 'string' ? data.detail : 'Yêu cầu thất bại (' + response.status + '). Kiểm tra dữ liệu nhập.');
+            const messages = {
+              'Email hoặc mật khẩu không đúng': 'Incorrect email or password.',
+              'Cloudflare Turnstile chưa được cấu hình đầy đủ.': 'Cloudflare Turnstile is not fully configured.',
+              'Vui lòng hoàn tất xác minh Cloudflare.': 'Please complete Cloudflare verification.',
+              'Không thể xác minh Cloudflare. Vui lòng thử lại.': 'Unable to verify with Cloudflare. Please try again.',
+              'Xác minh Cloudflare không hợp lệ hoặc đã hết hạn.': 'Cloudflare verification is invalid or expired.',
+            };
+            const detail = typeof data?.detail === 'string' ? (messages[data.detail] || data.detail) : null;
+            throw Error(detail || 'Request failed (' + response.status + '). Please check your input.');
           }
           return response.status === 204 ? null : response.json();
         }
@@ -833,31 +842,31 @@
           const body = $('accounts'); body.replaceChildren();
           for (const row of rows) {
             const tr = document.createElement('tr');
-            for (const value of [row.locket_id, new Date(row.expires_date).toLocaleString(), new Date(row.expires_date) > new Date() ? 'Gold' : 'Hết hạn']) {
+            for (const value of [row.locket_id, new Date(row.expires_date).toLocaleString('en-US'), new Date(row.expires_date) > new Date() ? 'Gold' : 'Expired']) {
               const td = document.createElement('td'); td.textContent = value; tr.append(td);
             }
             const actions = document.createElement('td');
-            const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary'; edit.textContent = 'Sửa';
+            const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary'; edit.textContent = 'Edit';
             edit.onclick = () => {
               $('accountId').value = row.locket_id;
               const date = new Date(row.expires_date);
               $('expiry').value = new Date(date - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
               openAccountDialog(true);
             };
-            const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary'; remove.textContent = 'Xóa';
+            const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary'; remove.textContent = 'Delete';
             remove.onclick = async () => {
-              if (!confirm('Xóa tài khoản ' + row.locket_id + '?')) return;
+              if (!confirm('Delete account ' + row.locket_id + '?')) return;
               remove.disabled = true;
               try { await api('/admin/accounts/' + encodeURIComponent(row.locket_id), { method: 'DELETE' }); await load(); }
               catch (error) { $('adminMessage').textContent = error.message; }
               finally { remove.disabled = false; }
             };
-            const check = document.createElement('button'); check.type = 'button'; check.className = 'secondary'; check.textContent = 'Kiểm tra API';
+            const check = document.createElement('button'); check.type = 'button'; check.className = 'secondary'; check.textContent = 'Check API';
             check.onclick = async () => {
               check.disabled = true;
               try {
                 const result = await api('/v1/subscribers/' + encodeURIComponent(row.locket_id));
-                $('adminMessage').textContent = 'API xác nhận ' + row.locket_id + ': ' + (result.subscriber.entitlements.Gold ? 'còn hạn cấp phép.' : 'không có quyền hoặc đã hết hạn.');
+                $('adminMessage').textContent = 'API result for ' + row.locket_id + ': ' + (result.subscriber.entitlements.Gold ? 'access is active.' : 'no access or expired.');
               } catch (error) { $('adminMessage').textContent = error.message; }
               finally { check.disabled = false; }
             };
@@ -875,9 +884,9 @@
             }
             actions.append(edit, check, remove); tr.append(actions); body.append(tr);
           }
-          if (!rows.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 4; td.textContent = 'Chưa có tài khoản.'; tr.append(td); body.append(tr); }
+          if (!rows.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 4; td.textContent = 'No accounts yet.'; tr.append(td); body.append(tr); }
           $('previous').disabled = skip === 0; $('next').disabled = rows.length < limit || skip + limit > 10000;
-          $('page').textContent = 'Trang ' + (skip / limit + 1);
+          $('page').textContent = 'Page ' + (skip / limit + 1);
         }
         async function enter() {
           if (!session || !Number.isFinite(Date.parse(session.expires_at)) || Date.parse(session.expires_at) <= Date.now()) { clearSession(); return; }
@@ -887,19 +896,19 @@
           if (!session) return;
           $('loginScreen').hidden = true; $('dashboard').hidden = false;
           clearTimeout(timer);
-          timer = setTimeout(() => { clearSession(); $('loginMessage').textContent = 'Phiên đã hết hạn. Vui lòng đăng nhập lại.'; }, Math.max(0, Date.parse(session.expires_at) - Date.now()));
+          timer = setTimeout(() => { clearSession(); $('loginMessage').textContent = 'Your session has expired. Please sign in again.'; }, Math.max(0, Date.parse(session.expires_at) - Date.now()));
         }
         $('loginForm').onsubmit = async event => {
           event.preventDefault();
           if (siteKey && !turnstileToken) {
-            $('loginMessage').textContent = 'Vui lòng hoàn tất xác minh Cloudflare.';
+            $('loginMessage').textContent = 'Please complete Cloudflare verification.';
             return;
           }
           $('signIn').disabled = true; $('loginMessage').textContent = '';
           let password = $('password').value; $('password').value = '';
           try {
             session = await api('/api/admin/login', { method: 'POST', body: JSON.stringify({ email: $('email').value.trim(), password, turnstile_token: turnstileToken }) }, false);
-            try { localStorage.setItem(key, JSON.stringify(session)); } catch { $('loginMessage').textContent = 'Trình duyệt chặn lưu phiên. Phiên chỉ dùng trong tab hiện tại.'; }
+            try { localStorage.setItem(key, JSON.stringify(session)); } catch { $('loginMessage').textContent = 'Your browser blocked session storage. This session is available in this tab only.'; }
             skip = 0; await enter();
           } catch (error) { clearSession(); $('loginMessage').textContent = error.message; }
           finally {
@@ -913,7 +922,7 @@
           try {
             await api('/admin/add-account', { method: 'POST', body: JSON.stringify({ locket_id: $('accountId').value, expires_date: new Date($('expiry').value).toISOString() }) });
             accountDialog.close();
-            $('adminMessage').textContent = 'Đã lưu tài khoản.'; await load();
+            $('adminMessage').textContent = 'Account saved.'; await load();
           } catch (error) {
             $(accountDialog.open ? 'accountMessage' : 'adminMessage').textContent = error.message;
           }
@@ -923,8 +932,8 @@
         $('next').onclick = async () => { skip += limit; try { await load(); } catch (error) { $('adminMessage').textContent = error.message; } };
         $('logout').onclick = async () => {
           $('logout').disabled = true;
-          try { await api('/api/admin/logout', { method: 'POST' }); clearSession(); $('loginMessage').textContent = 'Đã đăng xuất.'; }
-          catch (error) { if (session) $('adminMessage').textContent = 'Chưa thu hồi được phiên: ' + error.message + '. Hãy thử lại.'; }
+          try { await api('/api/admin/logout', { method: 'POST' }); clearSession(); $('loginMessage').textContent = 'You have signed out.'; }
+          catch (error) { if (session) $('adminMessage').textContent = 'Unable to revoke the session: ' + error.message + '. Please try again.'; }
           finally { $('logout').disabled = false; }
         };
         window.addEventListener('storage', event => { if (event.key === key && event.newValue === null) clearSession(); });
