@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from pymongo.errors import DuplicateKeyError
 from .database import get_accounts
 from .models import AccountId, AccountInput, AccountOutput, subscriber_response
@@ -18,6 +18,11 @@ async def home(request: Request):
     if 'admin' in request.query_params:
         raise HTTPException(400, 'URL tokens are disabled. Open /admin to sign in.')
     return render_page(False, request)
+
+
+@router.get('/robots.txt', include_in_schema=False)
+async def robots_txt():
+    return PlainTextResponse("User-agent: *\nDisallow: /")
 
 
 def render_page(admin: bool, request: Request) -> HTMLResponse:
