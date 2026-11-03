@@ -52,19 +52,20 @@ def subscriber_response(account_id: str, account: dict | None, now: datetime | N
     product_id = "com.locket.gold.yearly"
     now_str = now.isoformat().replace('+00:00', 'Z')
 
+    # Purchase history is not stored; unknown dates must not become request timestamps.
     entitlement = {
         'expires_date': entitlement_expires,
         'grace_period_expires_date': None,
         'product_identifier': product_id,
-        'purchase_date': now_str
+        'purchase_date': None
     } if active else None
 
     subscriptions = {
         product_id: {
             'expires_date': entitlement_expires,
             'is_sandbox': False,
-            'original_purchase_date': now_str,
-            'purchase_date': now_str,
+            'original_purchase_date': None,
+            'purchase_date': None,
             'ownership_type': 'PURCHASED',
             'store': 'app_store'
         }
@@ -76,10 +77,10 @@ def subscriber_response(account_id: str, account: dict | None, now: datetime | N
         'subscriber': {
             'original_app_user_id': account_id,
             'non_subscriptions': {},
-            'first_seen': now_str,
+            'first_seen': None,
             'entitlements': {'Gold': entitlement} if active else {},
             'subscriptions': subscriptions,
             'management_url': None,
-            'original_purchase_date': now_str
+            'original_purchase_date': None
         }
     }

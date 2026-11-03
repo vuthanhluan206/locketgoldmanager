@@ -67,6 +67,8 @@ Khởi động sẽ kết nối MongoDB, tạo index và chỉ tạo superadmin 
 
 ## API
 
+API thuê bao không lưu lịch sử mua hàng. Các trường `first_seen`, `purchase_date` và `original_purchase_date` trả `null` khi không có dữ liệu, thay vì tạo ngày mua bằng thời gian gọi API. `request_date` và `request_date_ms` vẫn là thời gian phản hồi; trạng thái Gold và ngày hết hạn không đổi. Đây là hợp đồng nội bộ, chưa xác minh tính tương thích với ứng dụng Locket chính thức.
+
 | Method | Endpoint | Quyền |
 |---|---|---|
 | GET | `/` | Công khai; không có markup/script admin |

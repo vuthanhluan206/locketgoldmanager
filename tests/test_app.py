@@ -3,7 +3,9 @@ import hashlib
 import json
 import plistlib
 import secrets
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from html.parser import HTMLParser
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -38,6 +40,10 @@ def client(monkeypatch, password_pair):
     monkeypatch.setenv('NEXTDNS_ID', 'abc123')
     monkeypatch.setenv('ROOT_CA_PATH', '')
     monkeypatch.setenv('ROOT_CA_PEM', '')
+    monkeypatch.delenv('SUBSCRIBER_API_TOKEN', raising=False)
+    monkeypatch.setenv('TURNSTILE_SITE_KEY', '')
+    monkeypatch.setenv('TURNSTILE_SECRET_KEY', '')
+    monkeypatch.setenv('TURNSTILE_HOSTNAME', '')
     get_settings.cache_clear()
     app = create_app()
     accounts, admins, sessions = AsyncMock(), AsyncMock(), AsyncMock()
@@ -98,22 +104,50 @@ def test_views_and_csp(client):
     http = client[0]
     public = http.get('/')
     assert public.status_code == 200
-    assert 'loginForm' not in public.text and 'accountForm' not in public.text
-    assert '<script' not in public.text
-    assert 'href="/profile.mobileconfig"' in public.text
-    admin = http.get('/admin')
-    assert 'loginForm' in admin.text and 'accountForm' in admin.text
+    class Elements(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.ids = set()
+            self.scripts = []
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if 'id' in attrs:
+                self.ids.add(attrs['id'])
+            if tag == 'script':
+                self.scripts.append(attrs)
+
+    public_elements = Elements()
+    public_elements.feed(public.text)
+    assert not {'loginForm', 'accountForm'} & public_elements.ids
+    assert 'installBtn' in public_elements.ids
+    assert "const key = 'locket_admin_session'" not in public.text
+    admin_path = '/admin-gmnWJ5nG3qZRcdku3eBtkIka'
+    assert http.get('/admin').status_code == 404
+    admin = http.get(admin_path)
+    assert admin.status_code == 200
+    admin_elements = Elements()
+    admin_elements.feed(admin.text)
+    assert {'loginForm', 'accountForm'} <= admin_elements.ids
+    assert 'installBtn' not in admin_elements.ids
     assert '__NONCE__' not in admin.text
     csp = admin.headers['content-security-policy']
     assert 'unsafe-inline' not in csp and 'nonce-' in csp
     nonce = csp.split("script-src 'nonce-")[1].split("'")[0]
     assert f'nonce="{nonce}"' in admin.text
-    assert nonce not in http.get('/admin').headers['content-security-policy']
+    assert nonce not in http.get(admin_path).headers['content-security-policy']
+    assert all(script.get('nonce') == nonce for script in admin_elements.scripts)
+    public_nonce = public.headers['content-security-policy'].split("script-src 'nonce-")[1].split("'")[0]
+    assert all(script.get('nonce') == public_nonce for script in public_elements.scripts)
     assert admin.headers['x-frame-options'] == 'DENY'
     assert admin.headers['x-content-type-options'] == 'nosniff'
     assert http.get('/?admin=old-token').status_code == 400
     for path in ['/web/index.html', '/.env', '/app/config.py', '/%2e%2e/.env']:
         assert http.get(path).status_code == 404
+
+
+def test_public_download_uses_server_profile(client):
+    assert 'href="/profile.mobileconfig"' in client[0].get('/').text
 
 
 @pytest.mark.parametrize('method,path', [
@@ -260,6 +294,42 @@ def test_expiry_boundary():
     now = datetime.now(timezone.utc)
     for account in [None, {'expires_date': now}, {'expires_date': now - timedelta(seconds=1)}]:
         assert subscriber_response('id', account, now)['subscriber']['entitlements'] == {}
+
+
+@pytest.mark.parametrize('days_remaining', [30, -1, None])
+def test_subscriber_history_is_stable_without_mutating_account(days_remaining):
+    now = datetime(2026, 11, 3, 12, tzinfo=timezone.utc)
+    account = ({'locket_id': 'id', 'expires_date': now + timedelta(days=days_remaining)}
+               if days_remaining is not None else None)
+    original = deepcopy(account)
+    first = subscriber_response('id', account, now)
+    later = subscriber_response('id', account, now + timedelta(seconds=10))
+    assert account == original
+    assert first['subscriber'] == later['subscriber']
+    assert first['request_date'] != later['request_date']
+    assert later['request_date_ms'] - first['request_date_ms'] == 10000
+    subscriber = first['subscriber']
+    assert subscriber['first_seen'] is None
+    assert subscriber['original_purchase_date'] is None
+    assert bool(subscriber['entitlements']) == (days_remaining == 30)
+    if days_remaining == 30:
+        entitlement = subscriber['entitlements']['Gold']
+        subscription = subscriber['subscriptions'][entitlement['product_identifier']]
+        assert entitlement['purchase_date'] is None
+        assert subscription['purchase_date'] is None
+        assert subscription['original_purchase_date'] is None
+        assert entitlement['expires_date'] == '2026-12-03T12:00:00Z'
+
+
+def test_app_instances_keep_routes_and_state_isolated():
+    first, second = create_app(), create_app()
+    first.state.audit_marker = 'first'
+    assert not hasattr(second.state, 'audit_marker')
+    first.dependency_overrides[get_accounts] = lambda: None
+    assert get_accounts not in second.dependency_overrides
+    paths = first.openapi()['paths']
+    assert paths == second.openapi()['paths']
+    assert {'/api/admin/login', '/admin/accounts', '/v1/subscribers/{account_id}'} <= paths.keys()
 
 
 def test_date_only_expiry_is_stored_as_mongodb_datetime(client):
