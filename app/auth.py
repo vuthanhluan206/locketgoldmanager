@@ -12,6 +12,8 @@ from pymongo import ReturnDocument
 from .config import get_settings
 from .passwords import verify_password
 from .security import require_admin, token_digest
+from .middleware import client_ip
+from .turnstile import verify_turnstile
 
 router = APIRouter(prefix='/api/admin', tags=['Authentication'])
 logger = logging.getLogger(__name__)
@@ -20,8 +22,7 @@ logger = logging.getLogger(__name__)
 async def enforce_login_limit(request: Request):
     now = datetime.now(timezone.utc)
     window = int(now.timestamp()) // 60
-    client_ip = request.client.host if request.client else 'unknown'
-    ip_key = hashlib.sha256(client_ip.encode('utf-8')).hexdigest()
+    ip_key = hashlib.sha256(client_ip(request.scope).encode('utf-8')).hexdigest()
     # Shared counters survive serverless cold starts; local middleware also limits malformed requests.
     for key, limit in [(ip_key, 10), ('global', 30)]:
         bucket = await request.app.state.login_limits.find_one_and_update(
@@ -37,6 +38,7 @@ class LoginInput(BaseModel):
     model_config = ConfigDict(extra='forbid')
     email: str = Field(min_length=3, max_length=254, pattern=r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
     password: SecretStr = Field(min_length=1, max_length=256)
+    turnstile_token: SecretStr = Field(default=SecretStr(''), max_length=2048)
 
     @field_validator('email')
     @classmethod
@@ -47,6 +49,7 @@ class LoginInput(BaseModel):
 @router.post('/login')
 async def login(data: LoginInput, request: Request):
     await enforce_login_limit(request)
+    await verify_turnstile(data.turnstile_token.get_secret_value())
     settings = get_settings()
     admin = await request.app.state.admins.find_one({'_id': 'superadmin'})
     encoded = admin['password_hash'] if admin else settings.superadmin_password_hash.get_secret_value()

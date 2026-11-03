@@ -1,12 +1,14 @@
 import hashlib
 import re
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from pymongo import ReturnDocument
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from .config import get_settings
+from .middleware import client_ip
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -39,6 +41,15 @@ async def require_admin(
     request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
 ):
+    now = datetime.now(timezone.utc)
+    ip_key = hashlib.sha256(client_ip(request.scope).encode('utf-8')).hexdigest()
+    bucket = await request.app.state.login_limits.find_one_and_update(
+        {'_id': f'admin:{int(now.timestamp()) // 60}:{ip_key}'},
+        {'$inc': {'count': 1}, '$setOnInsert': {'expires_at': now + timedelta(minutes=2)}},
+        upsert=True, return_document=ReturnDocument.AFTER,
+    )
+    if bucket['count'] > 60:
+        raise HTTPException(429, 'Too many admin requests', headers={'Retry-After': '60'})
     unauthorized = HTTPException(401, "Invalid or expired session", headers={"WWW-Authenticate": "Bearer"})
     if credentials is None or not re.fullmatch(r"[A-Za-z0-9_-]{64}", credentials.credentials):
         raise unauthorized

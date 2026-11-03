@@ -1,5 +1,30 @@
 # Locket Gold Manager
 
+## Bảo vệ admin bằng IP và Cloudflare Turnstile
+
+- Giữ giới hạn hiện có: 120 request/IP/phút; đăng nhập 10 lần/IP/phút và 30 lần/phút toàn hệ thống. API admin có thêm giới hạn 60 request/IP/phút, dùng bộ đếm MongoDB chung giữa các instance. Vượt giới hạn trả HTTP 429 và `Retry-After: 60`.
+- Tạo widget **Managed** trong Cloudflare Dashboard → Turnstile, khai báo hostname thực tế của trang admin. Đặt các biến sau trong `.env` hoặc Environment Variables của Vercel, rồi khởi động/deploy lại:
+
+```dotenv
+TURNSTILE_SITE_KEY=your_public_site_key
+TURNSTILE_SECRET_KEY=your_private_secret_key
+TURNSTILE_HOSTNAME=locketgold.vuthanhluan.bond,locketgold-premium.vercel.app
+```
+
+`TURNSTILE_HOSTNAME` chứa một hoặc nhiều tên miền cách nhau bằng dấu phẩy, không có `https://`, cổng hay đường dẫn. Thêm tất cả tên miền này vào cùng widget Turnstile trong Cloudflare; cả hai dùng chung Site Key và Secret Key. Secret Key chỉ nằm ở backend. Khi bật, mọi đăng nhập phải có token hợp lệ; backend kiểm tra `success`, hostname thuộc danh sách cho phép và action `admin-login` trước khi kiểm tra mật khẩu. Token lỗi/hết hạn trả 403; lỗi kết nối Cloudflare hoặc thiếu cấu hình trả 503. Bỏ trống cả hai key sẽ giữ cách đăng nhập hiện tại; cần điền đủ ba biến để bật bảo vệ.
+
+Mặc định giới hạn theo IP kết nối do server cung cấp, không tin header do khách gửi. Chỉ cấu hình `TRUSTED_PROXY_CIDRS` khi origin được giới hạn truy cập từ proxy tin cậy và proxy đó luôn ghi đè `CF-Connecting-IP`:
+
+```dotenv
+TRUSTED_PROXY_CIDRS=["YOUR_TRUSTED_PROXY_CIDR"]
+```
+
+Dùng dải IP chính thức của Cloudflare nếu origin nhận kết nối trực tiếp từ Cloudflare; giữ danh sách cập nhật. Không dùng `0.0.0.0/0` hoặc `::/0`. Với Uvicorn trực tiếp sau Cloudflare, dùng `--no-proxy-headers` khi chọn cơ chế này để giữ đúng IP peer cho bước kiểm tra proxy. Nếu triển khai Vercel hoặc qua nhiều proxy, phải xác minh cách nền tảng cung cấp IP và chặn truy cập vòng qua proxy trước khi bật tin header. Turnstile dùng được cả khi tên miền không proxy qua Cloudflare.
+
+Giới hạn tổng request ở middleware vẫn theo process; Turnstile bảo vệ đăng nhập và không thay thế giới hạn lưu lượng tại edge. Nếu dùng Cloudflare WAF, áp dụng rule cho đường dẫn trang admin hiện tại và `/api/admin/*`, `/admin/*`; tránh áp challenge lên API subscriber vì ứng dụng không giải được challenge trình duyệt.
+
+Tài liệu: [Siteverify](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/), [CSP cho Turnstile](https://developers.cloudflare.com/turnstile/reference/content-security-policy/).
+
 FastAPI + MongoDB. Một file `web/index.html` chứa trang tải cấu hình và giao diện đăng nhập/quản trị. Server loại bỏ phần admin khỏi phản hồi `/`. `/admin` hiển thị màn hình đăng nhập; tất cả dữ liệu/thao tác admin yêu cầu phiên Bearer được xác minh bằng MongoDB. Không còn token tĩnh hoặc token trong URL.
 
 Đây là hệ thống cấp phép độc lập cho ứng dụng bạn kiểm soát. DNS và CA không tự kích hoạt Gold trong Locket chính thức; JSON subscriber là hợp đồng nội bộ có dạng tương tự RevenueCat, không cam kết tương thích SDK RevenueCat.
@@ -131,3 +156,6 @@ python -m pytest -q
 `SOURCE.md` chứa nguyên văn các file để copy; `source-code.zip` chứa mã nguồn không kèm `.env`, `.venv` hoặc dữ liệu runtime.
 
 Tham khảo: [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html), [OWASP HTML5 Storage](https://cheatsheetseries.owasp.org/cheatsheets/HTML5_Security_Cheat_Sheet.html), [Starlette Middleware](https://starlette.dev/middleware/), [Apple DNSSettings](https://developer.apple.com/documentation/devicemanagement/dnssettings).
+
+
+

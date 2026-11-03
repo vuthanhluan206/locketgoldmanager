@@ -7,6 +7,7 @@ from pymongo.errors import DuplicateKeyError
 from .database import get_accounts
 from .models import AccountId, AccountInput, AccountOutput, subscriber_response
 from .security import require_admin, require_subscriber_access
+from .config import get_settings
 
 router = APIRouter()
 WEB = Path(__file__).resolve().parent.parent / 'web'
@@ -31,6 +32,7 @@ def render_page(admin: bool, request: Request) -> HTMLResponse:
     before, rest = page.split(start)
     _, after = rest.split(end)
     page = before + after
+    page = page.replace('__TURNSTILE_SITE_KEY__', get_settings().turnstile_site_key)
     return HTMLResponse(page.replace('__NONCE__', request.state.csp_nonce).replace('__VIEW__', 'admin' if admin else 'public'))
 
 

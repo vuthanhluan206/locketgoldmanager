@@ -1,5 +1,6 @@
-"""Bounded requests and process-local throttling; no forwarded-header parsing."""
+"""Bounded requests and throttling with explicitly trusted proxy addresses."""
 import asyncio
+from ipaddress import ip_address, ip_network
 import secrets
 import time
 
@@ -12,6 +13,18 @@ from .config import get_settings
 MAX_BODY = 8192
 
 
+def client_ip(scope) -> str:
+    peer = scope['client'][0] if scope.get('client') else 'unknown'
+    try:
+        address = ip_address(peer)
+        if any(address in ip_network(cidr) for cidr in get_settings().trusted_proxy_cidrs):
+            forwarded = Headers(scope=scope).get('cf-connecting-ip', '')
+            return str(ip_address(forwarded))
+        return str(address)
+    except ValueError:
+        return peer
+
+
 def security_headers(nonce: str, https: bool) -> dict[str, str]:
     headers = {
         'Cache-Control': 'no-store',
@@ -21,7 +34,8 @@ def security_headers(nonce: str, https: bool) -> dict[str, str]:
         'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
         'Content-Security-Policy': (
             f"default-src 'none'; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; "
-            "connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+            "connect-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; "
+            "form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
         ),
     }
     if https:
@@ -83,11 +97,11 @@ class SecurityMiddleware:
 
         if self.settings.require_https and not https:
             return await reject(400, 'HTTPS is required')
-        client_ip = scope['client'][0] if scope.get('client') else 'unknown'
-        if not self.limiter.allow((client_ip, 'all'), 120):
+        ip = client_ip(scope)
+        if not self.limiter.allow((ip, 'all'), 120):
             return await reject(429, 'Too many requests', True)
         if scope['path'].rstrip('/') == '/api/admin/login':
-            if (not self.limiter.allow((client_ip, 'login'), 10)
+            if (not self.limiter.allow((ip, 'login'), 10)
                     or not self.limiter.allow(('global', 'login'), 30)):
                 return await reject(429, 'Too many login attempts', True)
         length = headers.get('content-length')

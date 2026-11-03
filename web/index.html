@@ -437,6 +437,7 @@
         <label for="email">Email</label><input id="email" type="email" autocomplete="username" required maxlength="254">
         <label for="password">Mật khẩu</label><input id="password" type="password" autocomplete="current-password"
           required maxlength="256">
+        <div id="turnstile" data-sitekey="__TURNSTILE_SITE_KEY__"></div>
         <button style="margin-top: 15px;" id="signIn" type="submit">Đăng nhập</button>
       </form>
       <p class="status" id="loginMessage" role="status" aria-live="polite"></p>
@@ -484,6 +485,27 @@
         const $ = id => document.getElementById(id);
         let session = null, skip = 0, timer;
         const limit = 50;
+        const siteKey = $('turnstile').dataset.sitekey;
+        let turnstileToken = '', widgetId;
+        if (siteKey) {
+          window.onTurnstileReady = () => {
+            widgetId = window.turnstile.render('#turnstile', {
+              sitekey: siteKey, action: 'admin-login',
+              callback: token => { turnstileToken = token; $('loginMessage').textContent = ''; },
+              'expired-callback': () => { turnstileToken = ''; },
+              'error-callback': () => {
+                turnstileToken = '';
+                $('loginMessage').textContent = 'Không thể tải xác minh Cloudflare. Vui lòng thử lại.';
+              }
+            });
+          };
+          const script = document.createElement('script');
+          script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileReady&render=explicit';
+          script.nonce = document.currentScript.nonce;
+          script.async = true;
+          script.onerror = () => { $('loginMessage').textContent = 'Không thể tải xác minh Cloudflare. Vui lòng tải lại trang.'; };
+          document.head.append(script);
+        }
         function clearSession() {
           clearTimeout(timer); session = null;
           try { localStorage.removeItem(key); } catch { }
@@ -553,14 +575,22 @@
           timer = setTimeout(() => { clearSession(); $('loginMessage').textContent = 'Phiên đã hết hạn. Vui lòng đăng nhập lại.'; }, Math.max(0, Date.parse(session.expires_at) - Date.now()));
         }
         $('loginForm').onsubmit = async event => {
-          event.preventDefault(); $('signIn').disabled = true; $('loginMessage').textContent = '';
+          event.preventDefault();
+          if (siteKey && !turnstileToken) {
+            $('loginMessage').textContent = 'Vui lòng hoàn tất xác minh Cloudflare.';
+            return;
+          }
+          $('signIn').disabled = true; $('loginMessage').textContent = '';
           let password = $('password').value; $('password').value = '';
           try {
-            session = await api('/api/admin/login', { method: 'POST', body: JSON.stringify({ email: $('email').value.trim(), password }) }, false);
+            session = await api('/api/admin/login', { method: 'POST', body: JSON.stringify({ email: $('email').value.trim(), password, turnstile_token: turnstileToken }) }, false);
             try { localStorage.setItem(key, JSON.stringify(session)); } catch { $('loginMessage').textContent = 'Trình duyệt chặn lưu phiên. Phiên chỉ dùng trong tab hiện tại.'; }
             skip = 0; await enter();
           } catch (error) { clearSession(); $('loginMessage').textContent = error.message; }
-          finally { password = ''; $('signIn').disabled = false; }
+          finally {
+            password = ''; $('signIn').disabled = false; turnstileToken = '';
+            if (widgetId !== undefined) window.turnstile.reset(widgetId);
+          }
         };
         $('accountForm').onsubmit = async event => {
           event.preventDefault(); $('save').disabled = true;

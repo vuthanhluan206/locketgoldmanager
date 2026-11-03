@@ -1,4 +1,5 @@
 from functools import lru_cache
+from ipaddress import ip_network
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from .passwords import validate_password_hash
@@ -17,6 +18,17 @@ class Settings(BaseSettings):
     require_https: bool = False
     session_ttl_seconds: int = Field(default=3600, ge=300, le=86400)
     subscriber_api_token: SecretStr | None = None
+    turnstile_site_key: str = Field(default='', pattern=r'^[A-Za-z0-9_-]*$', max_length=256)
+    turnstile_secret_key: SecretStr = SecretStr('')
+    turnstile_hostname: str = ''
+    trusted_proxy_cidrs: list[str] = []
+
+    @field_validator('trusted_proxy_cidrs')
+    @classmethod
+    def validate_proxy_cidrs(cls, value: list[str]) -> list[str]:
+        for network in value:
+            ip_network(network)
+        return value
 
     @field_validator('subscriber_api_token')
     @classmethod
