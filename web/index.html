@@ -515,16 +515,16 @@
     .admin #dashboard .directory-panel > .status:not(:empty) { margin: 16px 24px; }
     .admin #dashboard .scroll { border: 0; border-radius: 0; }
     .admin #dashboard table { min-width: 660px; }
-    .admin #dashboard th { padding: 14px 24px; font-size: 10px; text-transform: uppercase; letter-spacing: .1em; font-weight: 700; }
+    .admin #dashboard th { padding: 14px 24px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
     .admin #dashboard td { padding: 20px 24px; vertical-align: middle; border-bottom: 1px solid var(--line); }
-    .admin #dashboard td:nth-child(2) { width: 32%; font-family: inherit; font-size: 13px; }
-    .admin #dashboard .row-number { width: 64px; min-width: 64px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .admin #dashboard td:nth-child(2) { width: 32%; font-family: inherit; font-size: 15px; }
+    .admin #dashboard .row-number { width: 64px; min-width: 64px; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
     .admin #dashboard th:last-child { width: 156px; }
     .admin .account-name { display: inline-flex; align-items: center; gap: 10px; max-width: 100%; }
-    .admin .account-name::before { content: 'G'; display: grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0; border-radius: 10px; background: var(--field); border: 1px solid var(--line); color: var(--gold); font-size: 12px; font-weight: 750; }
+    .admin .account-crown { width: 34px; height: 34px; padding: 6px; flex-shrink: 0; border-radius: 10px; background: var(--field); border: 1px solid var(--line); color: var(--gold); fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
     .admin .account-name span { overflow-wrap: anywhere; }
-    .admin .account-expiry { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
-    .admin .account-status { display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--field); color: var(--muted); font-size: 11px; font-weight: 650; }
+    .admin .account-expiry { font-size: 14px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .admin .account-status { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--field); color: var(--muted); font-size: 13px; font-weight: 650; }
     .admin .account-status::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
     .admin .account-status.is-gold { color: var(--gold); border-color: currentColor; }
     .admin #dashboard td:last-child:not([colspan]), .admin #dashboard th:last-child { text-align: right; white-space: nowrap; }
@@ -532,7 +532,7 @@
     .admin #dashboard td button:hover:not(:disabled) { border-color: var(--line); background: var(--field); filter: none; }
     .admin #dashboard td button:nth-child(3) { border-color: transparent; }
     .admin #dashboard .pager { margin: 0; padding: 18px 24px; border-top: 1px solid var(--line); background: var(--field); }
-    .admin #dashboard .pager #page { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .admin #dashboard .pager #page { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
     .admin #dashboard td[colspan] { text-align: center; padding: 64px 24px; color: var(--muted); font-weight: 450; font-family: inherit; }
     .admin #dashboard td[colspan]::before { content: '◇'; display: block; color: var(--gold); font-size: 34px; margin-bottom: 12px; }
     @media (max-width: 540px) {
@@ -879,7 +879,11 @@
               const label = document.createElement('span'); label.textContent = value;
               if (index === 0) {
                 const name = document.createElement('span'); name.className = 'account-name';
-                name.append(label); td.append(name);
+                const crown = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                crown.setAttribute('viewBox', '0 0 32 32'); crown.setAttribute('class', 'account-crown'); crown.setAttribute('aria-hidden', 'true');
+                const symbol = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+                symbol.setAttribute('href', '#gold-crown'); crown.append(symbol);
+                name.append(crown, label); td.append(name);
               } else {
                 label.className = index === 1 ? 'account-expiry' : 'account-status' + (value === 'Gold' ? ' is-gold' : '');
                 td.append(label);
