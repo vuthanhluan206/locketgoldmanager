@@ -325,6 +325,7 @@
     .admin main { max-width: 1240px; min-width: 0; }
     .admin .card { border: 1px solid var(--line); box-shadow: 0 16px 48px #18283f08; border-radius: 20px; }
     .admin .login { max-width: 460px; padding: 40px; margin-inline: auto; }
+    .admin[data-login-rendering] .login { visibility: hidden; }
     .admin .brand-mark {
       display: inline-grid; place-items: center; width: 48px; height: 48px;
       border-radius: 14px; background: #25344c; color: #f5d486;
@@ -658,6 +659,13 @@
     </section>
     <!-- PUBLIC_END -->
     <!-- ADMIN_START -->
+    <script nonce="__NONCE__">
+      document.body.dataset.loginRendering = '';
+      try {
+        const theme = localStorage.getItem('locket_admin_theme');
+        if (theme === 'light' || theme === 'dark') document.body.dataset.theme = theme;
+      } catch { }
+    </script>
     <link rel="preconnect" href="https://challenges.cloudflare.com">
     <link rel="preload" as="script" nonce="__NONCE__" href="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileReady&amp;render=explicit">
     <section class="card login" id="loginScreen" aria-labelledby="loginTitle">
@@ -683,6 +691,9 @@
       <p class="status" id="loginMessage" role="status" aria-live="polite"></p>
       <div class="login-footer"><a class="quiet" href="/">← Back to downloads</a></div>
     </section>
+    <script nonce="__NONCE__">
+      delete document.body.dataset.loginRendering;
+    </script>
     <section class="card" id="dashboard" hidden aria-labelledby="adminTitle">
       <svg width="0" height="0" aria-hidden="true" focusable="false"><defs>
         <symbol id="gold-crown" viewBox="0 0 32 32"><path d="m4 9 6 5 6-9 6 9 6-5-3 15H7ZM8 28h16"/></symbol>
@@ -771,7 +782,7 @@
         const themeButtons = document.querySelectorAll('[data-theme-toggle]');
         const themeModes = ['system', 'light', 'dark'];
         const themeNames = { system: 'Auto', light: 'Light', dark: 'Dark' };
-        let currentTheme = 'system';
+        let currentTheme = document.body.dataset.theme || 'system';
         function applyTheme(value) {
           currentTheme = value;
           if (value === 'light' || value === 'dark') document.body.dataset.theme = value;
@@ -784,10 +795,6 @@
             button.title = themeNames[value] + ' → ' + themeNames[next];
           });
         }
-        try {
-          const stored = localStorage.getItem('locket_admin_theme');
-          if (themeModes.includes(stored)) currentTheme = stored;
-        } catch { }
         applyTheme(currentTheme);
         themeButtons.forEach(button => button.addEventListener('click', () => {
           const next = themeModes[(themeModes.indexOf(currentTheme) + 1) % themeModes.length];
