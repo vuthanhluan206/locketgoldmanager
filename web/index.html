@@ -324,7 +324,7 @@
 
     .admin main { max-width: 1240px; min-width: 0; }
     .admin .card { border: 1px solid var(--line); box-shadow: 0 16px 48px #18283f08; border-radius: 20px; }
-    .admin .login { max-width: 460px; padding: 40px; }
+    .admin .login { max-width: 460px; padding: 40px; margin-inline: auto; }
     .admin .brand-mark {
       display: inline-grid; place-items: center; width: 48px; height: 48px;
       border-radius: 14px; background: #25344c; color: #f5d486;
@@ -351,6 +351,7 @@
     .admin .secondary { background: var(--card); }
     .admin #signIn { margin-top: 18px; }
     .admin #turnstile { max-width: 100%; overflow-x: auto; }
+    .admin #turnstile:not([data-sitekey=""]) { min-height: 65px; }
     .admin .login-footer { border-top: 1px solid var(--line); padding-top: 20px; text-align: center; }
     .admin .login-footer a { color: var(--muted); }
     .admin #dashboard { padding: 0; overflow: hidden; }
@@ -361,10 +362,8 @@
     .admin .workspace-heading p:last-child { margin: 0; font-size: 14px; }
     .admin .workspace-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 24px; padding: 0 28px 28px; align-items: start; }
     .admin .editor-panel { padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--field); }
-    .admin .panel-caption { font-size: 13px; margin-bottom: 24px; }
     .admin #accountForm .row { display: block; }
     .admin #accountForm .field { min-width: 0; }
-    .admin #accountForm .note { font-size: 12px; line-height: 1.7; margin: 0 0 20px; }
     .admin .directory-panel { min-width: 0; }
     .admin .directory-heading { padding: 4px 0 16px; }
     .admin .directory-heading p { font-size: 12px; margin: 0; }
@@ -404,8 +403,6 @@
     }
     .admin .profile-name { display: block; font-size: 13px; font-weight: 650; margin-bottom: 4px; }
     .admin .profile #identity { font-size: 11px; }
-    .admin .workspace-heading { border-left: 3px solid var(--gold); margin: 28px 28px 24px; padding: 0 0 0 18px; }
-    .admin .editor-panel { border-top: 3px solid var(--gold); }
     .admin .directory-heading h3 { font-size: 18px; }
     .admin #signIn, .admin #save { background: linear-gradient(120deg, #334766, #25344c); color: #fff; }
 
@@ -426,20 +423,12 @@
       }
     }
 
-    @media (max-width: 960px) {
-      .admin .workspace-layout { grid-template-columns: 1fr; }
-      .admin #accountForm .row { display: flex; }
-      .admin #accountForm .field { flex: 1 1 230px; }
-      .admin #save { width: auto; }
-    }
-
     @media (max-width: 540px) {
       body.admin { padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
       .admin .login { padding: 28px 20px; }
       .admin h1 { font-size: 26px; }
       .admin h2 { font-size: 24px; }
       .admin .workspace-bar { padding: 18px; gap: 18px; }
-      .admin .workspace-heading { margin: 24px 18px; padding: 0 0 0 14px; }
       .admin .workspace-layout { padding: 0 18px 20px; gap: 22px; }
       .admin .editor-panel { padding: 18px; }
       .admin #save { width: 100%; }
@@ -469,7 +458,6 @@
     .admin .gold-emblem svg { width: 34px; height: 34px; fill: none; stroke: currentColor; stroke-width: 1.5; }
     .admin #dashboard .workspace-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
     .admin #dashboard .editor-panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 24px; box-shadow: 0 4px 16px #00000003; }
-    .admin #dashboard #accountForm .row { display: flex; align-items: flex-end; gap: 16px; }
     .admin #dashboard #accountForm .field { flex: 1 1 200px; }
     .admin #dashboard #accountForm input { margin-bottom: 0; background: var(--field); }
     .admin #dashboard #save { width: auto; min-height: 48px; padding-inline: 22px; background: linear-gradient(120deg, #f0d38c, #d9ad58); color: #3c2c0c; }
@@ -477,7 +465,7 @@
     .admin .section-title h3 { margin: 0; font-size: 15px; }
     .admin .ui-icon { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
     .admin .section-title > .ui-icon { color: var(--gold); }
-    .admin #dashboard .directory-panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 24px; }
+    .admin #dashboard .directory-panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; }
     .admin #dashboard .directory-heading { padding: 0; }
     .admin #dashboard .directory-heading .section-title { margin-bottom: 20px; }
     .admin #dashboard .scroll { border-radius: 12px; }
@@ -670,6 +658,8 @@
     </section>
     <!-- PUBLIC_END -->
     <!-- ADMIN_START -->
+    <link rel="preconnect" href="https://challenges.cloudflare.com">
+    <link rel="preload" as="script" nonce="__NONCE__" href="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileReady&amp;render=explicit">
     <section class="card login" id="loginScreen" aria-labelledby="loginTitle">
       <div class="login-header">
         <div class="login-brand">
@@ -828,7 +818,7 @@
         if (siteKey) {
           window.onTurnstileReady = () => {
             widgetId = window.turnstile.render('#turnstile', {
-              sitekey: siteKey, action: 'admin-login', language: 'en',
+              sitekey: siteKey, action: 'admin-login', language: 'en', size: 'flexible',
               callback: token => { turnstileToken = token; $('loginMessage').textContent = ''; },
               'expired-callback': () => { turnstileToken = ''; },
               'error-callback': () => {
