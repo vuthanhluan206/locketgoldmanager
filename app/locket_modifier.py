@@ -6,11 +6,10 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from pymongo import MongoClient
 
-app = FastAPI(title="Locket Dynamic Cloud Modifier Proxy", version="2.2.1")
+app = FastAPI(title="Locket Dynamic Cloud Modifier Proxy", version="2.2.2")
 
 UPSTREAM_TARGET = "https://api.locketcamera.com"
 
-# Khởi tạo kết nối MongoDB trực tiếp an toàn dựa trên biến môi trường của dự án
 MONGO_URI = os.getenv("MONGODB_URI") or os.getenv("MONGO_URI")
 db = None
 if MONGO_URI:
@@ -40,7 +39,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
 
     try:
         req = urllib.request.Request(url, data=body if body else None, headers=headers, method=method)
-        with urllib.request.urlopen(req, timeout=30.0) as upstream_response:
+        with urllib.request.urlopen(req, timeout=60.0) as upstream_response: # Tăng timeout lên 60s cho việc upload ảnh/video nặng
             upstream_status = upstream_response.status
             upstream_headers = dict(upstream_response.headers.items())
             upstream_content = upstream_response.read()
@@ -54,11 +53,15 @@ async def dynamic_reverse_proxy(request: Request, path: str):
 
     content_type = upstream_headers.get("content-type", "")
     
-    if "application/json" in content_type and upstream_content:
+    # --- QUAN TRỌNG: BỎ QUA XỬ LÝ NẾU LÀ YÊU CẦU ĐĂNG ẢNH/VIDEO (UPLOAD/MULTIPART) ---
+    # Các request đăng bài thường là POST và chứa dữ liệu multipart hoặc không phải JSON thuần để sửa thông tin
+    is_upload_action = method == "POST" and ("multipart/form-data" in headers.get("content-type", "") or "posts" in path or "moments" in path)
+
+    if "application/json" in content_type and upstream_content and not is_upload_action:
         try:
             data = json.loads(upstream_content.decode("utf-8"))
             
-            # --- 1. XỬ LÝ DANH SÁCH NGƯỜI XEM ĐỘNG (Moments/Posts) ---
+            # --- 1. XỬ LÝ DANH SÁCH NGƯỜI XEM ĐỘNG ---
             if "moments" in path or "posts" in path:
                 if isinstance(data, dict):
                     dynamic_viewers = []
@@ -87,10 +90,9 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                     
                     data["viewers"] = dynamic_viewers
 
-            # --- 2. XỬ LÝ TRẠNG THÁI VÀ THỜI HẠN GOLD TỪ MONGODB (ĐÃ TỐI ƯU AN TOÀN) ---
+            # --- 2. XỬ LÝ TRẠNG THÁI GOLD ---
             elif "subscribers" in path or "user" in path:
                 if isinstance(data, dict):
-                    # Đảm bảo luôn có cấu trúc dictionary cho subscriber
                     if "subscriber" not in data or not isinstance(data["subscriber"], dict):
                         data["subscriber"] = {}
                     
@@ -123,6 +125,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
         except Exception:
             pass
 
+    # Trả về nguyên bản dữ liệu (đặc biệt quan trọng cho các lệnh upload ảnh/video)
     response_headers = {k: v for k, v in upstream_headers.items() if k.lower() not in ["content-length", "transfer-encoding", "content-encoding"]}
     return Response(
         content=upstream_content,
