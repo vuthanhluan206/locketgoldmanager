@@ -3,11 +3,12 @@ import json
 import os
 import urllib.error
 import urllib.request
-from fastapi import FastAPI, Request, Response
+from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 from pymongo import MongoClient
 
-app = FastAPI(title="Locket Dynamic Cloud Modifier Proxy", version="2.4.0")
+# Khai báo router để main.py import thành công tuyệt đối
+router = APIRouter(prefix="/proxy", tags=["Locket Proxy"])
 
 UPSTREAM_TARGET = "https://api.locketcamera.com"
 
@@ -37,8 +38,7 @@ def _fetch_upstream(req: urllib.request.Request, timeout_limit: float):
         return e.code, dict(e.headers.items()), e.read()
 
 
-# --- ENDPOINT TỰ ĐỘNG TẠO VÀ TẢI FILE .MOBILECONFIG CHO IPHONE ---
-@app.get("/install", response_class=Response)
+@router.get("/install", response_class=Response)
 async def download_profile(request: Request):
     host = request.headers.get("host", "locketgold.vuthanhluan.bond")
     scheme = request.url.scheme
@@ -96,7 +96,7 @@ async def download_profile(request: Request):
     )
 
 
-@app.get("/proxy.pac", response_class=Response)
+@router.get("/proxy.pac", response_class=Response)
 async def get_pac_file(request: Request):
     host = request.headers.get("host", "locketgold.vuthanhluan.bond")
     pac_content = f"""function FindProxyForURL(url, host) {{
@@ -108,8 +108,7 @@ async def get_pac_file(request: Request):
     return Response(content=pac_content, media_type="application/x-ns-proxy-autoconfig")
 
 
-# --- PROXY CHÍNH CHO ỨNG DỤNG LOCKET ---
-@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+@router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def dynamic_reverse_proxy(request: Request, path: str):
     url = f"{UPSTREAM_TARGET}/{path}"
 
@@ -169,7 +168,6 @@ async def dynamic_reverse_proxy(request: Request, path: str):
 
             data = json.loads(raw_content.decode("utf-8"))
 
-            # --- XỬ LÝ DANH SÁCH NGƯỜI XEM (Viewers) ---
             if "moments" in path or "posts" in path or "viewer" in path:
                 dynamic_viewers = []
                 if db is not None and user_token:
@@ -202,7 +200,6 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                         if isinstance(item, dict):
                             item["viewers"] = dynamic_viewers
 
-            # --- XỬ LÝ TRẠNG THÁI VÀ THỜI HẠN GOLD ---
             elif "subscribers" in path or "user" in path:
                 if isinstance(data, dict):
                     if "subscriber" not in data or not isinstance(data["subscriber"], dict):
