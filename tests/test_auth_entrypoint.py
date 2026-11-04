@@ -11,6 +11,7 @@ def test_entrypoint_checks_turnstile_before_login(monkeypatch):
     monkeypatch.setenv('SUPERADMIN_EMAIL', 'admin@example.test')
     monkeypatch.setenv('SUPERADMIN_PASSWORD_HASH', hash_password('test-password'))
     monkeypatch.setenv('MONGODB_URI', 'mongodb://localhost')
+    monkeypatch.setenv('ALLOWED_HOSTS', '["testserver"]')
     monkeypatch.setenv('REQUIRE_HTTPS', 'false')
     monkeypatch.setenv('TURNSTILE_SITE_KEY', 'test-site-key')
     monkeypatch.setenv('TURNSTILE_SECRET_KEY', 'test-secret')

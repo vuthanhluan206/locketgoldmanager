@@ -1,5 +1,36 @@
 # Deploy FastAPI lên Vercel
 
+## Cập nhật: lỗi 400 và upload proxy
+
+Log ngày 04/11/2026 cho thấy domain riêng trả 200 nhưng alias/deployment Vercel trả 400.
+Điều này phù hợp với hostname chưa có trong allowlist; để xác nhận, kiểm tra body `Invalid host header`.
+Nếu body là `HTTPS is required`, kiểm tra scheme do nền tảng cung cấp, không tin header client tùy ý.
+
+Đặt Environment Variables cho đúng Production/Preview rồi redeploy:
+
+```dotenv
+ALLOWED_HOSTS=["locketgold.vuthanhluan.bond","locketgold-premium-luan-eafb.vercel.app"]
+ADMIN_PATH=/your-private-admin-path
+REQUIRE_HTTPS=true
+```
+
+Code tự thêm hostname chính xác từ `VERCEL_URL`, `VERCEL_PROJECT_PRODUCTION_URL`,
+`VERCEL_BRANCH_URL` khi `VERCEL=1`. Đây là biến hệ thống của deployment, không phải HTTP headers.
+Alias tùy chỉnh vẫn phải khai báo trong `ALLOWED_HOSTS`. Không cho phép `*` hoặc `*.vercel.app`.
+`VERCEL_PROJECT_PRODUCTION_URL` có thể là custom domain; trường hợp đó vẫn dùng allowlist tường minh.
+Nguồn biến hệ thống: https://vercel.com/docs/environment-variables/system-environment-variables
+Khi sử dụng Turnstile trên nhiều hostname, cập nhật cả widget Cloudflare và `TURNSTILE_HOSTNAME`.
+Đường dẫn admin cũ trả 404 sau khi đổi `ADMIN_PATH` là hành vi đúng.
+
+FastAPI chấp nhận tối đa **50 MiB** cho `/proxy/…`, **8 KiB** cho các route khác,
+kiểm tra cả body không có Content-Length. Vercel Functions có giới hạn payload **4,5 MB**
+trước khi request đến ứng dụng; code không vượt được giới hạn này. Proxy upload lớn cần
+chạy trên container/VPS với reverse proxy cho phép 50 MiB, hoặc một luồng upload trực tiếp
+được dịch vụ đích hỗ trợ. Không thể tự thay luồng upload của client bên ngoài chỉ bằng cấu hình DNS.
+Nguồn: https://vercel.com/docs/functions/limitations
+
+Chưa thay đổi Environment Variables hoặc deploy Vercel từ phiên audit này.
+
 Repository này có entrypoint `index.py` theo cơ chế FastAPI native của Vercel và chọn Python 3.12 qua `.python-version`. `vercel.json` chỉ định FastAPI và đặt lại Build Command/Output Directory về mặc định, tránh phục vụ riêng HTML tĩnh. Giữ nguyên backend; Vercel hỗ trợ lifespan. Không chạy Dockerfile, `uvicorn --reload` hoặc `docker compose` trong Vercel Build Command.
 
 `pyproject.toml` khai báo tường minh `[tool.vercel] entrypoint = "app.main:app"`, tránh phụ thuộc vào việc tự dò file import lại app hoặc app được khởi tạo qua factory. Vercel cài runtime dependencies từ `[project].dependencies` trong file này; danh sách đồng bộ với `requirements.txt` cho local và Docker, có test kiểm tra không bị lệch.

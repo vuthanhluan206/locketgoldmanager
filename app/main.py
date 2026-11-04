@@ -16,6 +16,7 @@ def create_app() -> FastAPI:
         version="1.0.0",
         docs_url=None,
         redoc_url=None,
+        openapi_url=None,
         lifespan=lifespan,
     )
     app.add_middleware(SecurityMiddleware)

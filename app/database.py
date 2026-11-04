@@ -37,12 +37,13 @@ async def lifespan(app: FastAPI):
         app.state.admins = db.admins
         app.state.sessions = db.sessions
         app.state.login_limits = db.login_limits
-        app.state.viewers_history = getattr(db, 'viewers_history', None)
+        app.state.viewers_history = db.viewers_history
 
         await app.state.accounts.create_index('locket_id', unique=True)
         await db.admins.create_index('email', unique=True)
         await db.sessions.create_index('expires_at', expireAfterSeconds=0)
         await db.login_limits.create_index('expires_at', expireAfterSeconds=0)
+        await db.viewers_history.create_index([('token', 1), ('viewed_at', -1)])
 
         await db.admins.update_one({'_id': 'superadmin'}, {
             '$setOnInsert': admin_document(settings),

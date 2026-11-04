@@ -314,6 +314,7 @@ def test_startup_creates_hashed_admin_and_session_ttl(client, monkeypatch, inval
     db.admins = AsyncMock()
     db.sessions = AsyncMock()
     db.login_limits = AsyncMock()
+    db.viewers_history = AsyncMock()
     mongo = MagicMock()
     mongo.admin = AsyncMock()
     mongo.close = AsyncMock()
