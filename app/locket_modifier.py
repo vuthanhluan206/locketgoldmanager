@@ -200,7 +200,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                                 "com.locket.gold.yearly": {
                                     "expires_date": expiry_date,
                                     "is_sandbox": False,
-                                    *("purchase_date", "2026-01-01T00:00:00Z"),
+                                    "purchase_date": "2026-01-01T00:00:00Z",
                                     "original_purchase_date": "2026-01-01T00:00:00Z",
                                     "ownership_type": "PURCHASED",
                                     "store": "app_store"
