@@ -3,11 +3,11 @@ import urllib.error
 import json
 import os
 import gzip
-from fastapi import FastAPI, Request, Response
+from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 from pymongo import MongoClient
 
-app = FastAPI(title="Locket Dynamic Cloud Modifier Proxy", version="2.5.0")
+router = APIRouter(prefix="/proxy", tags=["Locket Realtime Proxy"])
 
 UPSTREAM_TARGET = "https://api.locketcamera.com"
 
@@ -20,12 +20,11 @@ if MONGO_URI:
     except Exception:
         pass
 
-# --- ENDPOINT TỰ ĐỘNG TẠO VÀ TẢI FILE .MOBILECONFIG CHO IPHONE ---
-@app.get("/install", response_class=Response)
+@router.get("/install", response_class=Response)
 async def download_profile(request: Request):
     host = request.headers.get("host", "locketgold.vuthanhluan.bond")
     scheme = request.url.scheme
-    pac_url = f"{scheme}://{host}/proxy.pac"
+    pac_url = f"{scheme}://{host}/proxy/proxy.pac"
 
     mobileconfig_content = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -78,8 +77,7 @@ async def download_profile(request: Request):
         headers={"Content-Disposition": "attachment; filename=locket_proxy.mobileconfig"}
     )
 
-# --- PROXY CHÍNH CHO ỨNG DỤNG LOCKET ---
-@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+@router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def dynamic_reverse_proxy(request: Request, path: str):
     url = f"{UPSTREAM_TARGET}/{path}"
     
@@ -90,7 +88,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     headers = dict(request.headers)
     headers.pop("host", None)
     headers["Host"] = "api.locketcamera.com"
-    headers["Accept-Encoding"] = "identity"  # Tránh nén gzip phức tạp từ upstream nếu không cần thiết
+    headers["Accept-Encoding"] = "identity"
 
     method = request.method
     content_type_header = headers.get("content-type", "")
@@ -139,31 +137,32 @@ async def dynamic_reverse_proxy(request: Request, path: str):
 
             data = json.loads(raw_content.decode("utf-8"))
             
-            # --- ÉP CẤU HÌNH THỜI LƯỢNG QUAY VIDEO (2 PHÚT = 120 GIÂY) & BỘ LỌC ---
+            # --- ÉP CẤU HÌNH THỜI LƯỢNG QUAY VIDEO LÊN 60 GIÂY & BỘ LỌC REAL-TIME ---
             if isinstance(data, dict):
-                # Thiết lập thời lượng quay video tối đa là 120 giây (2 phút)
-                data["max_video_duration_seconds"] = 120
-                data["video_max_seconds"] = 120
-                data["duration_limit"] = 120
-                data["max_video_duration"] = 120
-                data["video_recording_limit"] = 120
+                data["max_video_duration_seconds"] = 60
+                data["video_max_seconds"] = 60
+                data["duration_limit"] = 60
+                data["max_video_duration"] = 60
+                data["video_recording_limit"] = 60
                 data["enable_library_video_upload"] = True
                 data["enable_private_posts"] = True
                 data["is_gold"] = True
-
-                # Kích hoạt mở khóa toàn bộ các bộ lọc (filters) và hiệu ứng
                 data["unlocked_filters"] = True
                 data["has_unlocked_filters"] = True
                 data["is_premium_user"] = True
                 data["filters_unlocked"] = True
+                
+                # Bổ sung cờ kích hoạt phản hồi realtime và đồng bộ live stream/socket
+                data["realtime_sync_enabled"] = True
+                data["live_updates"] = True
 
                 if "features" in data and isinstance(data["features"], dict):
-                    data["features"]["max_video_duration_seconds"] = 120
-                    data["features"]["video_recording_limit"] = 120
+                    data["features"]["max_video_duration_seconds"] = 60
+                    data["features"]["video_recording_limit"] = 60
                     data["features"]["unlocked_all_filters"] = True
                     data["features"]["filters_unlocked"] = True
+                    data["features"]["realtime_sync_enabled"] = True
 
-            # --- XỬ LÝ DANH SÁCH NGƯỜI XEM (Viewers) ---
             if "moments" in path or "posts" in path or "viewer" in path:
                 dynamic_viewers = []
                 if db is not None and user_token:
@@ -196,7 +195,6 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                         if isinstance(item, dict):
                             item["viewers"] = dynamic_viewers
 
-            # --- XỬ LÝ TRẠNG THÁI VÀ THỜI HẠN GOLD ---
             elif "subscribers" in path or "user" in path:
                 if isinstance(data, dict):
                     if "subscriber" not in data or not isinstance(data["subscriber"], dict):
