@@ -1,3 +1,4 @@
+import json
 from functools import lru_cache
 from ipaddress import ip_network
 from pydantic import Field, SecretStr, field_validator
@@ -14,7 +15,8 @@ class Settings(BaseSettings):
     nextdns_id: str = Field(default='', pattern=r'^([a-fA-F0-9]{6})?$')
     root_ca_path: str = ''
     root_ca_pem: str = Field(default='', max_length=65536, repr=False)
-    allowed_hosts: list[str] = ['localhost', '127.0.0.1', '[::1]', '*']
+    admin_path: str = Field(default='/admin', pattern=r'^/[A-Za-z0-9_-]{1,64}$')
+    allowed_hosts: list[str] = ['localhost', '127.0.0.1', '[::1]', 'testserver']
     require_https: bool = False
     session_ttl_seconds: int = Field(default=3600, ge=300, le=86400)
     subscriber_api_token: SecretStr | None = None
@@ -61,16 +63,19 @@ class Settings(BaseSettings):
     @classmethod
     def validate_hosts(cls, value):
         if isinstance(value, str):
-            hosts = [h.strip() for h in value.split(',') if h.strip()]
+            raw = value.strip()
+            if raw.startswith('['):
+                hosts = json.loads(raw)
+            else:
+                hosts = [h.strip() for h in raw.split(',') if h.strip()]
         elif isinstance(value, list):
-            hosts = value
+            hosts = [str(h).strip() for h in value if str(h).strip()]
         else:
-            hosts = ['localhost', '127.0.0.1']
-        
-        # Đảm bảo luôn bao gồm dấu '*' để cho phép mọi tên miền động trên Vercel preview
-        if '*' not in hosts:
-            hosts.append('*')
-            
+            raise ValueError('ALLOWED_HOSTS must be a list of hostnames')
+        if not hosts or '*' in hosts:
+            raise ValueError('ALLOWED_HOSTS must contain explicit hostnames and never wildcard (*)')
+        if 'testserver' not in hosts:
+            hosts.append('testserver')
         return hosts
 
 

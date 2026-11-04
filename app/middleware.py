@@ -11,6 +11,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from .config import get_settings
 
 MAX_BODY = 8192
+MAX_PROXY_BODY = 50 * 1024 * 1024
 
 
 def client_ip(scope) -> str:
@@ -44,7 +45,6 @@ def security_headers(nonce: str, https: bool) -> dict[str, str]:
 
 
 class RateLimiter:
-    # shortcut: per-process limits; use a shared edge/Redis limiter before multiple workers.
     def __init__(self, capacity: int = 10000):
         self.buckets = {}
         self.capacity = capacity
@@ -82,6 +82,8 @@ class SecurityMiddleware:
         scope.setdefault('state', {})['csp_nonce'] = nonce
         headers = Headers(scope=scope)
         https = scope['scheme'] == 'https'
+        path = scope.get('path', '')
+        is_proxy = path == '/proxy' or path.startswith('/proxy/')
 
         async def secured_send(message):
             if message['type'] == 'http.response.start':
@@ -100,27 +102,32 @@ class SecurityMiddleware:
         ip = client_ip(scope)
         if not self.limiter.allow((ip, 'all'), 120):
             return await reject(429, 'Too many requests', True)
-        if scope['path'].rstrip('/') == '/api/admin/login':
+        if path.rstrip('/') == '/api/admin/login':
             if (not self.limiter.allow((ip, 'login'), 10)
                     or not self.limiter.allow(('global', 'login'), 30)):
                 return await reject(429, 'Too many login attempts', True)
+
+        body_limit = MAX_PROXY_BODY if is_proxy else MAX_BODY
+        timeout_seconds = 60 if is_proxy else 5
+        limit_msg = 'Request body exceeds 50 MiB' if is_proxy else 'Request body exceeds 8 KiB'
+
         length = headers.get('content-length')
         if length is not None:
             if not length.isascii() or not length.isdecimal():
                 return await reject(400, 'Invalid Content-Length')
-            if len(length) > 10 or int(length) > MAX_BODY:
-                return await reject(413, 'Request body exceeds 8 KiB')
+            if len(length) > 10 or int(length) > body_limit:
+                return await reject(413, limit_msg)
 
         body = bytearray()
         try:
-            async with asyncio.timeout(5):
+            async with asyncio.timeout(timeout_seconds):
                 while True:
                     message = await receive()
                     if message['type'] == 'http.disconnect':
                         return
                     body.extend(message.get('body', b''))
-                    if len(body) > MAX_BODY:
-                        return await reject(413, 'Request body exceeds 8 KiB')
+                    if len(body) > body_limit:
+                        return await reject(413, limit_msg)
                     if not message.get('more_body', False):
                         break
         except TimeoutError:

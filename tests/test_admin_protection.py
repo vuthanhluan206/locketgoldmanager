@@ -9,7 +9,7 @@ from app.auth import router
 from app.config import get_settings
 from app.middleware import SecurityMiddleware, client_ip
 from app.passwords import hash_password
-from app.routes import router as pages
+from app.routers.management import router as pages
 
 
 @pytest.fixture
@@ -57,7 +57,7 @@ def test_verified_login_and_widget(protected):
     assert login(http).status_code == 200
     verifier.assert_called_once_with('test-secret', 'test-token')
     app.state.sessions.insert_one.assert_awaited_once()
-    page = http.get('/admin-gmnWJ5nG3qZRcdku3eBtkIka')
+    page = http.get('/admin')
     assert 'data-sitekey="test-site-key"' in page.text
     assert 'test-secret' not in page.text
     assert 'frame-src https://challenges.cloudflare.com' in page.headers['content-security-policy']

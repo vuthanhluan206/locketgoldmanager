@@ -21,20 +21,32 @@ async def require_subscriber_access(
     request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
 ):
+    unauthorized = HTTPException(401, "Invalid or missing subscriber API token", headers={"WWW-Authenticate": "Bearer"})
+    if credentials is None:
+        raise unauthorized
+
     settings = get_settings()
     configured = settings.subscriber_api_token
-    
-    # Nếu hệ thống có cấu hình token riêng cho subscriber thì kiểm tra
-    if configured is not None:
-        if credentials is not None and secrets.compare_digest(
-            credentials.credentials.encode('utf-8'),
-            configured.get_secret_value().encode('ascii')
-        ):
-            return
-        raise HTTPException(401, "Invalid or missing subscriber API token", headers={"WWW-Authenticate": "Bearer"})
-    
-    # Nếu không cấu hình token riêng, cho phép ứng dụng Locket gọi vào tự do để trả về trạng thái
-    return
+    if configured is not None and secrets.compare_digest(
+        credentials.credentials.encode("utf-8"),
+        configured.get_secret_value().encode("ascii"),
+    ):
+        return
+
+    if re.fullmatch(r"[A-Za-z0-9_-]{64}", credentials.credentials):
+        sessions = getattr(request.app.state, "sessions", None)
+        admins = getattr(request.app.state, "admins", None)
+        if sessions is not None and admins is not None:
+            session = await sessions.find_one({
+                "_id": token_digest(credentials.credentials),
+                "expires_at": {"$gt": datetime.now(timezone.utc)},
+            })
+            if session is not None and session.get("admin_id") == "superadmin":
+                admin = await admins.find_one({"_id": session["admin_id"]})
+                if admin is not None and admin.get("auth_version") == session.get("auth_version"):
+                    return
+
+    raise unauthorized
 
 
 async def require_admin(

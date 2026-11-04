@@ -6,17 +6,17 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.middleware import SecurityMiddleware
-from app.routes import router
+from app.routers.management import router
 
 
 @pytest.fixture
 def icon_client(monkeypatch):
     settings = SimpleNamespace(
         allowed_hosts=['testserver'], require_https=False,
-        trusted_proxy_cidrs=[], turnstile_site_key='',
+        trusted_proxy_cidrs=[], turnstile_site_key='', admin_path='/admin',
     )
     monkeypatch.setattr('app.middleware.get_settings', lambda: settings)
-    monkeypatch.setattr('app.routes.get_settings', lambda: settings)
+    monkeypatch.setattr('app.routers.management.get_settings', lambda: settings)
     app = FastAPI()
     app.include_router(router)
     app.add_middleware(SecurityMiddleware)

@@ -12,14 +12,17 @@ router = APIRouter()
 WEB = Path(__file__).resolve().parent.parent.parent / 'web'
 Accounts = Annotated[object, Depends(get_accounts)]
 
+
 @router.get('/favicon.ico', include_in_schema=False)
 async def favicon():
     return FileResponse(WEB / 'favicon.ico', media_type='image/vnd.microsoft.icon')
+
 
 @router.get('/apple-touch-icon.png', include_in_schema=False)
 @router.get('/apple-touch-icon-precomposed.png', include_in_schema=False)
 async def apple_touch_icon():
     return FileResponse(WEB / 'apple-touch-icon.png', media_type='image/png')
+
 
 @router.get('/', response_class=HTMLResponse, include_in_schema=False)
 async def home(request: Request):
@@ -27,9 +30,11 @@ async def home(request: Request):
         raise HTTPException(400, 'URL tokens are disabled. Open /admin to sign in.')
     return render_page(False, request)
 
+
 @router.get('/robots.txt', include_in_schema=False)
 async def robots_txt():
     return PlainTextResponse("User-agent: *\nDisallow: /")
+
 
 def render_page(admin: bool, request: Request) -> HTMLResponse:
     page = (WEB / 'index.html').read_text(encoding='utf-8')
@@ -40,19 +45,38 @@ def render_page(admin: bool, request: Request) -> HTMLResponse:
     page = page.replace('__TURNSTILE_SITE_KEY__', get_settings().turnstile_site_key)
     return HTMLResponse(page.replace('__NONCE__', request.state.csp_nonce).replace('__VIEW__', 'admin' if admin else 'public'))
 
-@router.get('/admin-gmnWJ5nG3qZRcdku3eBtkIka', response_class=HTMLResponse, include_in_schema=False)
-async def admin_login(request: Request):
+
+@router.get('/admin', response_class=HTMLResponse, include_in_schema=False)
+async def admin_login_default(request: Request):
+    settings = get_settings()
+    if getattr(settings, 'admin_path', '/admin') != '/admin':
+        raise HTTPException(404, 'Not Found')
     return render_page(True, request)
+
 
 @router.get('/profile.mobileconfig')
 async def download_profile(request: Request):
-    if not request.app.state.profile:
+    profile_bytes = getattr(request.app.state, 'profile', None)
+    if not profile_bytes:
         raise HTTPException(503, 'Cấu hình DNS hoặc chứng chỉ chưa sẵn sàng.')
-    return Response(request.app.state.profile, media_type='application/x-apple-aspen-config',
-                    headers={'Content-Disposition': 'attachment; filename="locket.mobileconfig"'})
+    return Response(
+        profile_bytes,
+        media_type='application/x-apple-aspen-config',
+        headers={'Content-Disposition': 'attachment; filename="locket.mobileconfig"'},
+    )
 
-# Các route yêu cầu quyền Admin
+
+@router.get('/{admin_slug}', response_class=HTMLResponse, include_in_schema=False)
+async def admin_login_custom(admin_slug: str, request: Request):
+    settings = get_settings()
+    configured_path = getattr(settings, 'admin_path', '/admin')
+    if f'/{admin_slug}' != configured_path:
+        raise HTTPException(404, 'Not Found')
+    return render_page(True, request)
+
+
 admin_router = APIRouter(prefix='/admin', dependencies=[Depends(require_admin)])
+
 
 @admin_router.post('/add-account', response_model=AccountOutput)
 async def upsert_account(data: AccountInput, accounts: Accounts):
@@ -63,9 +87,11 @@ async def upsert_account(data: AccountInput, accounts: Accounts):
         await accounts.update_one({'locket_id': data.locket_id}, {'$set': document})
     return document
 
+
 @admin_router.get('/accounts', response_model=list[AccountOutput])
 async def list_accounts(accounts: Accounts, skip: int = Query(0, ge=0, le=10000), limit: int = Query(50, ge=1, le=100)):
     return await accounts.find({}, {'_id': 0}).sort('locket_id', 1).skip(skip).limit(limit).to_list(length=limit)
+
 
 @admin_router.delete('/accounts/{account_id}', status_code=204)
 async def delete_account(account_id: AccountId, accounts: Accounts):

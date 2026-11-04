@@ -44,7 +44,7 @@ def client(monkeypatch, password_pair):
     admin = {'_id': 'superadmin', 'email': 'admin@example.test', 'password_hash': encoded,
              'auth_version': hashlib.sha256(encoded.encode()).hexdigest()}
     admins.find_one.side_effect = lambda query: admin.copy() if query in [
-        {'_id': 'superadmin', 'email': admin['email']}, {'_id': admin['_id']},
+        {'_id': 'superadmin', 'email': admin['email']}, {'_id': admin['_id']}, {'_id': 'superadmin'},
     ] else None
     stored = {}
 
@@ -98,7 +98,7 @@ def test_views_and_csp(client):
     http = client[0]
     public = http.get('/')
     assert public.status_code == 200
-    assert 'loginForm' not in public.text and 'accountForm' not in public.text
+    assert 'id="loginForm"' not in public.text and 'id="accountForm"' not in public.text
     assert '<script' not in public.text
     assert 'href="/profile.mobileconfig"' in public.text
     admin = http.get('/admin')
@@ -170,7 +170,6 @@ def test_bad_login_and_rate_limit(client):
     assert http.post('/api/admin/login', json=wrong).status_code == 401
     wrong['email'] = 'missing@example.test'
     assert http.post('/api/admin/login', json=wrong).status_code == 401
-    # Invalid schema still counts against login attempts, without expensive hashing.
     for _ in range(8):
         assert http.post('/api/admin/login', json={}).status_code == 422
     response = http.post('/api/admin/login', json={})

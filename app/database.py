@@ -20,7 +20,6 @@ def admin_document(settings):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
-    # Validate certificate once; no certificate file I/O during public downloads.
     app.state.profile = None
     try:
         app.state.profile = build_profile(settings) if settings.nextdns_id else None
@@ -38,15 +37,13 @@ async def lifespan(app: FastAPI):
         app.state.admins = db.admins
         app.state.sessions = db.sessions
         app.state.login_limits = db.login_limits
-        
-        # Đảm bảo tạo Index duy nhất cho locket_id giúp thời gian query luôn dưới 10ms, chống timeout
+        app.state.viewers_history = getattr(db, 'viewers_history', None)
+
         await app.state.accounts.create_index('locket_id', unique=True)
-        
         await db.admins.create_index('email', unique=True)
         await db.sessions.create_index('expires_at', expireAfterSeconds=0)
         await db.login_limits.create_index('expires_at', expireAfterSeconds=0)
-        
-        # Existing DB credentials are authoritative; cold starts must never reset passwords.
+
         await db.admins.update_one({'_id': 'superadmin'}, {
             '$setOnInsert': admin_document(settings),
         }, upsert=True)
