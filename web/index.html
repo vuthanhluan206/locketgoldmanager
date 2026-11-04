@@ -554,6 +554,55 @@
       .admin #dashboard .directory-heading, .admin #dashboard .pager { padding: 16px; }
       .admin #dashboard td, .admin #dashboard th { padding-left: 18px; padding-right: 18px; }
     }
+    /* Compact layout with readable controls on narrow and short screens. */
+    body { padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+    main { min-width: 0; max-width: 400px; }
+    .card { padding: 28px 22px; border-radius: 20px; }
+    .logo-wrapper { width: 64px; height: 64px; margin-bottom: 16px; border-radius: 18px; }
+    h1 { font-size: clamp(22px, 6vw, 26px); }
+    .features-list { padding: 14px; margin-bottom: 18px; }
+    .features-list div { gap: 9px; line-height: 1.5; }
+    body.admin { padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+    .admin main { max-width: 1080px; }
+    .admin .login { max-width: 400px; padding: 28px 24px; }
+    .admin .login-header { margin-bottom: 24px; }
+    .admin h1 { font-size: 26px; }
+    .admin #dashboard .workspace-bar { padding: 16px 20px; }
+    .admin #dashboard .workspace-heading { padding: 22px 20px; }
+    .admin #dashboard .workspace-heading h2 { font-size: clamp(22px, 3vw, 28px); }
+    .admin .workspace-layout { padding: 0 20px 20px; }
+    .admin #dashboard td, .admin #dashboard th { padding: 14px 16px; }
+    .admin .account-dialog { max-height: calc(100vh - 24px); max-height: calc(100svh - 24px); overflow-y: auto; }
+    @media (max-width: 700px) {
+      .admin .workspace-bar > .row { width: 100%; min-width: 0; justify-content: space-between; }
+      .admin .profile { flex: 1; min-width: 0; }
+      .admin .profile > div { min-width: 0; }
+      .admin .profile-name { overflow-wrap: anywhere; }
+      .admin .session-actions { flex-wrap: wrap; }
+      .admin #dashboard .workspace-heading { padding: 20px 16px; }
+      .admin .workspace-layout { padding: 0 12px 12px; }
+      .admin .gold-emblem { width: 44px; height: 44px; border-radius: 12px; }
+      .admin #dashboard table { min-width: 0; table-layout: fixed; }
+      .admin #dashboard thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+      .admin #dashboard tbody, .admin #dashboard tr, .admin #dashboard td { display: block; width: 100%; max-width: none; min-width: 0; }
+      .admin #dashboard tr { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+      .admin #dashboard td { padding: 6px 0; border: 0; }
+      .admin #dashboard .row-number { width: auto; min-width: 0; font-size: 12px; }
+      .admin #dashboard .row-number::before { content: '#'; }
+      .admin #dashboard td:nth-child(2) { width: 100%; }
+      .admin .account-expiry { white-space: normal; }
+      .admin #dashboard td:last-child:not([colspan]) { text-align: left; }
+      .admin #dashboard td button { min-width: 44px; min-height: 44px; }
+      .admin #dashboard td[colspan] { padding: 24px 0; }
+      .admin #dashboard .pager { gap: 8px; padding: 12px; }
+      .admin .pager button { padding: 10px; }
+    }
+    @media (max-width: 360px) {
+      .card, .admin .login { padding: 22px 16px; }
+      .admin .workspace-bar > .row { gap: 12px; }
+      .admin .session-actions { width: 100%; justify-content: flex-end; }
+      .admin .login-brand .brand-name { font-size: 12px; }
+    }
   </style>
 </head>
 
