@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from pymongo import MongoClient
 
-app = FastAPI(title="Locket Dynamic Cloud Modifier Proxy", version="2.3.2")
+app = FastAPI(title="Locket Dynamic Cloud Modifier Proxy", version="2.4.0")
 
 UPSTREAM_TARGET = "https://api.locketcamera.com"
 
@@ -19,6 +19,65 @@ if MONGO_URI:
     except Exception:
         pass
 
+# --- ENDPOINT TỰ ĐỘNG TẠO VÀ TẢI FILE .MOBILECONFIG CHO IPHONE ---
+@app.get("/install", response_class=Response)
+async def download_profile(request: Request):
+    host = request.headers.get("host", "locketgold.vuthanhluan.bond")
+    scheme = request.url.scheme
+    pac_url = f"{scheme}://{host}/proxy.pac"
+
+    mobileconfig_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PayloadContent</key>
+	<array>
+		<dict>
+			<key>AutoProxy</key>
+			<dict>
+				<key>ProxyAutoConfigURLString</key>
+				<string>{pac_url}</string>
+			</dict>
+			<key>PayloadDescription</key>
+			<string>Cấu hình Proxy tự động cho Locket Gold</string>
+			<key>PayloadDisplayName</key>
+			<string>Locket Gold Proxy</string>
+			<key>PayloadIdentifier</key>
+			<string>com.vuthanhluan.proxy.conf</string>
+			<key>PayloadType</key>
+			<string>com.apple.webClip.managed</string>
+			<key>PayloadUUID</key>
+			<string>8A15256A-47B2-4F81-815E-921356A41001</string>
+			<key>PayloadVersion</key>
+			<integer>1</integer>
+		</dict>
+	</array>
+	<key>PayloadDescription</key>
+	<string>Cấu hình mạng tương thích mọi phiên bản iOS</string>
+	<key>PayloadDisplayName</key>
+	<string>Locket Proxy Manager</string>
+	<key>PayloadIdentifier</key>
+	<string>com.vuthanhluan.locketmanager.profile</string>
+	<key>PayloadOrganization</key>
+	<string>Vũ Thành Luân</string>
+	<key>PayloadRemovalDisallowed</key>
+	<false/>
+	<key>PayloadType</key>
+	<string>Configuration</string>
+	<key>PayloadUUID</key>
+	<string>7B241459-36A1-4E72-904D-812445B39002</string>
+	<key>PayloadVersion</key>
+	<integer>1</integer>
+</dict>
+</plist>"""
+
+    return Response(
+        content=mobileconfig_content,
+        media_type="application/x-apple-aspen-config",
+        headers={"Content-Disposition": "attachment; filename=locket_proxy.mobileconfig"}
+    )
+
+# --- PROXY CHÍNH CHO ỨNG DỤNG LOCKET ---
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def dynamic_reverse_proxy(request: Request, path: str):
     url = f"{UPSTREAM_TARGET}/{path}"
@@ -71,7 +130,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
         try:
             data = json.loads(upstream_content.decode("utf-8"))
             
-            # --- 1. XỬ LÝ DANH SÁCH NGƯỜI XEM (Hỗ trợ cả dạng Dict và List) ---
+            # --- XỬ LÝ DANH SÁCH NGƯỜI XEM (Viewers) ---
             if "moments" in path or "posts" in path or "viewer" in path:
                 dynamic_viewers = []
                 if db is not None and user_token:
@@ -97,16 +156,14 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                         }
                     ]
                 
-                # Nếu phản hồi là một đối tượng dict, gán trực tiếp trường viewers vào
                 if isinstance(data, dict):
                     data["viewers"] = dynamic_viewers
                 elif isinstance(data, list):
-                    # Trường hợp API trả về danh sách các bài đăng, lặp qua để chèn viewers vào từng bài đăng
                     for item in data:
                         if isinstance(item, dict):
                             item["viewers"] = dynamic_viewers
 
-            # --- 2. XỬ LÝ TRẠNG THÁI GOLD ---
+            # --- XỬ LÝ TRẠNG THÁI VÀ THỜI HẠN GOLD ---
             elif "subscribers" in path or "user" in path:
                 if isinstance(data, dict):
                     if "subscriber" not in data or not isinstance(data["subscriber"], dict):
