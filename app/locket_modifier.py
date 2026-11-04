@@ -3,10 +3,10 @@ import urllib.error
 import json
 import os
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 from pymongo import MongoClient
 
-app = FastAPI(title="Locket Dynamic Cloud Modifier Proxy", version="2.3.0")
+app = FastAPI(title="Locket Dynamic Cloud Modifier Proxy", version="2.3.2")
 
 UPSTREAM_TARGET = "https://api.locketcamera.com"
 
@@ -36,16 +36,11 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     auth_header = headers.get("authorization", "")
     user_token = auth_header.replace("Bearer ", "").strip()
 
-    # Nhận diện các request tải lên ảnh/video (multipart hoặc post trực tiếp bài đăng)
     is_upload = method in ["POST", "PUT", "PATCH"] and ("multipart/form-data" in content_type_header or "posts" in path or "moments" in path)
-
-    # Đọc body request
     body = await request.body()
 
     try:
         req = urllib.request.Request(url, data=body if body else None, headers=headers, method=method)
-        
-        # Nếu là request upload ảnh/video nặng, mở rộng timeout lên 60 giây
         timeout_limit = 60.0 if is_upload else 30.0
 
         with urllib.request.urlopen(req, timeout=timeout_limit) as upstream_response:
@@ -62,7 +57,6 @@ async def dynamic_reverse_proxy(request: Request, path: str):
 
     response_headers = {k: v for k, v in upstream_headers.items() if k.lower() not in ["content-length", "transfer-encoding", "content-encoding"]}
 
-    # Nếu là upload ảnh/video, trả về nguyên bản lập tức mà không can thiệp JSON để tránh hỏng tệp nhị phân
     if is_upload:
         return Response(
             content=upstream_content,
@@ -77,34 +71,40 @@ async def dynamic_reverse_proxy(request: Request, path: str):
         try:
             data = json.loads(upstream_content.decode("utf-8"))
             
-            # --- 1. XỬ LÝ DANH SÁCH NGƯỜI XEM ĐỘNG ---
-            if "moments" in path or "posts" in path:
+            # --- 1. XỬ LÝ DANH SÁCH NGƯỜI XEM (Hỗ trợ cả dạng Dict và List) ---
+            if "moments" in path or "posts" in path or "viewer" in path:
+                dynamic_viewers = []
+                if db is not None and user_token:
+                    try:
+                        cursor = db.viewers_history.find({"token": user_token}).sort("viewed_at", -1).limit(10)
+                        for record in cursor:
+                            dynamic_viewers.append({
+                                "user_id": str(record.get("viewer_id", "unknown_id")),
+                                "username": record.get("username", "bạn bè"),
+                                "display_name": record.get("display_name", "Thành viên"),
+                                "viewed_at": record.get("viewed_at", "2026-06-06T15:00:00Z")
+                            })
+                    except Exception:
+                        pass
+                
+                if not dynamic_viewers:
+                    dynamic_viewers = [
+                        {
+                            "user_id": "vtl_cloud_id",
+                            "username": "vuthanhluan",
+                            "display_name": "Vũ Thành Luân",
+                            "viewed_at": "2026-06-06T15:00:00Z"
+                        }
+                    ]
+                
+                # Nếu phản hồi là một đối tượng dict, gán trực tiếp trường viewers vào
                 if isinstance(data, dict):
-                    dynamic_viewers = []
-                    if db is not None and user_token:
-                        try:
-                            cursor = db.viewers_history.find({"token": user_token}).sort("viewed_at", -1).limit(5)
-                            for record in cursor:
-                                dynamic_viewers.append({
-                                    "user_id": str(record.get("viewer_id", "unknown_id")),
-                                    "username": record.get("username", "bạn bè"),
-                                    "display_name": record.get("display_name", "Thành viên"),
-                                    "viewed_at": record.get("viewed_at", "2026-06-06T15:00:00Z")
-                                })
-                        except Exception:
-                            pass
-                    
-                    if not dynamic_viewers:
-                        dynamic_viewers = [
-                            {
-                                "user_id": "vtl_cloud_id",
-                                "username": "vuthanhluan",
-                                "display_name": "Vũ Thành Luân",
-                                "viewed_at": "2026-06-06T15:00:00Z"
-                            }
-                        ]
-                    
                     data["viewers"] = dynamic_viewers
+                elif isinstance(data, list):
+                    # Trường hợp API trả về danh sách các bài đăng, lặp qua để chèn viewers vào từng bài đăng
+                    for item in data:
+                        if isinstance(item, dict):
+                            item["viewers"] = dynamic_viewers
 
             # --- 2. XỬ LÝ TRẠNG THÁI GOLD ---
             elif "subscribers" in path or "user" in path:
