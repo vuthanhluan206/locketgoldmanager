@@ -161,6 +161,10 @@
       color: var(--muted);
     }
 
+    .note-spacing {
+      margin-top: 20px;
+    }
+
     .eyebrow {
       font-size: 11px;
       letter-spacing: .12em;
@@ -305,7 +309,6 @@
         --accent: #0a84ff;
       }
     }
-
     /* Admin workspace */
     body.admin {
       --background: #f4f5f8;
@@ -325,1031 +328,216 @@
       padding: max(32px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
     }
 
-    .admin main {
-      max-width: 1240px;
-      min-width: 0;
-    }
-
-    .admin .card {
-      border: 1px solid var(--line);
-      box-shadow: 0 16px 48px #18283f08;
-      border-radius: 20px;
-    }
-
-    .admin .login {
-      max-width: 460px;
-      padding: 40px;
-      margin-inline: auto;
-    }
-
-    .admin[data-login-rendering] .login {
-      visibility: hidden;
-    }
-
+    .admin main { max-width: 1240px; min-width: 0; }
+    .admin .card { border: 1px solid var(--line); box-shadow: 0 16px 48px #18283f08; border-radius: 20px; }
+    .admin .login { max-width: 460px; padding: 40px; margin-inline: auto; }
+    .admin[data-login-rendering] .login { visibility: hidden; }
     .admin .brand-mark {
-      display: inline-grid;
-      place-items: center;
-      width: 48px;
-      height: 48px;
-      border-radius: 14px;
-      background: #25344c;
-      color: #f5d486;
-      font-size: 23px;
-      font-weight: 700;
-      flex-shrink: 0;
+      display: inline-grid; place-items: center; width: 48px; height: 48px;
+      border-radius: 14px; background: #25344c; color: #f5d486;
+      font-size: 23px; font-weight: 700; flex-shrink: 0;
     }
-
-    .admin .login-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 30px;
-    }
-
-    .admin .login-brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      min-width: 0;
-    }
-
-    .admin .login-brand .brand-name {
-      font-size: 14px;
-      line-height: 1.5;
-    }
-
-    .admin .login-header .theme-toggle {
-      flex-shrink: 0;
-      padding: 10px;
-    }
-
-    .admin .login-header .brand-mark {
-      width: 42px;
-      height: 42px;
-      border-radius: 12px;
-    }
-
-    .admin .eyebrow {
-      color: var(--gold);
-      font-size: 10px;
-      font-weight: 750;
-      letter-spacing: .16em;
-    }
-
-    .admin h1 {
-      font-size: 30px;
-      margin-bottom: 12px;
-    }
-
-    .admin h2 {
-      font-size: 27px;
-    }
-
-    .admin h3 {
-      font-size: 16px;
-      letter-spacing: -.02em;
-      margin: 0 0 8px;
-    }
-
-    .admin label {
-      font-weight: 650;
-      color: var(--text);
-    }
-
-    .admin input {
-      border-radius: 10px;
-      background: var(--card);
-      margin-top: 9px;
-      transition: border-color .15s;
-    }
-
-    .admin input:hover {
-      border-color: #acb6c5;
-    }
-
-    .admin input:focus-visible {
-      outline: 3px solid #b8cae65c;
-      outline-offset: 1px;
-      border-color: #7087aa;
-    }
-
-    .admin button {
-      border-radius: 10px;
-      min-height: 46px;
-      font-size: 14px;
-      box-shadow: none;
-    }
-
+    .admin .login-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 30px; }
+    .admin .login-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .admin .login-brand .brand-name { font-size: 14px; line-height: 1.5; }
+    .admin .login-header .theme-toggle { flex-shrink: 0; padding: 10px; }
+    .admin .login-header .brand-mark { width: 42px; height: 42px; border-radius: 12px; }
+    .admin .eyebrow { color: var(--gold); font-size: 10px; font-weight: 750; letter-spacing: .16em; }
+    .admin h1 { font-size: 30px; margin-bottom: 12px; }
+    .admin h2 { font-size: 27px; }
+    .admin h3 { font-size: 16px; letter-spacing: -.02em; margin: 0 0 8px; }
+    .admin label { font-weight: 650; color: var(--text); }
+    .admin input { border-radius: 10px; background: var(--card); margin-top: 9px; transition: border-color .15s; }
+    .admin input:hover { border-color: #acb6c5; }
+    .admin input:focus-visible { outline: 3px solid #b8cae65c; outline-offset: 1px; border-color: #7087aa; }
+    .admin button { border-radius: 10px; min-height: 46px; font-size: 14px; box-shadow: none; }
     @media (hover: hover) and (pointer: fine) {
-      .admin button:hover:not(:disabled) {
-        opacity: .88;
-      }
+      .admin button:hover:not(:disabled) { opacity: .88; }
     }
+    .admin button:disabled { cursor: not-allowed; }
+    .admin .secondary { background: var(--card); }
+    .admin #signIn { margin-top: 18px; }
+    .admin #turnstile { max-width: 100%; overflow-x: auto; }
+    .admin #turnstile:not([data-sitekey=""]) { min-height: 65px; }
+    .admin .login-footer { border-top: 1px solid var(--line); padding-top: 20px; text-align: center; }
+    .admin .login-footer a { color: var(--muted); }
+    .admin #dashboard { padding: 0; overflow: hidden; }
+    .admin .workspace-bar { padding: 22px 28px; border-bottom: 1px solid var(--line); }
+    .admin .brand-name { font-weight: 750; font-size: 15px; letter-spacing: -.02em; }
+    .admin .brand-name small { display: block; color: var(--muted); font-size: 11px; font-weight: 450; margin-top: 4px; }
+    .admin .workspace-heading { padding: 30px 28px 24px; }
+    .admin .workspace-heading p:last-child { margin: 0; font-size: 14px; }
+    .admin .workspace-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 24px; padding: 0 28px 28px; align-items: start; }
+    .admin .editor-panel { padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--field); }
+    .admin #accountForm .row { display: block; }
+    .admin #accountForm .field { min-width: 0; }
+    .admin .directory-panel { min-width: 0; }
+    .admin .directory-heading { padding: 4px 0 16px; }
+    .admin .directory-heading p { font-size: 12px; margin: 0; }
+    .admin .scroll { border: 1px solid var(--line); border-radius: 12px; }
+    .admin table { min-width: 580px; }
+    .admin th { background: var(--field); font-size: 11px; letter-spacing: .03em; white-space: nowrap; padding: 15px; }
+    .admin td { padding: 18px 15px; line-height: 1.6; }
+    .admin tbody tr:last-child td { border-bottom: 0; }
+    .admin tbody tr:hover { background: var(--field); }
+    .admin td:nth-child(2) { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-weight: 600; max-width: 180px; }
+    .admin td:nth-child(4) { font-weight: 650; white-space: nowrap; }
+    .admin td:last-child { min-width: 190px; }
+    .admin td button { min-height: 40px; padding: 7px 10px; font-size: 11px; border-radius: 7px; }
+    .admin td button:nth-child(3) { color: var(--danger); border-color: var(--danger-line); }
+    .admin .pager { padding-top: 4px; }
+    .admin .pager button { font-size: 12px; padding: 10px 14px; }
+    .admin .status { margin: 12px 0; min-height: 0; }
+    .admin .status:not(:empty) { padding: 12px 14px; background: var(--field); border: 1px solid var(--line); border-radius: 10px; }
+    .admin #identity { margin: 0; max-width: 280px; overflow-wrap: anywhere; }
 
-    .admin button:disabled {
-      cursor: not-allowed;
-    }
-
-    .admin .secondary {
-      background: var(--card);
-    }
-
-    .admin #signIn {
-      margin-top: 18px;
-    }
-
-    .admin #turnstile {
-      max-width: 100%;
-      overflow-x: auto;
-    }
-
-    .admin #turnstile:not([data-sitekey=""]) {
-      min-height: 65px;
-    }
-
-    .admin .login-footer {
-      border-top: 1px solid var(--line);
-      padding-top: 20px;
-      text-align: center;
-    }
-
-    .admin .login-footer a {
-      color: var(--muted);
-    }
-
-    .admin #dashboard {
-      padding: 0;
-      overflow: hidden;
-    }
-
-    .admin .workspace-bar {
-      padding: 22px 28px;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .admin .brand-name {
-      font-weight: 750;
-      font-size: 15px;
-      letter-spacing: -.02em;
-    }
-
-    .admin .brand-name small {
-      display: block;
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 450;
-      margin-top: 4px;
-    }
-
-    .admin .workspace-heading {
-      padding: 30px 28px 24px;
-    }
-
-    .admin .workspace-heading p:last-child {
-      margin: 0;
-      font-size: 14px;
-    }
-
-    .admin .workspace-layout {
-      display: grid;
-      grid-template-columns: 300px minmax(0, 1fr);
-      gap: 24px;
-      padding: 0 28px 28px;
-      align-items: start;
-    }
-
-    .admin .editor-panel {
-      padding: 22px;
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      background: var(--field);
-    }
-
-    .admin #accountForm .row {
-      display: block;
-    }
-
-    .admin #accountForm .field {
-      min-width: 0;
-    }
-
-    .admin .directory-panel {
-      min-width: 0;
-    }
-
-    .admin .directory-heading {
-      padding: 4px 0 16px;
-    }
-
-    .admin .directory-heading p {
-      font-size: 12px;
-      margin: 0;
-    }
-
-    .admin .scroll {
-      border: 1px solid var(--line);
-      border-radius: 12px;
-    }
-
-    .admin table {
-      min-width: 580px;
-    }
-
-    .admin th {
-      background: var(--field);
-      font-size: 11px;
-      letter-spacing: .03em;
-      white-space: nowrap;
-      padding: 15px;
-    }
-
-    .admin td {
-      padding: 18px 15px;
-      line-height: 1.6;
-    }
-
-    .admin tbody tr:last-child td {
-      border-bottom: 0;
-    }
-
-    .admin tbody tr:hover {
-      background: var(--field);
-    }
-
-    .admin td:nth-child(2) {
-      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-      font-weight: 600;
-      max-width: 180px;
-    }
-
-    .admin td:nth-child(4) {
-      font-weight: 650;
-      white-space: nowrap;
-    }
-
-    .admin td:last-child {
-      min-width: 190px;
-    }
-
-    .admin td button {
-      min-height: 40px;
-      padding: 7px 10px;
-      font-size: 11px;
-      border-radius: 7px;
-    }
-
-    .admin td button:nth-child(3) {
-      color: var(--danger);
-      border-color: var(--danger-line);
-    }
-
-    .admin .pager {
-      padding-top: 4px;
-    }
-
-    .admin .pager button {
-      font-size: 12px;
-      padding: 10px 14px;
-    }
-
-    .admin .status {
-      margin: 12px 0;
-      min-height: 0;
-    }
-
-    .admin .status:not(:empty) {
-      padding: 12px 14px;
-      background: var(--field);
-      border: 1px solid var(--line);
-      border-radius: 10px;
-    }
-
-    .admin #identity {
-      margin: 0;
-      max-width: 280px;
-      overflow-wrap: anywhere;
-    }
-
-    .admin .theme-toggle {
-      width: auto;
-      display: inline-flex;
-      gap: 8px;
-      padding: 10px 14px;
-      border-radius: 24px;
-      color: var(--gold);
-    }
-
-    .admin .theme-toggle svg {
-      width: 20px;
-      height: 20px;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.7;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-
-    .admin .theme-toggle[data-mode="light"] svg {
-      fill: currentColor;
-      fill-opacity: .22;
-      filter: drop-shadow(0 0 3px #d9b65c66);
-    }
-
-    .admin .theme-toggle[data-mode="dark"] {
-      color: var(--muted);
-    }
-
-    .admin .theme-toggle[data-mode="system"] svg {
-      display: none;
-    }
-
+    .admin .theme-toggle { width: auto; display: inline-flex; gap: 8px; padding: 10px 14px; border-radius: 24px; color: var(--gold); }
+    .admin .theme-toggle svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .admin .theme-toggle[data-mode="light"] svg { fill: currentColor; fill-opacity: .22; filter: drop-shadow(0 0 3px #d9b65c66); }
+    .admin .theme-toggle[data-mode="dark"] { color: var(--muted); }
+    .admin .theme-toggle[data-mode="system"] svg { display: none; }
     .admin .theme-toggle[data-mode="light"] [data-theme-label],
-    .admin .theme-toggle[data-mode="dark"] [data-theme-label] {
-      display: none;
-    }
-
-    .admin .theme-toggle {
-      min-width: 46px;
-    }
-
-    .admin .theme-toggle span {
-      min-width: 30px;
-      font-size: 12px;
-    }
-
-    .admin .session-actions {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: nowrap;
-    }
-
-    .admin .workspace-bar {
-      background: var(--field);
-    }
-
-    .admin .profile {
-      gap: 10px;
-    }
-
+    .admin .theme-toggle[data-mode="dark"] [data-theme-label] { display: none; }
+    .admin .theme-toggle { min-width: 46px; }
+    .admin .theme-toggle span { min-width: 30px; font-size: 12px; }
+    .admin .session-actions { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+    .admin .workspace-bar { background: var(--field); }
+    .admin .profile { gap: 10px; }
     .admin .avatar {
-      display: grid;
-      place-items: center;
-      width: 38px;
-      height: 38px;
-      flex-shrink: 0;
-      border: 1px solid var(--line);
-      border-radius: 50%;
-      background: var(--card);
-      font-size: 12px;
-      font-weight: 750;
-      color: var(--gold);
+      display: grid; place-items: center; width: 38px; height: 38px; flex-shrink: 0;
+      border: 1px solid var(--line); border-radius: 50%; background: var(--card);
+      font-size: 12px; font-weight: 750; color: var(--gold);
     }
-
-    .admin .profile-name {
-      display: block;
-      font-size: 13px;
-      font-weight: 650;
-      margin-bottom: 4px;
-    }
-
-    .admin .profile #identity {
-      font-size: 11px;
-    }
-
-    .admin .directory-heading h3 {
-      font-size: 18px;
-    }
-
-    .admin #signIn,
-    .admin #save {
-      background: linear-gradient(120deg, #334766, #25344c);
-      color: #fff;
-    }
+    .admin .profile-name { display: block; font-size: 13px; font-weight: 650; margin-bottom: 4px; }
+    .admin .profile #identity { font-size: 11px; }
+    .admin .directory-heading h3 { font-size: 18px; }
+    .admin #signIn, .admin #save { background: linear-gradient(120deg, #334766, #25344c); color: #fff; }
 
     .admin[data-theme="dark"] {
       color-scheme: dark;
-      --background: #0d131e;
-      --card: #151e2c;
-      --field: #1a2535;
-      --text: #e7edf6;
-      --muted: #a1afc3;
-      --line: #2c3a4e;
-      --accent: #bdd1ef;
-      --halo: #203048;
-      --gold: #e3c17e;
-      --danger: #ffa6ac;
-      --danger-line: #65404a;
+      --background: #0d131e; --card: #151e2c; --field: #1a2535;
+      --text: #e7edf6; --muted: #a1afc3; --line: #2c3a4e;
+      --accent: #bdd1ef; --halo: #203048; --gold: #e3c17e;
+      --danger: #ffa6ac; --danger-line: #65404a;
     }
-
     @media (prefers-color-scheme: dark) {
       .admin:not([data-theme="light"]) {
         color-scheme: dark;
-        --background: #0d131e;
-        --card: #151e2c;
-        --field: #1a2535;
-        --text: #e7edf6;
-        --muted: #a1afc3;
-        --line: #2c3a4e;
-        --accent: #bdd1ef;
-        --halo: #203048;
-        --gold: #e3c17e;
-        --danger: #ffa6ac;
-        --danger-line: #65404a;
+        --background: #0d131e; --card: #151e2c; --field: #1a2535;
+        --text: #e7edf6; --muted: #a1afc3; --line: #2c3a4e;
+        --accent: #bdd1ef; --halo: #203048; --gold: #e3c17e;
+        --danger: #ffa6ac; --danger-line: #65404a;
       }
     }
 
     @media (max-width: 540px) {
-      body.admin {
-        padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
-      }
-
-      .admin .login {
-        padding: 28px 20px;
-      }
-
-      .admin h1 {
-        font-size: 26px;
-      }
-
-      .admin h2 {
-        font-size: 24px;
-      }
-
-      .admin .workspace-bar {
-        padding: 18px;
-        gap: 18px;
-      }
-
-      .admin .workspace-layout {
-        padding: 0 18px 20px;
-        gap: 22px;
-      }
-
-      .admin .editor-panel {
-        padding: 18px;
-      }
-
-      .admin #save {
-        width: 100%;
-      }
-
-      .admin #identity {
-        max-width: 180px;
-      }
+      body.admin { padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+      .admin .login { padding: 28px 20px; }
+      .admin h1 { font-size: 26px; }
+      .admin h2 { font-size: 24px; }
+      .admin .workspace-bar { padding: 18px; gap: 18px; }
+      .admin .workspace-layout { padding: 0 18px 20px; gap: 22px; }
+      .admin .editor-panel { padding: 18px; }
+      .admin #save { width: 100%; }
+      .admin #identity { max-width: 180px; }
     }
-
-    .admin #dashboard {
-      position: relative;
-      isolation: isolate;
-      background: var(--background);
-      border-radius: 24px;
-    }
-
-    .admin #dashboard> :not(.gold-rain) {
-      position: relative;
-      z-index: 1;
-    }
-
-    .admin .gold-rain {
-      position: absolute;
-      inset: 0;
-      overflow: hidden;
-      contain: strict;
-      pointer-events: none;
-      z-index: 0;
-      color: var(--gold);
-    }
-
-    .admin .gold-rain>svg {
-      position: absolute;
-      top: -80px;
-      width: 34px;
-      height: 34px;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.2;
-      opacity: 0;
-      will-change: transform, opacity;
-      animation: gold-fall 24s linear infinite;
-    }
-
-    .admin .gold-rain>svg:nth-child(1) {
-      left: 3%;
-      animation-delay: -3s;
-    }
-
-    .admin .gold-rain>svg:nth-child(2) {
-      left: 14%;
-      animation-delay: -16s;
-      width: 24px;
-    }
-
-    .admin .gold-rain>svg:nth-child(3) {
-      left: 27%;
-      animation-delay: -8s;
-      animation-duration: 29s;
-    }
-
-    .admin .gold-rain>svg:nth-child(4) {
-      left: 39%;
-      animation-delay: -20s;
-    }
-
-    .admin .gold-rain>svg:nth-child(5) {
-      left: 51%;
-      animation-delay: -12s;
-      width: 22px;
-    }
-
-    .admin .gold-rain>svg:nth-child(6) {
-      left: 63%;
-      animation-delay: -5s;
-      animation-duration: 31s;
-    }
-
-    .admin .gold-rain>svg:nth-child(7) {
-      left: 75%;
-      animation-delay: -19s;
-    }
-
-    .admin .gold-rain>svg:nth-child(8) {
-      left: 88%;
-      animation-delay: -10s;
-      width: 26px;
-    }
-
+    .admin #dashboard { position: relative; isolation: isolate; background: var(--background); border-radius: 24px; }
+    .admin #dashboard > :not(.gold-rain) { position: relative; z-index: 1; }
+    .admin .gold-rain { position: absolute; inset: 0; overflow: hidden; contain: strict; pointer-events: none; z-index: 0; color: var(--gold); }
+    .admin .gold-rain > svg { position: absolute; top: -80px; width: 34px; height: 34px; fill: none; stroke: currentColor; stroke-width: 1.2; opacity: 0; will-change: transform, opacity; animation: gold-fall 24s linear infinite; }
+    .admin .gold-rain > svg:nth-child(1) { left: 3%; animation-delay: -3s; }
+    .admin .gold-rain > svg:nth-child(2) { left: 14%; animation-delay: -16s; width: 24px; }
+    .admin .gold-rain > svg:nth-child(3) { left: 27%; animation-delay: -8s; animation-duration: 29s; }
+    .admin .gold-rain > svg:nth-child(4) { left: 39%; animation-delay: -20s; }
+    .admin .gold-rain > svg:nth-child(5) { left: 51%; animation-delay: -12s; width: 22px; }
+    .admin .gold-rain > svg:nth-child(6) { left: 63%; animation-delay: -5s; animation-duration: 31s; }
+    .admin .gold-rain > svg:nth-child(7) { left: 75%; animation-delay: -19s; }
+    .admin .gold-rain > svg:nth-child(8) { left: 88%; animation-delay: -10s; width: 26px; }
     @keyframes gold-fall {
-      0% {
-        transform: translate3d(0, 0, 0) rotate(-15deg);
-        opacity: 0;
-      }
-
-      12%,
-      82% {
-        opacity: .13;
-      }
-
-      100% {
-        transform: translate3d(24px, 1100px, 0) rotate(65deg);
-        opacity: 0;
-      }
+      0% { transform: translate3d(0, 0, 0) rotate(-15deg); opacity: 0; }
+      12%, 82% { opacity: .13; }
+      100% { transform: translate3d(24px, 1100px, 0) rotate(65deg); opacity: 0; }
     }
-
-    .admin #dashboard .workspace-bar {
-      background: var(--card);
-      padding: 20px 28px;
-    }
-
-    .admin #dashboard .workspace-heading {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 20px;
-      border: 0;
-      padding: 28px;
-      margin: 0;
-    }
-
-    .admin #dashboard .workspace-heading h2 {
-      font-size: clamp(25px, 3vw, 34px);
-      margin-bottom: 0;
-    }
-
-    .admin .gold-emblem {
-      display: grid;
-      place-items: center;
-      width: 64px;
-      height: 64px;
-      flex-shrink: 0;
-      border-radius: 20px;
-      background: linear-gradient(135deg, #ffe7a4, #c9943d);
-      color: #654317;
-      box-shadow: 0 8px 24px #b88a3026;
-      transform: rotate(8deg);
-    }
-
-    .admin .gold-emblem svg {
-      width: 34px;
-      height: 34px;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.5;
-    }
-
-    .admin #dashboard .workspace-layout {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 24px;
-    }
-
-    .admin #dashboard .editor-panel {
-      background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      padding: 24px;
-      box-shadow: 0 4px 16px #00000003;
-    }
-
-    .admin #dashboard #accountForm .field {
-      flex: 1 1 200px;
-    }
-
-    .admin #dashboard #accountForm input {
-      margin-bottom: 0;
-      background: var(--field);
-    }
-
-    .admin #dashboard #save {
-      width: auto;
-      min-height: 48px;
-      padding-inline: 22px;
-      background: linear-gradient(120deg, #f0d38c, #d9ad58);
-      color: #3c2c0c;
-    }
-
-    .admin .section-title {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 22px;
-    }
-
-    .admin .section-title h3 {
-      margin: 0;
-      font-size: 15px;
-    }
-
-    .admin .ui-icon {
-      width: 18px;
-      height: 18px;
-      flex-shrink: 0;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.7;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-
-    .admin .section-title>.ui-icon {
-      color: var(--gold);
-    }
-
-    .admin #dashboard .directory-panel {
-      background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: 18px;
-    }
-
-    .admin #dashboard .directory-heading {
-      padding: 0;
-    }
-
-    .admin #dashboard .directory-heading .section-title {
-      margin-bottom: 20px;
-    }
-
-    .admin #dashboard .scroll {
-      border-radius: 12px;
-    }
-
-    .admin #dashboard th {
-      padding-block: 14px;
-    }
-
-    .admin #dashboard td {
-      padding-block: 16px;
-    }
-
-    .admin #dashboard td:last-child {
-      min-width: 156px;
-    }
-
-    .admin #dashboard td button {
-      min-width: 40px;
-      gap: 6px;
-    }
-
-    .admin #dashboard .pager {
-      margin-top: 20px;
-    }
-
-    .admin #dashboard #logout {
-      gap: 8px;
-    }
-
+    .admin #dashboard .workspace-bar { background: var(--card); padding: 20px 28px; }
+    .admin #dashboard .workspace-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; border: 0; padding: 28px; margin: 0; }
+    .admin #dashboard .workspace-heading h2 { font-size: clamp(25px, 3vw, 34px); margin-bottom: 0; }
+    .admin .gold-emblem { display: grid; place-items: center; width: 64px; height: 64px; flex-shrink: 0; border-radius: 20px; background: linear-gradient(135deg, #ffe7a4, #c9943d); color: #654317; box-shadow: 0 8px 24px #b88a3026; transform: rotate(8deg); }
+    .admin .gold-emblem svg { width: 34px; height: 34px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+    .admin #dashboard .workspace-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+    .admin #dashboard .editor-panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 24px; box-shadow: 0 4px 16px #00000003; }
+    .admin #dashboard #accountForm .field { flex: 1 1 200px; }
+    .admin #dashboard #accountForm input { margin-bottom: 0; background: var(--field); }
+    .admin #dashboard #save { width: auto; min-height: 48px; padding-inline: 22px; background: linear-gradient(120deg, #f0d38c, #d9ad58); color: #3c2c0c; }
+    .admin .section-title { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
+    .admin .section-title h3 { margin: 0; font-size: 15px; }
+    .admin .ui-icon { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .admin .section-title > .ui-icon { color: var(--gold); }
+    .admin #dashboard .directory-panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; }
+    .admin #dashboard .directory-heading { padding: 0; }
+    .admin #dashboard .directory-heading .section-title { margin-bottom: 20px; }
+    .admin #dashboard .scroll { border-radius: 12px; }
+    .admin #dashboard th { padding-block: 14px; }
+    .admin #dashboard td { padding-block: 16px; }
+    .admin #dashboard td:last-child { min-width: 156px; }
+    .admin #dashboard td button { min-width: 40px; gap: 6px; }
+    .admin #dashboard .pager { margin-top: 20px; }
+    .admin #dashboard #logout { gap: 8px; }
     @media (max-width: 540px) {
-      .admin .gold-rain>svg:nth-child(even) {
-        display: none;
-      }
-
-      .admin #dashboard .workspace-bar {
-        padding: 18px;
-      }
-
-      .admin #dashboard .workspace-heading {
-        padding: 24px 18px;
-      }
-
-      .admin .gold-emblem {
-        width: 48px;
-        height: 48px;
-        border-radius: 16px;
-      }
-
-      .admin #dashboard .editor-panel,
-      .admin #dashboard .directory-panel {
-        padding: 18px;
-      }
-
-      .admin #dashboard #accountForm .field,
-      .admin #dashboard #save {
-        flex-basis: 100%;
-        width: 100%;
-      }
+      .admin .gold-rain > svg:nth-child(even) { display: none; }
+      .admin #dashboard .workspace-bar { padding: 18px; }
+      .admin #dashboard .workspace-heading { padding: 24px 18px; }
+      .admin .gold-emblem { width: 48px; height: 48px; border-radius: 16px; }
+      .admin #dashboard .editor-panel, .admin #dashboard .directory-panel { padding: 18px; }
+      .admin #dashboard #accountForm .field, .admin #dashboard #save { flex-basis: 100%; width: 100%; }
     }
-
     @media (prefers-reduced-motion: reduce) {
-      .admin .gold-rain {
-        display: none;
-      }
-
-      .admin .gold-rain>svg {
-        animation: none;
-        will-change: auto;
-      }
-
-      .button,
-      button,
-      .admin input {
-        transition: none;
-      }
-
-      .button:active,
-      button:active:not(:disabled) {
-        transform: none;
-      }
+      .admin .gold-rain { display: none; }
+      .admin .gold-rain > svg { animation: none; will-change: auto; }
+      .button, button, .admin input { transition: none; }
+      .button:active, button:active:not(:disabled) { transform: none; }
     }
-
-    .admin .account-dialog {
-      width: min(520px, calc(100% - 28px));
-      max-height: calc(100svh - 40px);
-      padding: 0;
-      border: 1px solid var(--line);
-      border-radius: 20px;
-      background: var(--card);
-      color: var(--text);
-      box-shadow: 0 24px 100px #00000040;
-    }
-
-    .admin .account-dialog::backdrop {
-      background: #08101db3;
-    }
-
-    .admin #dashboard .account-dialog .editor-panel {
-      border: 0;
-    }
-
-    .admin #dashboard .account-dialog #accountForm .row {
-      display: block;
-    }
-
-    .admin #dashboard .account-dialog input {
-      margin-bottom: 20px;
-    }
-
-    .admin .dialog-heading,
-    .admin .dialog-actions {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-
-    .admin .dialog-heading .section-title {
-      margin-bottom: 0;
-    }
-
-    .admin .dialog-heading {
-      margin-bottom: 24px;
-    }
-
-    .admin .dialog-heading button {
-      width: 44px;
-      padding: 8px;
-      font-size: 24px;
-    }
-
-    .admin .dialog-actions {
-      justify-content: flex-end;
-      margin-top: 24px;
-    }
-
-    .admin .dialog-actions button,
-    .admin #addAccount {
-      width: auto;
-      gap: 8px;
-    }
-
-    .admin #addAccount {
-      background: linear-gradient(120deg, #f0d38c, #d9ad58);
-      color: #3c2c0c;
-    }
-
-    .admin #dashboard .directory-heading {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 14px;
-      margin-bottom: 20px;
-    }
-
-    .admin #dashboard .directory-heading .section-title {
-      margin-bottom: 0;
-    }
-
-    .admin #dashboard .directory-panel {
-      padding: 0;
-      overflow: hidden;
-      box-shadow: 0 8px 30px #00000004;
-    }
-
-    .admin #dashboard .directory-heading {
-      padding: 22px 24px;
-      margin: 0;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .admin #dashboard .directory-panel>.status:not(:empty) {
-      margin: 16px 24px;
-    }
-
-    .admin #dashboard .scroll {
-      border: 0;
-      border-radius: 0;
-    }
-
-    .admin #dashboard table {
-      min-width: 660px;
-    }
-
-    .admin #dashboard th {
-      padding: 14px 24px;
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      font-weight: 700;
-    }
-
-    .admin #dashboard td {
-      padding: 20px 24px;
-      vertical-align: middle;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .admin #dashboard td:nth-child(2) {
-      width: 32%;
-      font-family: inherit;
-      font-size: 15px;
-    }
-
-    .admin #dashboard .row-number {
-      width: 64px;
-      min-width: 64px;
-      color: var(--muted);
-      font-size: 14px;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .admin #dashboard th:last-child {
-      width: 156px;
-    }
-
-    .admin .account-name {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      max-width: 100%;
-    }
-
-    .admin .account-crown {
-      width: 34px;
-      height: 34px;
-      padding: 6px;
-      flex-shrink: 0;
-      border-radius: 10px;
-      background: var(--field);
-      border: 1px solid var(--line);
-      color: var(--gold);
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.6;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-
-    .admin .account-name span {
-      overflow-wrap: anywhere;
-    }
-
-    .admin .account-expiry {
-      font-size: 14px;
-      color: var(--muted);
-      white-space: nowrap;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .admin .account-status {
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      padding: 6px 12px;
-      border-radius: 8px;
-      border: 1px solid var(--line);
-      background: var(--field);
-      color: var(--muted);
-      font-size: 13px;
-      font-weight: 650;
-    }
-
-    .admin .account-status::before {
-      content: '';
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
-      background: currentColor;
-    }
-
-    .admin .account-status.is-gold {
-      color: var(--gold);
-      border-color: currentColor;
-    }
-
-    .admin #dashboard td:last-child:not([colspan]),
-    .admin #dashboard th:last-child {
-      text-align: right;
-      white-space: nowrap;
-    }
-
-    .admin #dashboard td button {
-      border-color: transparent;
-      background: transparent;
-      margin: 0 1px;
-      border-radius: 10px;
-    }
-
-    .admin #dashboard td button:hover:not(:disabled) {
-      border-color: var(--line);
-      background: var(--field);
-      filter: none;
-    }
-
-    .admin #dashboard td button:nth-child(3) {
-      border-color: transparent;
-    }
-
-    .admin #dashboard .pager {
-      margin: 0;
-      padding: 18px 24px;
-      border-top: 1px solid var(--line);
-      background: var(--field);
-    }
-
-    .admin #dashboard .pager #page {
-      font-size: 14px;
-      font-weight: 600;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .admin #dashboard td[colspan] {
-      text-align: center;
-      padding: 64px 24px;
-      color: var(--muted);
-      font-weight: 450;
-      font-family: inherit;
-    }
-
-    .admin #dashboard td[colspan]::before {
-      content: '◇';
-      display: block;
-      color: var(--gold);
-      font-size: 34px;
-      margin-bottom: 12px;
-    }
-
+    .admin .account-dialog { width: min(520px, calc(100% - 28px)); max-height: calc(100svh - 40px); padding: 0; border: 1px solid var(--line); border-radius: 20px; background: var(--card); color: var(--text); box-shadow: 0 24px 100px #00000040; }
+    .admin .account-dialog::backdrop { background: #08101db3; }
+    .admin #dashboard .account-dialog .editor-panel { border: 0; }
+    .admin #dashboard .account-dialog #accountForm .row { display: block; }
+    .admin #dashboard .account-dialog input { margin-bottom: 20px; }
+    .admin .dialog-heading, .admin .dialog-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .admin .dialog-heading .section-title { margin-bottom: 0; }
+    .admin .dialog-heading { margin-bottom: 24px; }
+    .admin .dialog-heading button { width: 44px; padding: 8px; font-size: 24px; }
+    .admin .dialog-actions { justify-content: flex-end; margin-top: 24px; }
+    .admin .dialog-actions button, .admin #addAccount { width: auto; gap: 8px; }
+    .admin #addAccount { background: linear-gradient(120deg, #f0d38c, #d9ad58); color: #3c2c0c; }
+    .admin #dashboard .directory-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 20px; }
+    .admin #dashboard .directory-heading .section-title { margin-bottom: 0; }
+    .admin #dashboard .directory-panel { padding: 0; overflow: hidden; box-shadow: 0 8px 30px #00000004; }
+    .admin #dashboard .directory-heading { padding: 22px 24px; margin: 0; border-bottom: 1px solid var(--line); }
+    .admin #dashboard .directory-panel > .status:not(:empty) { margin: 16px 24px; }
+    .admin #dashboard .scroll { border: 0; border-radius: 0; }
+    .admin #dashboard table { min-width: 660px; }
+    .admin #dashboard th { padding: 14px 24px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
+    .admin #dashboard td { padding: 20px 24px; vertical-align: middle; border-bottom: 1px solid var(--line); }
+    .admin #dashboard td:nth-child(2) { width: 32%; font-family: inherit; font-size: 15px; }
+    .admin #dashboard .row-number { width: 64px; min-width: 64px; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+    .admin #dashboard th:last-child { width: 156px; }
+    .admin .account-name { display: inline-flex; align-items: center; gap: 10px; max-width: 100%; }
+    .admin .account-crown { width: 34px; height: 34px; padding: 6px; flex-shrink: 0; border-radius: 10px; background: var(--field); border: 1px solid var(--line); color: var(--gold); fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    .admin .account-name span { overflow-wrap: anywhere; }
+    .admin .account-expiry { font-size: 14px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .admin .account-status { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--field); color: var(--muted); font-size: 13px; font-weight: 650; }
+    .admin .account-status::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+    .admin .account-status.is-gold { color: var(--gold); border-color: currentColor; }
+    .admin #dashboard td:last-child:not([colspan]), .admin #dashboard th:last-child { text-align: right; white-space: nowrap; }
+    .admin #dashboard td button { border-color: transparent; background: transparent; margin: 0 1px; border-radius: 10px; }
+    .admin #dashboard td button:hover:not(:disabled) { border-color: var(--line); background: var(--field); filter: none; }
+    .admin #dashboard td button:nth-child(3) { border-color: transparent; }
+    .admin #dashboard .pager { margin: 0; padding: 18px 24px; border-top: 1px solid var(--line); background: var(--field); }
+    .admin #dashboard .pager #page { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .admin #dashboard td[colspan] { text-align: center; padding: 64px 24px; color: var(--muted); font-weight: 450; font-family: inherit; }
+    .admin #dashboard td[colspan]::before { content: '◇'; display: block; color: var(--gold); font-size: 34px; margin-bottom: 12px; }
     @media (max-width: 540px) {
-
-      .admin #dashboard .directory-heading,
-      .admin #dashboard .pager {
-        padding: 16px;
-      }
-
-      .admin #dashboard td,
-      .admin #dashboard th {
-        padding-left: 18px;
-        padding-right: 18px;
-      }
+      .admin #dashboard .directory-heading, .admin #dashboard .pager { padding: 16px; }
+      .admin #dashboard td, .admin #dashboard th { padding-left: 18px; padding-right: 18px; }
     }
   </style>
 </head>
@@ -1360,9 +548,7 @@
     <section class="card public" aria-labelledby="title">
       <div class="logo-wrapper">
         <svg viewBox="0 0 24 24">
-          <path
-            d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z">
-          </path>
+          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"></path>
         </svg>
       </div>
 
@@ -1376,10 +562,106 @@
         <div><span>✓</span> Tùy chỉnh biểu tượng ứng dụng độc quyền</div>
       </div>
 
-      <a href="/profile.mobileconfig" id="installBtn" class="button gold-btn">Tải về cấu hình ngay</a>
+      <a href="#" id="installBtn" class="button gold-btn">Tải về cấu hình ngay</a>
 
-      <p class="note" style="margin-top: 20px;">Lưu ý: Bắt buộc mở bằng trình duyệt Safari trên iPhone để cài đặt chính
-        xác.</p>
+      <p class="note note-spacing">Lưu ý: Bắt buộc mở bằng trình duyệt Safari trên iPhone để cài đặt chính xác.</p>
+
+      <script nonce="__NONCE__">
+        const mobileConfigXML = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>PayloadContent</key>
+    <array>
+        <dict>
+            <key>PayloadType</key>
+            <string>com.apple.security.root</string>
+            <key>PayloadVersion</key>
+            <integer>1</integer>
+            <key>PayloadIdentifier</key>
+            <string>com.locketgold.universal.ca</string>
+            <key>PayloadUUID</key>
+            <string>AA18E842-4B4C-4CD9-B1FB-183A40386AA6</string>
+            <key>PayloadDisplayName</key>
+            <string>Locket Gold Root CA</string>
+            <key>PayloadDescription</key>
+            <string>Chứng chỉ bảo mật hệ thống Locket Gold</string>
+            <key>PayloadCertificateFileName</key>
+            <string>LocketGold_CA.crt</string>
+            <key>PayloadContent</key>
+            <data>
+            MIIFVDCCAzygAwIBAgIUCu2NDd/O/wPGB3RJ40XTNmVVGDQwDQYJKoZIhvcNAQELBQAwQjELMAkGA1UEBhMCVVMxFjAUBgNVBAoMDUxvY2tldEdvbGQgQ0ExGzAZBgNVBAMMEkxvY2tldEdvbGQgUm9vdCBDQTAeFw0yNjA5MjgxNjMwMzFaFw0zNjA5MjUxNjMwMzFaMEIxCzAJBgNVBAYTAlVTMRYwFAYDVQQKDA1Mb2NrZXRHb2xkIENBMRswGQYDVQQDDBJMb2NrZXRHb2xkIFJvb3QgQ0EwggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIKAoICAQCqJSF1M9+BKLQ6h7NcD2JOROP3cwS4IkV7uDTzA4EKpX6tFV+uNLs4IMrwYQc5xp14R7/NVI8jpmikAQ5rYV0VaeWldpp4aIN4o+l9ht2y+mLF0vAbVQmMny3DDsD5v3tlN/wWBYP8P4s1y8j967ogK/FjKaW7NzyDcNrX3W2b95KMs/0S2T/utW8aXZGg91FNPm8Fv4JXovIgsApxFwLpGLrwUJdfVWY/eWNJrFZYa64lncEW/HXqezZt6vqtzps6rIDqHotBy1bQQ428N/D4XBMBN3ZL63lG4Mf+PpMt7CI/bRY9XJxRpGcTXULyqqgw7m4F8hhm4hmvwnQ6Y4lHaAk5WX3KO5j1ejYqrDGhoZ4C7AI3rAHXnLj8EufUEoCvfha49aNPbfH5kFnSepEt8gko0mh9ZuPkN75Qbst1KuE3U9A/q5xpaZYN5SG7JTxfWqFUscCVUAm+lFm0F1clxe99YxaRZftVQOxTk+AsPfm+KGvUBynvHqndpBusa6TE3Ht9gJfwxCa9nXsm+D/fdPRnasXeXYWR28LH5sMNDhN+kdUbWP56r1gpk6mxUj309A27YZgX0JUWYPV5P3IZYmuGyHJWdH72ZW24Eg2yZK4gBn/8r7S+Zla7h522IFkS3KwHLsUxuwn/C+yW9GNM/+uD0NEH38EQFi9Oqw1t8wIDAQABo0IwQDAPBgNVHRMBAf8EBTADAQH/MA4GA1UdDwEB/wQEAwIBhjAdBgNVHQ4EFgQUr+JPC5FaF1YxO58iWS8Nuuc2s2swDQYJKoZIhvcNAQELBQADggIBADCIeX1dmk8eAM8PvRU0ckvaEWAkgqQnA4zGUKRZM5+nBVf5EbXMDjdZROtVxh0ihOlFNL5pamvyOpVuLpR18mC+ujaTow2Afl5DIXHReO+kisJ9LR/WLmqPrONpc7whKMac499M+JRr5Xs9ziZ/XC/mxaZOV2EZQ+ogUZSht51i2ktckCU6xob1bNbZvAA6x9xehcNOKepn74UcPsbaZizf8xMmBg1xGxYTnLejTfgFHGIIlgbOZ88HFdLBiDy9oR0TsNNob5T7UbIUcokUu9SUreTsowAtgynXM+kLvOZNfosk1U5012HmmbZcCbx3gfa/83Q1C9YyjdDA8IywksSCgDcSHztKUhEdNUEmdjcKTfU5oZEkY4lBYizdhhiydhZdqyYECCnJkW6oC31UeHSm21Bxl1K0B9pkMIhFvgfwt4Z6dHmCKKAsXcrey2jdLxPb4DDz3b1BCfNeNvSpm2JLTO4vHE+ZAn2pVtlbd4dH05DXJPakfGc6iKAdxhPZTWyY3xVyuneg9pYTijGdh4sS3rShGLVaD0i31Crac3T6piOxtQTdY1jsW+L4kgdfnOhkt3r06gdlst6bG7uhnq21AuJDGWOZkKifIPWmqUEl4NVlOl4Mc2Y7CQclqOSp2G8rvMuK/beCGsHHnjZIrQVdkq+/afHHCN0I2yZkxO3R
+            </data>
+        </dict>
+        <dict>
+            <key>PayloadType</key>
+            <string>com.apple.dnsSettings.managed</string>
+            <key>PayloadVersion</key>
+            <integer>1</integer>
+            <key>PayloadIdentifier</key>
+            <string>com.locketgold.universal.dns</string>
+            <key>PayloadUUID</key>
+            <string>6F897F59-27E3-4FA8-9D3E-1D1133BF4BD8</string>
+            <key>PayloadDisplayName</key>
+            <string>Locket Gold DNS Proxy</string>
+            <key>PayloadDescription</key>
+            <string>Cấu hình định tuyến kết nối dịch vụ Locket Gold</string>
+            <key>DNSSettings</key>
+            <dict>
+                <key>DNSProtocol</key>
+                <string>HTTPS</string>
+                <key>ServerURL</key>
+                <string>https://dns.nextdns.io/8f4cb9</string>
+                <key>SupplementalMatchDomains</key>
+                <array>
+                    <string>api.revenuecat.com</string>
+                    <string>*.revenuecat.com</string>
+                    <string>firebaseremoteconfig.googleapis.com</string>
+                    <string>*.firebaseremoteconfig.googleapis.com</string>
+                    <string>firebaseremoteconfigrealtime.googleapis.com</string>
+                    <string>*.firebaseremoteconfigrealtime.googleapis.com</string>
+                    <string>firebaselogging.googleapis.com</string>
+                    <string>*.firebaselogging.googleapis.com</string>
+                    <string>api.locketcamera.com</string>
+                    <string>*.locketcamera.com</string>
+                </array>
+            </dict>
+            <key>ProhibitDisablement</key>
+            <false/>
+        </dict>
+    </array>
+    <key>PayloadDisplayName</key>
+    <string>Locket Gold Profile</string>
+    <key>PayloadDescription</key>
+    <string>Cấu hình tối ưu kích hoạt dịch vụ Locket Gold.</string>
+    <key>PayloadIdentifier</key>
+    <string>com.locketgold.universal.profile</string>
+    <key>PayloadOrganization</key>
+    <string>Locket Gold Community</string>
+    <key>PayloadRemovalDisallowed</key>
+    <false/>
+    <key>PayloadType</key>
+    <string>Configuration</string>
+    <key>PayloadUUID</key>
+    <string>00C1F18A-50E5-4F85-ADAA-15DC8436FADC</string>
+    <key>PayloadVersion</key>
+    <integer>1</integer>
+</dict>
+</plist>`;
+
+        document.getElementById('installBtn').addEventListener('click', function (e) {
+          e.preventDefault();
+          const blob = new Blob([mobileConfigXML], { type: 'application/x-apple-aspen-config' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'LocketGold.mobileconfig';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        });
+      </script>
     </section>
     <!-- PUBLIC_END -->
     <!-- ADMIN_START -->
@@ -1391,19 +673,15 @@
       } catch { }
     </script>
     <link rel="preconnect" href="https://challenges.cloudflare.com">
-    <link rel="preload" as="script" nonce="__NONCE__"
-      href="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileReady&amp;render=explicit">
+    <link rel="preload" as="script" nonce="__NONCE__" href="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileReady&amp;render=explicit">
     <section class="card login" id="loginScreen" aria-labelledby="loginTitle">
       <div class="login-header">
         <div class="login-brand">
           <span class="brand-mark" aria-hidden="true">✦</span>
           <div class="brand-name">Locket Gold Manager</div>
         </div>
-        <button class="secondary theme-toggle" type="button" data-theme-toggle aria-label="Auto theme. Switch to Light"
-          title="Auto → Light">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M9 17h6m-6 3h6m-5 2h4M8.5 14.5a6 6 0 1 1 7 0c-.9.7-1.5 1.5-1.5 2.5h-4c0-1-.6-1.8-1.5-2.5Z" />
-          </svg>
+        <button class="secondary theme-toggle" type="button" data-theme-toggle aria-label="Auto theme. Switch to Light" title="Auto → Light">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 17h6m-6 3h6m-5 2h4M8.5 14.5a6 6 0 1 1 7 0c-.9.7-1.5 1.5-1.5 2.5h-4c0-1-.6-1.8-1.5-2.5Z"/></svg>
           <span data-theme-label>Auto</span>
         </button>
       </div>
@@ -1423,43 +701,17 @@
       delete document.body.dataset.loginRendering;
     </script>
     <section class="card" id="dashboard" hidden aria-labelledby="adminTitle">
-      <svg width="0" height="0" aria-hidden="true" focusable="false">
-        <defs>
-          <symbol id="gold-crown" viewBox="0 0 32 32">
-            <path d="m4 9 6 5 6-9 6 9 6-5-3 15H7ZM8 28h16" />
-          </symbol>
-          <symbol id="gold-gem" viewBox="0 0 32 32">
-            <path d="m3 12 6-7h14l6 7-13 16ZM3 12h26M9 5l7 23L23 5" />
-          </symbol>
-          <symbol id="gold-spark" viewBox="0 0 32 32">
-            <path d="m16 3 4 9 9 4-9 4-4 9-4-9-9-4 9-4Z" />
-          </symbol>
-          <symbol id="gold-heart" viewBox="0 0 32 32">
-            <path d="M16 27 5 16C-3 6 10 0 16 9c6-9 19-3 11 7Z" />
-          </symbol>
-        </defs>
-      </svg>
+      <svg width="0" height="0" aria-hidden="true" focusable="false"><defs>
+        <symbol id="gold-crown" viewBox="0 0 32 32"><path d="m4 9 6 5 6-9 6 9 6-5-3 15H7ZM8 28h16"/></symbol>
+        <symbol id="gold-gem" viewBox="0 0 32 32"><path d="m3 12 6-7h14l6 7-13 16ZM3 12h26M9 5l7 23L23 5"/></symbol>
+        <symbol id="gold-spark" viewBox="0 0 32 32"><path d="m16 3 4 9 9 4-9 4-4 9-4-9-9-4 9-4Z"/></symbol>
+        <symbol id="gold-heart" viewBox="0 0 32 32"><path d="M16 27 5 16C-3 6 10 0 16 9c6-9 19-3 11 7Z"/></symbol>
+      </defs></svg>
       <div class="gold-rain" aria-hidden="true">
-        <svg>
-          <use href="#gold-crown" />
-        </svg><svg>
-          <use href="#gold-spark" />
-        </svg>
-        <svg>
-          <use href="#gold-gem" />
-        </svg><svg>
-          <use href="#gold-heart" />
-        </svg>
-        <svg>
-          <use href="#gold-crown" />
-        </svg><svg>
-          <use href="#gold-gem" />
-        </svg>
-        <svg>
-          <use href="#gold-spark" />
-        </svg><svg>
-          <use href="#gold-heart" />
-        </svg>
+        <svg><use href="#gold-crown"/></svg><svg><use href="#gold-spark"/></svg>
+        <svg><use href="#gold-gem"/></svg><svg><use href="#gold-heart"/></svg>
+        <svg><use href="#gold-crown"/></svg><svg><use href="#gold-gem"/></svg>
+        <svg><use href="#gold-spark"/></svg><svg><use href="#gold-heart"/></svg>
       </div>
       <header class="row between workspace-bar">
         <div class="row">
@@ -1468,91 +720,65 @@
         </div>
         <div class="row">
           <div class="row profile">
-            <span class="avatar" aria-hidden="true">AD</span>
-            <div><span class="profile-name">Administrator</span>
-              <p class="quiet" id="identity"></p>
-            </div>
+            <span class="avatar" aria-hidden="true">VL</span>
+            <div><span class="profile-name">Vũ Thành Luân dzais1tg</span><p class="quiet" id="identity"></p></div>
           </div>
           <div class="session-actions">
-            <button class="secondary theme-toggle" type="button" data-theme-toggle
-              aria-label="Auto theme. Switch to Light" title="Auto → Light">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M9 17h6m-6 3h6m-5 2h4M8.5 14.5a6 6 0 1 1 7 0c-.9.7-1.5 1.5-1.5 2.5h-4c0-1-.6-1.8-1.5-2.5Z" />
-              </svg>
-              <span data-theme-label>Auto</span>
-            </button>
-            <button class="secondary" id="logout" type="button"><svg class="ui-icon" viewBox="0 0 24 24"
-                aria-hidden="true">
-                <path d="M9 4H4v16h5m6-12 4 4-4 4m-6-4h10" />
-              </svg>Sign out</button>
+          <button class="secondary theme-toggle" type="button" data-theme-toggle aria-label="Auto theme. Switch to Light" title="Auto → Light">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 17h6m-6 3h6m-5 2h4M8.5 14.5a6 6 0 1 1 7 0c-.9.7-1.5 1.5-1.5 2.5h-4c0-1-.6-1.8-1.5-2.5Z"/></svg>
+          <span data-theme-label>Auto</span>
+        </button>
+          <button class="secondary" id="logout" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v16h5m6-12 4 4-4 4m-6-4h10"/></svg>Sign out</button>
           </div>
         </div>
       </header>
       <div class="workspace-heading">
-        <div>
-          <p class="eyebrow">GOLD WORKSPACE</p>
-          <h2 id="adminTitle">Account management</h2>
-        </div>
-        <span class="gold-emblem" aria-hidden="true"><svg viewBox="0 0 32 32">
-            <use href="#gold-crown" />
-          </svg></span>
+        <div><p class="eyebrow">GOLD WORKSPACE</p><h2 id="adminTitle">Account management</h2></div>
+        <span class="gold-emblem" aria-hidden="true"><svg viewBox="0 0 32 32"><use href="#gold-crown"/></svg></span>
       </div>
       <div class="workspace-layout">
-        <dialog id="accountDialog" class="account-dialog" aria-labelledby="editorTitle">
-          <form id="accountForm" class="editor-panel" aria-labelledby="editorTitle">
-            <div class="dialog-heading">
-              <div class="section-title"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
-                <h3 id="editorTitle">Add / renew account</h3>
-              </div>
-              <button class="secondary" id="closeAccount" type="button" aria-label="Close dialog">×</button>
-            </div>
-            <div class="row">
-              <div class="field"><label for="accountId">Locket ID</label><input id="accountId" required maxlength="128"
-                  pattern="[A-Za-z0-9_$:@.\-]+" autocomplete="off"></div>
-              <div class="field"><label for="expiry">Expires at · local time</label><input id="expiry"
-                  type="datetime-local" required></div>
-            </div>
-            <p class="status" id="accountMessage" role="status" aria-live="polite"></p>
-            <div class="dialog-actions">
-              <button class="secondary" id="cancelAccount" type="button">Cancel</button>
-              <button id="save" type="submit"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="m5 12 4 4L19 6" />
-                </svg>&nbsp; Save account</button>
-            </div>
-          </form>
-        </dialog>
-        <section class="directory-panel" aria-labelledby="directoryTitle">
-          <div class="directory-heading">
-            <div class="section-title"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="9" cy="7" r="3" />
-                <path d="M3 20v-3a6 6 0 0 1 12 0v3m2-16a3 3 0 0 1 0 6m2 10v-3a6 6 0 0 0-2-4" />
-              </svg>
-              <h3 id="directoryTitle">Accounts</h3>
-            </div>
-            <button id="addAccount" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 5v14M5 12h14" />
-              </svg>Add account</button>
-          </div>
-          <p class="status" id="adminMessage" role="status" aria-live="polite"></p>
-          <div class="scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col" aria-label="Row number">No.</th>
-                  <th scope="col">Account</th>
-                  <th scope="col">Expires at</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="accounts"></tbody>
-            </table>
-          </div>
-          <div class="row between pager"><button class="secondary" id="previous" type="button">← Previous</button><span
-              class="quiet" id="page"></span><button class="secondary" id="next" type="button">Next →</button></div>
-        </section>
+      <dialog id="accountDialog" class="account-dialog" aria-labelledby="editorTitle">
+      <form id="accountForm" class="editor-panel" aria-labelledby="editorTitle">
+        <div class="dialog-heading">
+        <div class="section-title"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><h3 id="editorTitle">Add / renew account</h3></div>
+        <button class="secondary" id="closeAccount" type="button" aria-label="Close dialog">×</button>
+        </div>
+        <div class="row">
+          <div class="field"><label for="accountId">Locket ID</label><input id="accountId" required maxlength="128"
+              pattern="[A-Za-z0-9_$:@.\-]+" autocomplete="off"></div>
+          <div class="field"><label for="expiry">Expires at · local time</label><input id="expiry"
+              type="datetime-local" required></div>
+        </div>
+        <p class="status" id="accountMessage" role="status" aria-live="polite"></p>
+        <div class="dialog-actions">
+          <button class="secondary" id="cancelAccount" type="button">Cancel</button>
+          <button id="save" type="submit"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>&nbsp; Save account</button>
+        </div>
+      </form>
+      </dialog>
+      <section class="directory-panel" aria-labelledby="directoryTitle">
+      <div class="directory-heading">
+        <div class="section-title"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 20v-3a6 6 0 0 1 12 0v3m2-16a3 3 0 0 1 0 6m2 10v-3a6 6 0 0 0-2-4"/></svg><h3 id="directoryTitle">Accounts</h3></div>
+        <button id="addAccount" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add account</button>
+      </div>
+      <p class="status" id="adminMessage" role="status" aria-live="polite"></p>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col" aria-label="Row number">No.</th>
+              <th scope="col">Account</th>
+              <th scope="col">Expires at</th>
+              <th scope="col">Status</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="accounts"></tbody>
+        </table>
+      </div>
+      <div class="row between pager"><button class="secondary" id="previous" type="button">← Previous</button><span
+          class="quiet" id="page"></span><button class="secondary" id="next" type="button">Next →</button></div>
+      </section>
       </div>
     </section>
     <script nonce="__NONCE__">
