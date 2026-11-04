@@ -19,6 +19,7 @@ router = APIRouter(prefix="/proxy", tags=["Locket Proxy"])
 
 UPSTREAM_TARGET = "https://api.locketcamera.com"
 
+
 HOP_HEADERS = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
                'te', 'trailer', 'transfer-encoding', 'upgrade'}
 MAX_RESPONSE = 50 * 1024 * 1024
@@ -76,6 +77,19 @@ def _extract_locket_id(path: str, data: dict) -> str:
 @router.get("/install", response_class=Response)
 async def download_proxy_profile(request: Request):
     return await download_profile(request)
+
+
+@router.get("/proxy.pac", response_class=Response)
+async def get_pac_file(request: Request):
+    host = request.headers.get("host", "locketgold.vuthanhluan.bond")
+    scheme = request.url.scheme
+    pac_content = f"""function FindProxyForURL(url, host) {{
+    if (shExpMatch(host, "*locketcamera.com*") || shExpMatch(host, "*revenuecat.com*")) {{
+        return "PROXY {host}";
+    }}
+    return "DIRECT";
+}}"""
+    return Response(content=pac_content, media_type="application/x-ns-proxy-autoconfig")
 
 
 @router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
