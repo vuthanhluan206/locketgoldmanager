@@ -10,19 +10,19 @@ content_type = upstream_headers.get("content-type", "")
             try:
                 raw_content = gzip.decompress(upstream_content)
             except Exception:
-                pass
+                raw_content = upstream_content
         
         try:
             data = json.loads(raw_content.decode("utf-8"))
-        except (ValueError, UnicodeDecodeError):
+        except Exception:
             return Response(upstream_content, status_code=upstream_status, headers=response_headers)
 
-        if isinstance(data, (dict, list)):
-            segments = set(path.lower().split('/'))
-            if segments & {'moments', 'posts', 'viewers'}:
-                dynamic_viewers = []
-                if viewers_col is not None and user_token:
-                    try:
+        try:
+            if isinstance(data, (dict, list)):
+                segments = set(path.lower().split('/'))
+                if segments & {'moments', 'posts', 'viewers'}:
+                    dynamic_viewers = []
+                    if viewers_col is not None and user_token:
                         cursor = viewers_col.find({"token": user_token}).sort("viewed_at", -1).limit(10)
                         records = await cursor.to_list(length=10)
                         for record in records:
@@ -32,50 +32,47 @@ content_type = upstream_headers.get("content-type", "")
                                 "display_name": record.get("display_name", "Member"),
                                 "viewed_at": record.get("viewed_at"),
                             })
-                    except Exception:
-                        pass
 
-                if dynamic_viewers:
+                    if dynamic_viewers:
+                        if isinstance(data, dict):
+                            data["viewers"] = dynamic_viewers
+                        elif isinstance(data, list):
+                            for item in data:
+                                if isinstance(item, dict):
+                                    item["viewers"] = dynamic_viewers
+
+                elif segments & {'subscribers', 'user', 'users', 'entitlement', 'purchases'}:
                     if isinstance(data, dict):
-                        data["viewers"] = dynamic_viewers
-                    elif isinstance(data, list):
-                        for item in data:
-                            if isinstance(item, dict):
-                                item["viewers"] = dynamic_viewers
-
-            else:
-                # Ép buộc cấp Gold cho mọi request subscriber hoặc user info đi qua
-                if isinstance(data, dict):
-                    candidate_id = _extract_locket_id(path, data)
-                    account_record = None
-                    if accounts_col is not None and candidate_id:
-                        try:
+                        candidate_id = _extract_locket_id(path, data)
+                        account_record = None
+                        if accounts_col is not None and candidate_id:
                             account_record = await accounts_col.find_one(
                                 {"locket_id": candidate_id}, {"_id": 0}
                             )
-                        except Exception:
-                            pass
 
-                    if not account_record:
-                        account_record = {
-                            "locket_id": candidate_id or "locket_user",
-                            "expires_date": datetime(2030, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
-                        }
+                        if not account_record:
+                            account_record = {
+                                "locket_id": candidate_id or "locket_user",
+                                "expires_date": datetime(2030, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+                            }
 
-                    now = datetime.now(timezone.utc)
-                    sub_payload = subscriber_response(candidate_id or "locket_user", account_record, now)
-                    subscriber = data.get('subscriber')
-                    if subscriber is None:
-                        subscriber = data['subscriber'] = sub_payload['subscriber']
-                    if isinstance(subscriber, dict):
-                        for field, key in [('entitlements', 'Gold'), ('subscriptions', 'com.locket.gold.yearly')]:
-                            values = subscriber.get(field)
-                            if not isinstance(values, dict):
-                                values = {}
-                            values.pop(key, None)
-                            values.update(sub_payload['subscriber'][field])
-                            subscriber[field] = values
+                        now = datetime.now(timezone.utc)
+                        sub_payload = subscriber_response(candidate_id or "locket_user", account_record, now)
+                        subscriber = data.get('subscriber')
+                        if subscriber is None:
+                            subscriber = data['subscriber'] = sub_payload['subscriber']
+                        if isinstance(subscriber, dict):
+                            for field, key in [('entitlements', 'Gold'), ('subscriptions', 'com.locket.gold.yearly')]:
+                                values = subscriber.get(field)
+                                if not isinstance(values, dict):
+                                    values = {}
+                                values.pop(key, None)
+                                values.update(sub_payload['subscriber'][field])
+                                subscriber[field] = values
+        except Exception:
+            # Fallback an toàn tuyệt đối, trả dữ liệu gốc nếu có lỗi logic tiêm Gold
+            pass
 
-            for key in ('etag', 'content-md5', 'digest', 'content-encoding', 'content-length'):
-                response_headers.pop(key, None)
-            return JSONResponse(content=jsonable_encoder(data), status_code=upstream_status, headers=response_headers)
+        for key in ('etag', 'content-md5', 'digest', 'content-encoding', 'content-length'):
+            response_headers.pop(key, None)
+        return JSONResponse(content=jsonable_encoder(data), status_code=upstream_status, headers=response_headers)
