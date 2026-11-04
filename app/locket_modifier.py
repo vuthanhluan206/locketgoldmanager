@@ -1,8 +1,8 @@
-import asyncio
+import urllib.request
+import urllib.error
 import json
 import os
-import urllib.error
-import urllib.request
+import gzip
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 from pymongo import MongoClient
@@ -11,6 +11,7 @@ router = APIRouter(prefix="/proxy", tags=["Locket Proxy"])
 
 UPSTREAM_TARGET = "https://api.locketcamera.com"
 
+# Khởi tạo kết nối MongoDB trực tiếp an toàn dựa trên biến môi trường của dự án
 MONGO_URI = os.getenv("MONGODB_URI") or os.getenv("MONGO_URI")
 MONGO_DB_NAME = os.getenv("MONGODB_DATABASE", "locket_manager")
 db = None
@@ -95,81 +96,10 @@ async def download_profile(request: Request):
     )
 
 
-@router.get("/proxy.pac", response_class=Response)
-async def get_pac_file(request: Request):
-    host = request.headers.get("host", "locketgold.vuthanhluan.bond")
-    pac_content = f"""function FindProxyForURL(url, host) {{
-    if (shExpMatch(host, "*locketcamera.com*") || shExpMatch(host, "*revenuecat.com*")) {{
-        return "PROXY {host}";
-    }}
-    return "DIRECT";
-}}"""
-    return Response(content=pac_content, media_type="application/x-ns-proxy-autoconfig")
-
-
-@router.get("/v1/subscribers/{account_id}", response_class=JSONResponse)
-async def test_subscriber_check(account_id: str):
-    return {
-        "request_date": "2026-06-06T15:00:00Z",
-        "request_date_ms": 1780767600000,
-        "subscriber": {
-            "original_app_user_id": account_id,
-            "non_subscriptions": {
-                "max_video_duration": [
-                    {
-                        "id": "max_duration_120s",
-                        "purchase_date": "2026-01-01T00:00:00Z",
-                        "store": "app_store"
-                    }
-                ]
-            },
-            "first_seen": "2026-01-01T00:00:00Z",
-            "entitlements": {
-                "Gold": {
-                    "expires_date": "2029-12-31T23:59:59Z",
-                    "grace_period_expires_date": None,
-                    "product_identifier": "com.locket.gold.yearly",
-                    "purchase_date": "2026-01-01T00:00:00Z"
-                },
-                "unlimited_video_length": {
-                    "expires_date": "2029-12-31T23:59:59Z",
-                    "grace_period_expires_date": None,
-                    "product_identifier": "com.locket.gold.yearly",
-                    "purchase_date": "2026-01-01T00:00:00Z"
-                },
-                "allow_photo_library_videos": {
-                    "expires_date": "2029-12-31T23:59:59Z",
-                    "grace_period_expires_date": None,
-                    "product_identifier": "com.locket.gold.yearly",
-                    "purchase_date": "2026-01-01T00:00:00Z"
-                },
-                "private_posts": {
-                    "expires_date": "2029-12-31T23:59:59Z",
-                    "grace_period_expires_date": None,
-                    "product_identifier": "com.locket.gold.yearly",
-                    "purchase_date": "2026-01-01T00:00:00Z"
-                }
-            },
-            "subscriptions": {
-                "com.locket.gold.yearly": {
-                    "expires_date": "2029-12-31T23:59:59Z",
-                    "is_sandbox": False,
-                    "original_purchase_date": "2026-01-01T00:00:00Z",
-                    "purchase_date": "2026-01-01T00:00:00Z",
-                    "ownership_type": "PURCHASED",
-                    "store": "app_store"
-                }
-            },
-            "management_url": None,
-            "original_purchase_date": "2026-01-01T00:00:00Z"
-        }
-    }
-
-
 @router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def dynamic_reverse_proxy(request: Request, path: str):
     url = f"{UPSTREAM_TARGET}/{path}"
-
+    
     query_params = str(request.url.query)
     if query_params:
         url += f"?{query_params}"
@@ -194,9 +124,19 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     
     body = await request.body()
 
+    if method in ["POST", "PUT", "PATCH"] and ("posts" in path or "moments" in path) and body:
+        try:
+            req_json = json.loads(body.decode("utf-8"))
+            if isinstance(req_json, dict):
+                if "is_private" not in req_json:
+                    req_json["is_private"] = False
+                body = json.dumps(req_json).encode("utf-8")
+        except Exception:
+            pass
+
     try:
         req = urllib.request.Request(url, data=body if body else None, headers=headers, method=method)
-        timeout_limit = 60.0 if is_upload else 30.0
+        timeout_limit = 90.0 if is_upload else 30.0
         upstream_status, upstream_headers, upstream_content = await asyncio.to_thread(
             _fetch_upstream, req, timeout_limit
         )
@@ -222,7 +162,6 @@ async def dynamic_reverse_proxy(request: Request, path: str):
         try:
             raw_content = upstream_content
             if "gzip" in upstream_headers.get("content-encoding", "").lower():
-                import gzip
                 try:
                     raw_content = gzip.decompress(upstream_content)
                 except Exception:
@@ -230,14 +169,34 @@ async def dynamic_reverse_proxy(request: Request, path: str):
 
             data = json.loads(raw_content.decode("utf-8"))
 
-            # Ép cấu hình giới hạn thời gian quay video lên 120 giây (2 phút) trực tiếp trong mọi JSON response
+            # --- BỔ SUNG CƠ CHẾ KHẮC PHỤC BỘ LỌC (FILTERS) & THỜI LƯỢNG VIDEO ---
             if isinstance(data, dict):
-                data["max_video_duration_seconds"] = 120
-                data["video_max_seconds"] = 120
-                data["duration_limit"] = 120
+                data["max_video_duration_seconds"] = 60
+                data["video_max_seconds"] = 60
+                data["duration_limit"] = 60
+                data["max_video_duration"] = 60
+                data["video_recording_limit"] = 60
                 data["enable_library_video_upload"] = True
                 data["enable_private_posts"] = True
+                data["is_gold"] = True
+                data["has_ios_subscription"] = True
+                
+                # Các biến khóa chuyên biệt kích hoạt bộ lọc ảnh/video (Filters)
+                data["unlocked_filters"] = True
+                data["has_unlocked_filters"] = True
+                data["is_premium_user"] = True
+                data["filters_unlocked"] = True
+                data["camera_filters_enabled"] = True
+                data["enable_retro_filters"] = True
 
+                if "features" in data and isinstance(data["features"], dict):
+                    data["features"]["max_video_duration_seconds"] = 60
+                    data["features"]["video_recording_limit"] = 60
+                    data["features"]["unlocked_all_filters"] = True
+                    data["features"]["filters_unlocked"] = True
+                    data["features"]["camera_filters_enabled"] = True
+
+            # --- 1. XỬ LÝ DANH SÁCH NGƯỜI XEM (Viewers) ---
             if "moments" in path or "posts" in path or "viewer" in path:
                 dynamic_viewers = []
                 if db is not None and user_token:
@@ -270,6 +229,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                         if isinstance(item, dict):
                             item["viewers"] = dynamic_viewers
 
+            # --- 2. XỬ LÝ TRẠNG THÁI VÀ THỜI HẠN GOLD TỪ MONGODB ---
             elif "subscribers" in path or "user" in path:
                 if isinstance(data, dict):
                     if "subscriber" not in data or not isinstance(data["subscriber"], dict):
@@ -322,6 +282,12 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                                 "grace_period_expires_date": None,
                                 "product_identifier": "com.locket.gold.yearly",
                                 "purchase_date": "2026-01-01T00:00:00Z"
+                            },
+                            "unlocked_filters": {
+                                "expires_date": expiry_date,
+                                "grace_period_expires_date": None,
+                                "product_identifier": "com.locket.gold.yearly",
+                                "purchase_date": "2026-01-01T00:00:00Z"
                             }
                         }
                         data["subscriber"]["subscriptions"] = {
@@ -338,7 +304,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                             data["subscriber"]["non_subscriptions"] = {}
                         data["subscriber"]["non_subscriptions"]["max_video_duration"] = [
                             {
-                                "id": "max_duration_120s",
+                                "id": "max_duration_60s",
                                 "purchase_date": "2026-01-01T00:00:00Z",
                                 "store": "app_store"
                             }
