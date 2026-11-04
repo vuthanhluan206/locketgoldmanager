@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, Request
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 from pymongo.errors import DuplicateKeyError
 from ..database import get_accounts
-from ..models import AccountInput, AccountOutput
+from ..models import AccountInput, AccountOutput, AccountId
 from ..security import require_admin
 from ..config import get_settings
 
