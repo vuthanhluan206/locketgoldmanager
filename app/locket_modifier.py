@@ -178,19 +178,12 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                 if isinstance(data, dict):
                     candidate_id = _extract_locket_id(path, data)
                     account_record = None
-                    if accounts_col is None:
-                        raise HTTPException(503, 'Database unavailable')
-                    
-                    if candidate_id:
+                    if accounts_col is not None and candidate_id:
                         account_record = await accounts_col.find_one(
                             {"locket_id": candidate_id}, {"_id": 0}
                         )
-                    
-                    # QUAN TRỌNG: Nếu không tìm thấy theo ID cụ thể, ta lấy bản ghi bất kỳ trong DB 
-                    # hoặc cấp mặc định hạn mức Gold vĩnh viễn (đến năm 2030) để chắc chắn app hiện VIP.
-                    if not account_record:
-                        account_record = await accounts_col.find_one({}, {"_id": 0})
-                    
+
+                    # BẮT BUỘC ÉP GOLD: Nếu không tìm thấy trong DB, tự động cấp gói Gold vĩnh viễn đến năm 2030
                     if not account_record:
                         account_record = {
                             "locket_id": candidate_id or "locket_user",
