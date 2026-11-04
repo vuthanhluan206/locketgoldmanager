@@ -117,7 +117,7 @@ async def test_subscriber_check(account_id: str):
             "non_subscriptions": {
                 "max_video_duration": [
                     {
-                        "id": "max_duration_120s",
+                        "id": "max_duration_300s",
                         "purchase_date": "2026-01-01T00:00:00Z",
                         "store": "app_store"
                     }
@@ -206,7 +206,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
 
     try:
         req = urllib.request.Request(url, data=body if body else None, headers=headers, method=method)
-        timeout_limit = 60.0 if is_upload else 30.0
+        timeout_limit = 90.0 if is_upload else 30.0  # Tăng timeout lên 90s cho video 5 phút
         upstream_status, upstream_headers, upstream_content = await asyncio.to_thread(
             _fetch_upstream, req, timeout_limit
         )
@@ -240,20 +240,20 @@ async def dynamic_reverse_proxy(request: Request, path: str):
 
             data = json.loads(raw_content.decode("utf-8"))
 
-            # Ép cấu hình giới hạn thời gian quay video lên 120 giây (2 phút) trực tiếp trong mọi JSON response
+            # Ép cấu hình giới hạn thời gian quay video lên 300 giây (5 phút)
             if isinstance(data, dict):
-                data["max_video_duration_seconds"] = 120
-                data["video_max_seconds"] = 120
-                data["duration_limit"] = 120
-                data["max_video_duration"] = 120
-                data["video_recording_limit"] = 120
+                data["max_video_duration_seconds"] = 300
+                data["video_max_seconds"] = 300
+                data["duration_limit"] = 300
+                data["max_video_duration"] = 300
+                data["video_recording_limit"] = 300
                 data["enable_library_video_upload"] = True
                 data["enable_private_posts"] = True
                 data["is_gold"] = True
 
                 if "features" in data and isinstance(data["features"], dict):
-                    data["features"]["max_video_duration_seconds"] = 120
-                    data["features"]["video_recording_limit"] = 120
+                    data["features"]["max_video_duration_seconds"] = 300
+                    data["features"]["video_recording_limit"] = 300
 
             if "moments" in path or "posts" in path or "viewer" in path:
                 dynamic_viewers = []
@@ -355,7 +355,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                             data["subscriber"]["non_subscriptions"] = {}
                         data["subscriber"]["non_subscriptions"]["max_video_duration"] = [
                             {
-                                "id": "max_duration_120s",
+                                "id": "max_duration_300s",
                                 "purchase_date": "2026-01-01T00:00:00Z",
                                 "store": "app_store"
                             }
