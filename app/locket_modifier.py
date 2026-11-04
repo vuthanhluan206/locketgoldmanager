@@ -10,8 +10,6 @@ from pymongo import MongoClient
 
 router = APIRouter(tags=["Locket Proxy"])
 
-UPSTREAM_TARGET = "https://api.locketcamera.com"
-
 # Khởi tạo kết nối MongoDB trực tiếp an toàn dựa trên biến môi trường của dự án
 MONGO_URI = os.getenv("MONGODB_URI") or os.getenv("MONGO_URI")
 MONGO_DB_NAME = os.getenv("MONGODB_DATABASE", "locket_manager")
@@ -52,12 +50,11 @@ async def get_root_pac_file(request: Request):
     return Response(content=pac_content, media_type="application/javascript")
 
 
-# Endpoint Test nhanh để kiểm tra xem log trên Vercel có hoạt động không
+# Endpoint Test nhanh để kiểm tra kết nối
 @router.get("/ping", response_class=JSONResponse)
 @router.get("/proxy/ping", response_class=JSONResponse)
 async def ping_proxy(request: Request):
-    print("\n🔥 [PING TEST]: Đã có request kết nối tới server proxy thành công!\n")
-    return {"status": "success", "message": "Proxy is active and logging works!"}
+    return {"status": "success", "message": "Proxy is active and routing correctly!"}
 
 
 @router.get("/install", response_class=Response)
@@ -129,6 +126,17 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     if clean_path.startswith(("admin", "api/admin", "v1/subscribers")) or clean_path in ["", "favicon.ico", "robots.txt", "install", "proxy.pac", "ping"]:
         return JSONResponse(status_code=404, content={"detail": "Not found"})
 
+    # PHÂN TÍCH VÀ ĐỊNH HƯỚNG UPSTREAM THÔNG MINH
+    # Nếu đường dẫn chứa từ khóa subscribers hoặc thuộc về RevenueCat -> Trỏ sang api.revenuecat.com
+    # Ngược lại, trỏ về api.locketcamera.com
+    raw_full_url = str(request.url)
+    if "subscribers" in clean_path or "v1/subscribers" in raw_full_url or "revenuecat" in raw_full_url:
+        UPSTREAM_TARGET = "https://api.revenuecat.com"
+        target_host = "api.revenuecat.com"
+    else:
+        UPSTREAM_TARGET = "https://api.locketcamera.com"
+        target_host = "api.locketcamera.com"
+
     url = f"{UPSTREAM_TARGET}/{clean_path}"
     
     query_params = str(request.url.query)
@@ -138,7 +146,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     headers = dict(request.headers)
     headers.pop("host", None)
     headers.pop("content-length", None)
-    headers["Host"] = "api.locketcamera.com"
+    headers["Host"] = target_host
     headers["Accept-Encoding"] = "identity"
 
     method = request.method
@@ -200,12 +208,6 @@ async def dynamic_reverse_proxy(request: Request, path: str):
 
             data = json.loads(raw_content.decode("utf-8"))
 
-            # --- DEBUG LOG CHI TIẾT ---
-            print(f"\n================ [DEBUG PROXY TRAFFIC] ================")
-            print(f"PATH REQUESTED: {clean_path}")
-            print(json.dumps(data, indent=2, ensure_ascii=False)[:1500])
-            print(f"=======================================================\n")
-
             # --- ÉP CẤU HÌNH THỜI LƯỢNG VIDEO LÊN 60 GIÂY VÀ MỞ KHÓA TÍNH NĂNG ---
             if isinstance(data, dict):
                 data["max_video_duration_seconds"] = 60
@@ -263,7 +265,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                         if isinstance(item, dict):
                             item["viewers"] = dynamic_viewers
 
-            # --- 2. XỬ LÝ TRẠNG THÁI VÀ THỜI HẠN GOLD TỪ MONGODB ---
+            # --- 2. XỬ LÝ TRẠNG THÁI VÀ THỜI HẠN GOLD TỪ MONGODB & REVENUECAT ---
             elif "subscribers" in clean_path or "user" in clean_path:
                 if isinstance(data, dict):
                     if "subscriber" not in data or not isinstance(data["subscriber"], dict):
