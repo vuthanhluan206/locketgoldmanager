@@ -194,18 +194,6 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     
     body = await request.body()
 
-    # Xử lý nội dung request gửi lên nếu là tạo bài đăng riêng tư
-    if method in ["POST", "PUT", "PATCH"] and ("posts" in path or "moments" in path) and body:
-        try:
-            req_json = json.loads(body.decode("utf-8"))
-            if isinstance(req_json, dict):
-                # Bật cờ riêng tư nếu app gửi yêu cầu
-                if "is_private" not in req_json:
-                    req_json["is_private"] = False # Hoặc giữ nguyên theo lựa chọn của người dùng trên app
-                body = json.dumps(req_json).encode("utf-8")
-        except Exception:
-            pass
-
     try:
         req = urllib.request.Request(url, data=body if body else None, headers=headers, method=method)
         timeout_limit = 60.0 if is_upload else 30.0
@@ -242,8 +230,11 @@ async def dynamic_reverse_proxy(request: Request, path: str):
 
             data = json.loads(raw_content.decode("utf-8"))
 
+            # Ép cấu hình giới hạn thời gian quay video lên 120 giây (2 phút) trực tiếp trong mọi JSON response
             if isinstance(data, dict):
                 data["max_video_duration_seconds"] = 120
+                data["video_max_seconds"] = 120
+                data["duration_limit"] = 120
                 data["enable_library_video_upload"] = True
                 data["enable_private_posts"] = True
 
