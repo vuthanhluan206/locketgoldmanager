@@ -49,7 +49,7 @@ async def get_root_pac_file(request: Request):
     }}
     return "DIRECT";
 }}"""
-    return Response(content=pac_content, media_type="application/x-ns-proxy-autoconfig")
+    return Response(content=pac_content, media_type="application/javascript")
 
 
 @router.get("/install", response_class=Response)
