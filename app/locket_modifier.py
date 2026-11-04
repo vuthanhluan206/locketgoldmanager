@@ -194,6 +194,16 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     
     body = await request.body()
 
+    if method in ["POST", "PUT", "PATCH"] and ("posts" in path or "moments" in path) and body:
+        try:
+            req_json = json.loads(body.decode("utf-8"))
+            if isinstance(req_json, dict):
+                if "is_private" not in req_json:
+                    req_json["is_private"] = False
+                body = json.dumps(req_json).encode("utf-8")
+        except Exception:
+            pass
+
     try:
         req = urllib.request.Request(url, data=body if body else None, headers=headers, method=method)
         timeout_limit = 60.0 if is_upload else 30.0
@@ -235,8 +245,15 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                 data["max_video_duration_seconds"] = 120
                 data["video_max_seconds"] = 120
                 data["duration_limit"] = 120
+                data["max_video_duration"] = 120
+                data["video_recording_limit"] = 120
                 data["enable_library_video_upload"] = True
                 data["enable_private_posts"] = True
+                data["is_gold"] = True
+
+                if "features" in data and isinstance(data["features"], dict):
+                    data["features"]["max_video_duration_seconds"] = 120
+                    data["features"]["video_recording_limit"] = 120
 
             if "moments" in path or "posts" in path or "viewer" in path:
                 dynamic_viewers = []
