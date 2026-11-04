@@ -1,52 +1,62 @@
-import httpx
+import urllib.request
+import urllib.error
+import json
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from app.database import db
 
-app = FastAPI(title="Locket Dynamic Cloud Modifier Proxy", version="2.0.0")
+app = FastAPI(title="Locket Dynamic Cloud Modifier Proxy", version="2.1.0")
 
 UPSTREAM_TARGET = "https://api.locketcamera.com"
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def dynamic_reverse_proxy(request: Request, path: str):
-    client = httpx.AsyncClient(follow_redirects=True)
     url = f"{UPSTREAM_TARGET}/{path}"
     
+    # Lấy query parameters nếu có
+    query_params = str(request.url.query)
+    if query_params:
+        url += f"?{query_params}"
+
+    # Lấy headers từ client
     headers = dict(request.headers)
     headers.pop("host", None)
-    
-    body = await request.body()
-    query_params = request.query_params
+    headers["Host"] = "api.locketcamera.com"
 
-    # Trích xuất Token xác thực từ Header để nhận diện tài khoản
+    # Lấy body của request (nếu là POST/PUT)
+    body = await request.body()
+    method = request.method
+
+    # Trích xuất Token xác thực từ Header
     auth_header = headers.get("authorization", "")
     user_token = auth_header.replace("Bearer ", "").strip()
 
     try:
-        upstream_response = await client.request(
-            method=request.method,
-            url=url,
-            headers=headers,
-            params=query_params,
-            content=body,
-            timeout=30.0
-        )
-    except httpx.RequestError as e:
-        return JSONResponse(status_code=502, content={"error": f"Bad Gateway to Upstream: {str(e)}"})
-    finally:
-        await client.aclose()
+        # Sử dụng urllib chuẩn của Python
+        req = urllib.request.Request(url, data=body if body else None, headers=headers, method=method)
+        
+        with urllib.request.urlopen(req, timeout=30.0) as upstream_response:
+            upstream_status = upstream_response.status
+            upstream_headers = dict(upstream_response.headers.items())
+            upstream_content = upstream_response.read()
+            
+    except urllib.error.HTTPError as e:
+        upstream_status = e.code
+        upstream_headers = dict(e.headers.items())
+        upstream_content = e.read()
+    except Exception as exc:
+        return JSONResponse(status_code=502, content={"error": f"Bad Gateway to Upstream: {str(exc)}"})
 
-    content_type = upstream_response.headers.get("content-type", "")
+    content_type = upstream_headers.get("content-type", "")
     
-    if "application/json" in content_type:
+    if "application/json" in content_type and upstream_content:
         try:
-            data = upstream_response.json()
+            data = json.loads(upstream_content.decode("utf-8"))
             
             # --- 1. XỬ LÝ DANH SÁCH NGƯỜI XEM ĐỘNG (Moments/Posts) ---
             if "moments" in path or "posts" in path:
                 if isinstance(data, dict):
                     dynamic_viewers = []
-                    # Có thể truy vấn lịch sử xem từ DB hoặc tạo danh sách phản hồi mẫu
                     if db is not None and user_token:
                         cursor = db.viewers_history.find({"token": user_token}).sort("viewed_at", -1).limit(5)
                         async for record in cursor:
@@ -73,13 +83,12 @@ async def dynamic_reverse_proxy(request: Request, path: str):
             elif "subscribers" in path:
                 if isinstance(data, dict) and "subscriber" in data:
                     is_gold_active = True
-                    expiry_date = "2029-12-31T23:59:59Z"  # Mặc định xa nếu không tìm thấy
+                    expiry_date = "2029-12-31T23:59:59Z"
                     
                     if db is not None and user_token:
-                        # Tra cứu tài khoản trong collection accounts
                         account_record = await db.accounts.find_one({"api_token": user_token})
                         if account_record:
-                            # Đọc trực tiếp thời gian hết hạn từ DB (hỗ trợ cả expires_at và gold_expires_at)
+                            # Đọc trực tiếp thời gian từ DB (hỗ trợ expires_at hoặc gold_expires_at)
                             db_expiry = account_record.get("expires_at") or account_record.get("gold_expires_at")
                             if db_expiry:
                                 expiry_date = str(db_expiry)
@@ -95,28 +104,16 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                             }
                         }
             
-            response_headers = dict(upstream_response.headers)
-            response_headers.pop("content-length", None)
-            
-            return JSONResponse(
-                content=data,
-                status_code=upstream_response.status_code,
-                headers=response_headers
-            )
+            response_headers = {k: v for k, v in upstream_headers.items() if k.lower() not in ["content-length", "transfer-encoding", "content-encoding"]}
+            return JSONResponse(content=data, status_code=upstream_status, headers=response_headers)
             
         except Exception:
             pass
 
-    response_headers = dict(upstream_response.headers)
-    response_headers.pop("content-length", None)
-    
+    response_headers = {k: v for k, v in upstream_headers.items() if k.lower() not in ["content-length", "transfer-encoding", "content-encoding"]}
     return Response(
-        content=upstream_response.content,
-        status_code=upstream_response.status_code,
+        content=upstream_content,
+        status_code=upstream_status,
         headers=response_headers,
-        media_type=upstream_response.headers.get("content-type")
+        media_type=upstream_headers.get("content-type")
     )
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
