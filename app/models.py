@@ -45,10 +45,14 @@ def subscriber_response(account_id: str, account: dict | None, now: datetime | N
     except (ValueError, TypeError, KeyError):
         expiry = None
 
-    active = expiry is not None and expiry > now
+    # UNIVERSAL GOLD FALLBACK: Nếu không tìm thấy account hoặc đã hết hạn, 
+    # tự động cấp hạn mức Gold đến năm 2030 cho mọi request đi qua proxy.
+    if expiry is None:
+        expiry = datetime(2030, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+
+    active = expiry > now
     entitlement_expires = expiry.isoformat().replace('+00:00', 'Z') if active else None
     
-    # Sửa lại đúng Product ID của Locket
     product_id = "com.locket.gold.yearly"
     now_str = now.isoformat().replace('+00:00', 'Z')
 
