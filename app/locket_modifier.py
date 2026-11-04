@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from pymongo import MongoClient
 
-app = FastAPI(title="Locket Dynamic Cloud Modifier Proxy", version="2.2.0")
+app = FastAPI(title="Locket Dynamic Cloud Modifier Proxy", version="2.2.1")
 
 UPSTREAM_TARGET = "https://api.locketcamera.com"
 
@@ -16,7 +16,6 @@ db = None
 if MONGO_URI:
     try:
         client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
-        # Lấy tên database từ URI hoặc mặc định
         db = client.get_default_database()
     except Exception:
         pass
@@ -88,9 +87,13 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                     
                     data["viewers"] = dynamic_viewers
 
-            # --- 2. XỬ LÝ TRẠNG THÁI VÀ THỜI HẠN GOLD TỪ MONGODB ---
-            elif "subscribers" in path:
-                if isinstance(data, dict) and "subscriber" in data:
+            # --- 2. XỬ LÝ TRẠNG THÁI VÀ THỜI HẠN GOLD TỪ MONGODB (ĐÃ TỐI ƯU AN TOÀN) ---
+            elif "subscribers" in path or "user" in path:
+                if isinstance(data, dict):
+                    # Đảm bảo luôn có cấu trúc dictionary cho subscriber
+                    if "subscriber" not in data or not isinstance(data["subscriber"], dict):
+                        data["subscriber"] = {}
+                    
                     is_gold_active = True
                     expiry_date = "2029-12-31T23:59:59Z"
                     
@@ -101,7 +104,6 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                                 db_expiry = account_record.get("expires_at") or account_record.get("gold_expires_at")
                                 if db_expiry:
                                     expiry_date = str(db_expiry)
-                                
                                 is_gold_active = account_record.get("is_active", True)
                         except Exception:
                             pass
