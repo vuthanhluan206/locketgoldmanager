@@ -3,10 +3,10 @@ import urllib.error
 import json
 import os
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pymongo import MongoClient
 
-app = FastAPI(title="Locket Dynamic Cloud Modifier Proxy", version="2.2.2")
+app = FastAPI(title="Locket Dynamic Cloud Modifier Proxy", version="2.3.0")
 
 UPSTREAM_TARGET = "https://api.locketcamera.com"
 
@@ -31,15 +31,24 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     headers.pop("host", None)
     headers["Host"] = "api.locketcamera.com"
 
-    body = await request.body()
     method = request.method
-
+    content_type_header = headers.get("content-type", "")
     auth_header = headers.get("authorization", "")
     user_token = auth_header.replace("Bearer ", "").strip()
 
+    # Nhận diện các request tải lên ảnh/video (multipart hoặc post trực tiếp bài đăng)
+    is_upload = method in ["POST", "PUT", "PATCH"] and ("multipart/form-data" in content_type_header or "posts" in path or "moments" in path)
+
+    # Đọc body request
+    body = await request.body()
+
     try:
         req = urllib.request.Request(url, data=body if body else None, headers=headers, method=method)
-        with urllib.request.urlopen(req, timeout=60.0) as upstream_response: # Tăng timeout lên 60s cho việc upload ảnh/video nặng
+        
+        # Nếu là request upload ảnh/video nặng, mở rộng timeout lên 60 giây
+        timeout_limit = 60.0 if is_upload else 30.0
+
+        with urllib.request.urlopen(req, timeout=timeout_limit) as upstream_response:
             upstream_status = upstream_response.status
             upstream_headers = dict(upstream_response.headers.items())
             upstream_content = upstream_response.read()
@@ -51,13 +60,20 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     except Exception as exc:
         return JSONResponse(status_code=502, content={"error": f"Bad Gateway to Upstream: {str(exc)}"})
 
+    response_headers = {k: v for k, v in upstream_headers.items() if k.lower() not in ["content-length", "transfer-encoding", "content-encoding"]}
+
+    # Nếu là upload ảnh/video, trả về nguyên bản lập tức mà không can thiệp JSON để tránh hỏng tệp nhị phân
+    if is_upload:
+        return Response(
+            content=upstream_content,
+            status_code=upstream_status,
+            headers=response_headers,
+            media_type=upstream_headers.get("content-type")
+        )
+
     content_type = upstream_headers.get("content-type", "")
     
-    # --- QUAN TRỌNG: BỎ QUA XỬ LÝ NẾU LÀ YÊU CẦU ĐĂNG ẢNH/VIDEO (UPLOAD/MULTIPART) ---
-    # Các request đăng bài thường là POST và chứa dữ liệu multipart hoặc không phải JSON thuần để sửa thông tin
-    is_upload_action = method == "POST" and ("multipart/form-data" in headers.get("content-type", "") or "posts" in path or "moments" in path)
-
-    if "application/json" in content_type and upstream_content and not is_upload_action:
+    if "application/json" in content_type and upstream_content:
         try:
             data = json.loads(upstream_content.decode("utf-8"))
             
@@ -119,14 +135,11 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                             }
                         }
             
-            response_headers = {k: v for k, v in upstream_headers.items() if k.lower() not in ["content-length", "transfer-encoding", "content-encoding"]}
             return JSONResponse(content=data, status_code=upstream_status, headers=response_headers)
             
         except Exception:
             pass
 
-    # Trả về nguyên bản dữ liệu (đặc biệt quan trọng cho các lệnh upload ảnh/video)
-    response_headers = {k: v for k, v in upstream_headers.items() if k.lower() not in ["content-length", "transfer-encoding", "content-encoding"]}
     return Response(
         content=upstream_content,
         status_code=upstream_status,
