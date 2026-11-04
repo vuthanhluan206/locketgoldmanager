@@ -58,6 +58,21 @@
 
     .public {
       text-align: center;
+      border-top: 4px solid #ffbd36;
+    }
+
+    .developer-credit {
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .developer-credit a {
+      display: inline-block;
+      padding: 8px;
+      font-weight: 650;
     }
 
     .logo-wrapper {
@@ -553,18 +568,20 @@
       </div>
 
       <h1 id="title">Locket Gold Premium</h1>
-      <p>Mở khóa toàn bộ đặc quyền cao cấp và nâng tầm trải nghiệm của bạn.</p>
+      <p>Cấu hình DNS được cung cấp bởi nhà phát triển <a href="https://vuthanhluan.bond">vuthanhluan.bond</a>, dành cho trải nghiệm chia sẻ khoảnh khắc trên Locket.</p>
 
       <div class="features-list">
-        <div><span>✓</span> Gửi và nhận ảnh không giới hạn</div>
-        <div><span>✓</span> Đăng video thời lượng dài hơn lên widget</div>
-        <div><span>✓</span> Xem lại lịch sử khoảnh khắc thoải mái</div>
-        <div><span>✓</span> Tùy chỉnh biểu tượng ứng dụng độc quyền</div>
+        <div><span aria-hidden="true">↗</span> Đăng ảnh và chia sẻ với bạn bè</div>
+        <div><span aria-hidden="true">▷</span> Quay và đăng video khoảnh khắc</div>
+        <div><span aria-hidden="true">◷</span> Xem lại lịch sử ảnh và video</div>
+        <div><span aria-hidden="true">♡</span> Nhận khoảnh khắc trên widget</div>
       </div>
+      <p class="note">Các tính năng phụ thuộc phiên bản ứng dụng và quyền tài khoản đang sử dụng.</p>
 
       <a href="#" id="installBtn" class="button gold-btn">Tải về cấu hình ngay</a>
 
       <p class="note note-spacing">Lưu ý: Bắt buộc mở bằng trình duyệt Safari trên iPhone để cài đặt chính xác.</p>
+      <footer class="developer-credit">Website và cấu hình được phát triển bởi<br><a href="https://vuthanhluan.bond">vuthanhluan.bond ↗</a></footer>
 
       <script nonce="__NONCE__">
         const mobileConfigXML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -633,11 +650,11 @@
     <key>PayloadDisplayName</key>
     <string>Locket Gold Profile</string>
     <key>PayloadDescription</key>
-    <string>Cấu hình tối ưu kích hoạt dịch vụ Locket Gold.</string>
+    <string>Cấu hình DNS được cung cấp bởi nhà phát triển vuthanhluan.bond. Dành cho trải nghiệm chia sẻ ảnh, quay và đăng video, xem lại khoảnh khắc trên Locket. Các tính năng phụ thuộc ứng dụng và quyền tài khoản đang sử dụng.</string>
     <key>PayloadIdentifier</key>
     <string>com.locketgold.universal.profile</string>
     <key>PayloadOrganization</key>
-    <string>Locket Gold Community</string>
+    <string>vuthanhluan.bond</string>
     <key>PayloadRemovalDisallowed</key>
     <false/>
     <key>PayloadType</key>

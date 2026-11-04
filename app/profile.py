@@ -60,5 +60,8 @@ def build_profile(settings: Settings) -> bytes:
         contents.append(ca)
     profile = payload('Configuration', 'Locket Gold DNS')
     profile.update(PayloadContent=contents, PayloadRemovalDisallowed=False, PayloadScope='System',
-                   PayloadDescription='Cấu hình NextDNS. Không tự cấp quyền trong ứng dụng Locket.')
+                   PayloadOrganization='vuthanhluan.bond',
+                   PayloadDescription='Cấu hình DNS được cung cấp bởi nhà phát triển vuthanhluan.bond. '
+                   'Dành cho trải nghiệm chia sẻ ảnh, quay và đăng video, xem lại khoảnh khắc trên Locket. '
+                   'Các tính năng phụ thuộc ứng dụng và quyền tài khoản đang sử dụng.')
     return plistlib.dumps(profile, fmt=plistlib.FMT_XML)
