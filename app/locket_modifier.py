@@ -7,7 +7,6 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 from pymongo import MongoClient
 
-# Khai báo router để main.py import thành công tuyệt đối
 router = APIRouter(prefix="/proxy", tags=["Locket Proxy"])
 
 UPSTREAM_TARGET = "https://api.locketcamera.com"
@@ -106,6 +105,39 @@ async def get_pac_file(request: Request):
     return "DIRECT";
 }}"""
     return Response(content=pac_content, media_type="application/x-ns-proxy-autoconfig")
+
+
+@router.get("/v1/subscribers/{account_id}", response_class=JSONResponse)
+async def test_subscriber_check(account_id: str):
+    return {
+        "request_date": "2026-06-06T15:00:00Z",
+        "request_date_ms": 1780767600000,
+        "subscriber": {
+            "original_app_user_id": account_id,
+            "non_subscriptions": {},
+            "first_seen": "2026-01-01T00:00:00Z",
+            "entitlements": {
+                "Gold": {
+                    "expires_date": "2029-12-31T23:59:59Z",
+                    "grace_period_expires_date": None,
+                    "product_identifier": "com.locket.gold.yearly",
+                    "purchase_date": "2026-01-01T00:00:00Z"
+                }
+            },
+            "subscriptions": {
+                "com.locket.gold.yearly": {
+                    "expires_date": "2029-12-31T23:59:59Z",
+                    "is_sandbox": False,
+                    "original_purchase_date": "2026-01-01T00:00:00Z",
+                    "purchase_date": "2026-01-01T00:00:00Z",
+                    "ownership_type": "PURCHASED",
+                    "store": "app_store"
+                }
+            },
+            "management_url": None,
+            "original_purchase_date": "2026-01-01T00:00:00Z"
+        }
+    }
 
 
 @router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
