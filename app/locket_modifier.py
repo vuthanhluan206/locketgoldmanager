@@ -192,9 +192,11 @@ async def dynamic_reverse_proxy(request: Request, path: str):
 
             data = json.loads(raw_content.decode("utf-8"))
 
-            # --- DEBUG LOG ---
-            if "filter" in clean_path or "config" in clean_path or "settings" in clean_path or "user" in clean_path:
-                print(f"\n[PROXY REQUEST PATH]: {clean_path}")
+            # --- DEBUG LOG CHI TIẾT ĐỂ KIỂM TRA PHẢN HỒI ---
+            print(f"\n================ [DEBUG JSON RESPONSE] ================")
+            print(f"PATH: {clean_path}")
+            print(json.dumps(data, indent=2, ensure_ascii=False)[:2000])
+            print(f"=======================================================\n")
 
             # --- ÉP CẤU HÌNH THỜI LƯỢNG VIDEO LÊN 60 GIÂY VÀ MỞ KHÓA TÍNH NĂNG ---
             if isinstance(data, dict):
