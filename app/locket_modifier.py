@@ -8,7 +8,7 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 from pymongo import MongoClient
 
-router = APIRouter(prefix="/proxy", tags=["Locket Proxy"])
+router = APIRouter(tags=["Locket Proxy"])
 
 UPSTREAM_TARGET = "https://api.locketcamera.com"
 
@@ -39,11 +39,25 @@ def _fetch_upstream(req: urllib.request.Request, timeout_limit: float):
         return e.code, dict(e.headers.items()), e.read()
 
 
+@router.get("/proxy.pac", response_class=Response)
+@router.get("/proxy/proxy.pac", response_class=Response)
+async def get_root_pac_file(request: Request):
+    host = request.headers.get("host", "locketgold-premium.vercel.app")
+    pac_content = f"""function FindProxyForURL(url, host) {{
+    if (shExpMatch(host, "*locketcamera.com*") || shExpMatch(host, "*revenuecat.com*")) {{
+        return "PROXY {host}";
+    }}
+    return "DIRECT";
+}}"""
+    return Response(content=pac_content, media_type="application/x-ns-proxy-autoconfig")
+
+
 @router.get("/install", response_class=Response)
+@router.get("/proxy/install", response_class=Response)
 async def download_profile(request: Request):
-    host = request.headers.get("host", "locketgold.vuthanhluan.bond")
+    host = request.headers.get("host", "locketgold-premium.vercel.app")
     scheme = request.url.scheme
-    pac_url = f"{scheme}://{host}/proxy/proxy.pac"
+    pac_url = f"{scheme}://{host}/proxy.pac"
 
     mobileconfig_content = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -99,7 +113,15 @@ async def download_profile(request: Request):
 
 @router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def dynamic_reverse_proxy(request: Request, path: str):
-    url = f"{UPSTREAM_TARGET}/{path}"
+    clean_path = path.lstrip("/")
+    if clean_path.startswith("proxy/"):
+        clean_path = clean_path[6:]
+
+    # Bỏ qua các route quản trị hệ thống
+    if clean_path.startswith(("admin", "api/admin", "v1/subscribers")) or clean_path in ["", "favicon.ico", "robots.txt", "install", "proxy.pac"]:
+        return JSONResponse(status_code=404, content={"detail": "Not found"})
+
+    url = f"{UPSTREAM_TARGET}/{clean_path}"
     
     query_params = str(request.url.query)
     if query_params:
@@ -119,13 +141,13 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     is_upload = method in ["POST", "PUT", "PATCH"] and (
         "multipart/form-data" in content_type_header 
         or "video/" in content_type_header 
-        or "posts" in path 
-        or "moments" in path
+        or "posts" in clean_path 
+        or "moments" in clean_path
     )
     
     body = await request.body()
 
-    if method in ["POST", "PUT", "PATCH"] and ("posts" in path or "moments" in path) and body:
+    if method in ["POST", "PUT", "PATCH"] and ("posts" in clean_path or "moments" in clean_path) and body:
         try:
             req_json = json.loads(body.decode("utf-8"))
             if isinstance(req_json, dict):
@@ -170,10 +192,9 @@ async def dynamic_reverse_proxy(request: Request, path: str):
 
             data = json.loads(raw_content.decode("utf-8"))
 
-            # --- TÍNH NĂNG DEBUG LOG: Kiểm tra cấu trúc JSON trả về từ Locket ---
-            if "filter" in path or "config" in path or "settings" in path or "user" in path:
-                print(f"\n[DEBUG LOCKET PATH]: {path}")
-                print(f"[DEBUG JSON DATA]: {json.dumps(data, indent=2, ensure_ascii=False)[:800]}\n")
+            # --- DEBUG LOG ---
+            if "filter" in clean_path or "config" in clean_path or "settings" in clean_path or "user" in clean_path:
+                print(f"\n[PROXY REQUEST PATH]: {clean_path}")
 
             # --- ÉP CẤU HÌNH THỜI LƯỢNG VIDEO LÊN 60 GIÂY VÀ MỞ KHÓA TÍNH NĂNG ---
             if isinstance(data, dict):
@@ -187,7 +208,6 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                 data["is_gold"] = True
                 data["has_ios_subscription"] = True
                 
-                # Các cờ mở khóa bộ lọc
                 data["unlocked_filters"] = True
                 data["has_unlocked_filters"] = True
                 data["is_premium_user"] = True
@@ -201,7 +221,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                     data["features"]["filters_unlocked"] = True
 
             # --- 1. XỬ LÝ DANH SÁCH NGƯỜI XEM (Viewers) ---
-            if "moments" in path or "posts" in path or "viewer" in path:
+            if "moments" in clean_path or "posts" in clean_path or "viewer" in clean_path:
                 dynamic_viewers = []
                 if db is not None and user_token:
                     try:
@@ -234,7 +254,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                             item["viewers"] = dynamic_viewers
 
             # --- 2. XỬ LÝ TRẠNG THÁI VÀ THỜI HẠN GOLD TỪ MONGODB ---
-            elif "subscribers" in path or "user" in path:
+            elif "subscribers" in clean_path or "user" in clean_path:
                 if isinstance(data, dict):
                     if "subscriber" not in data or not isinstance(data["subscriber"], dict):
                         data["subscriber"] = {}
