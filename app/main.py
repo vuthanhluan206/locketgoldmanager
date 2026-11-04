@@ -1,17 +1,20 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.config import get_settings
+from app.middleware import SecurityMiddleware
+from app.routers import management
+from app.locket_modifier import app as proxy_app
 
-from .database import lifespan
-from .middleware import SecurityMiddleware
-from .routers.management import router as management_router, admin_router
-from .routers.subscribers import router as subscriber_router
-from .auth import router as auth_router
+settings = get_settings()
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title="Locket Management & Proxy System",
+    version="1.0.0",
+    docs_url=None,  # Tắt docs công khai nếu cần bảo mật
+    redoc_url=None
+)
 
-# Bật bảo vệ middleware
-app.add_middleware(SecurityMiddleware)
-
+# Cấu hình CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,8 +23,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Đăng ký các router đã phân tách
-app.include_router(management_router)
-app.include_router(admin_router)
-app.include_router(subscriber_router)
-app.include_router(auth_router)
+# Đăng ký Security Middleware tùy chỉnh của hệ thống
+app.add_middleware(SecurityMiddleware)
+
+# Đăng ký các router quản lý hệ thống tài khoản hiện tại
+app.include_router(management.router)
+
+# Mount ứng dụng proxy locket_modifier vào đường dẫn /proxy
+app.mount("/proxy", proxy_app)
+
+@app.get("/")
+async def root():
+    return {
+        "system": "Locket Management & Proxy System",
+        "status": "active",
+        "version": "1.0.0"
+    }
