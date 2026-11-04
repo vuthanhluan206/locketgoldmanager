@@ -45,14 +45,12 @@ def subscriber_response(account_id: str, account: dict | None, now: datetime | N
     except (ValueError, TypeError, KeyError):
         expiry = None
 
-    # UNIVERSAL GOLD FALLBACK: Nếu không tìm thấy account hoặc đã hết hạn, 
-    # tự động cấp hạn mức Gold đến năm 2030 cho mọi request đi qua proxy.
     if expiry is None:
-        expiry = datetime(2030, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+        expiry = datetime(2029, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
 
     active = expiry > now
     entitlement_expires = expiry.isoformat().replace('+00:00', 'Z') if active else None
-    
+
     product_id = "com.locket.gold.yearly"
     now_str = now.isoformat().replace('+00:00', 'Z')
 
@@ -60,15 +58,15 @@ def subscriber_response(account_id: str, account: dict | None, now: datetime | N
         'expires_date': entitlement_expires,
         'grace_period_expires_date': None,
         'product_identifier': product_id,
-        'purchase_date': now_str
+        'purchase_date': "2026-01-01T00:00:00Z"
     } if active else None
 
     subscriptions = {
         product_id: {
             'expires_date': entitlement_expires,
             'is_sandbox': False,
-            'original_purchase_date': now_str,
-            'purchase_date': now_str,
+            'original_purchase_date': "2026-01-01T00:00:00Z",
+            'purchase_date': "2026-01-01T00:00:00Z",
             'ownership_type': 'PURCHASED',
             'store': 'app_store'
         }
@@ -84,6 +82,6 @@ def subscriber_response(account_id: str, account: dict | None, now: datetime | N
             'entitlements': {'Gold': entitlement} if active else {},
             'subscriptions': subscriptions,
             'management_url': None,
-            'original_purchase_date': now_str
+            'original_purchase_date': "2026-01-01T00:00:00Z"
         }
     }
