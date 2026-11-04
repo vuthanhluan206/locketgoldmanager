@@ -52,6 +52,14 @@ async def get_root_pac_file(request: Request):
     return Response(content=pac_content, media_type="application/javascript")
 
 
+# Endpoint Test nhanh để kiểm tra xem log trên Vercel có hoạt động không
+@router.get("/ping", response_class=JSONResponse)
+@router.get("/proxy/ping", response_class=JSONResponse)
+async def ping_proxy(request: Request):
+    print("\n🔥 [PING TEST]: Đã có request kết nối tới server proxy thành công!\n")
+    return {"status": "success", "message": "Proxy is active and logging works!"}
+
+
 @router.get("/install", response_class=Response)
 @router.get("/proxy/install", response_class=Response)
 async def download_profile(request: Request):
@@ -118,7 +126,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
         clean_path = clean_path[6:]
 
     # Bỏ qua các route quản trị hệ thống
-    if clean_path.startswith(("admin", "api/admin", "v1/subscribers")) or clean_path in ["", "favicon.ico", "robots.txt", "install", "proxy.pac"]:
+    if clean_path.startswith(("admin", "api/admin", "v1/subscribers")) or clean_path in ["", "favicon.ico", "robots.txt", "install", "proxy.pac", "ping"]:
         return JSONResponse(status_code=404, content={"detail": "Not found"})
 
     url = f"{UPSTREAM_TARGET}/{clean_path}"
@@ -192,10 +200,10 @@ async def dynamic_reverse_proxy(request: Request, path: str):
 
             data = json.loads(raw_content.decode("utf-8"))
 
-            # --- DEBUG LOG CHI TIẾT ĐỂ KIỂM TRA PHẢN HỒI ---
-            print(f"\n================ [DEBUG JSON RESPONSE] ================")
-            print(f"PATH: {clean_path}")
-            print(json.dumps(data, indent=2, ensure_ascii=False)[:2000])
+            # --- DEBUG LOG CHI TIẾT ---
+            print(f"\n================ [DEBUG PROXY TRAFFIC] ================")
+            print(f"PATH REQUESTED: {clean_path}")
+            print(json.dumps(data, indent=2, ensure_ascii=False)[:1500])
             print(f"=======================================================\n")
 
             # --- ÉP CẤU HÌNH THỜI LƯỢNG VIDEO LÊN 60 GIÂY VÀ MỞ KHÓA TÍNH NĂNG ---
