@@ -144,7 +144,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     accounts_col = getattr(request.app.state, "accounts", None)
     viewers_col = getattr(request.app.state, "viewers_history", None)
 
-    if (200 <= upstream_status < 300 and user_token and
+    if (200 <= upstream_status < 300 and
             'application/json' in content_type.lower() and upstream_content and
             upstream_headers.get('content-encoding', 'identity').lower() == 'identity'):
         try:
@@ -152,7 +152,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
         except (ValueError, UnicodeDecodeError):
             return Response(upstream_content, status_code=upstream_status, headers=response_headers)
         if isinstance(data, (dict, list)):
-            segments = set(path.split('/'))
+            segments = set(path.lower().split('/'))
             if segments & {'moments', 'posts', 'viewers'}:
                 dynamic_viewers = []
                 if viewers_col is None:
@@ -175,7 +175,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                             if isinstance(item, dict):
                                 item["viewers"] = dynamic_viewers
 
-            elif segments & {'subscribers', 'user', 'users'}:
+            elif segments & {'subscribers', 'user', 'users', 'entitlement', 'purchases'}:
                 if isinstance(data, dict):
                     candidate_id = _extract_locket_id(path, data)
                     account_record = None
