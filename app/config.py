@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     nextdns_id: str = Field(default='', pattern=r'^([a-fA-F0-9]{6})?$')
     root_ca_path: str = ''
     root_ca_pem: str = Field(default='', max_length=65536, repr=False)
-    allowed_hosts: list[str] = ['localhost', '127.0.0.1', '[::1]']
+    allowed_hosts: list[str] = ['localhost', '127.0.0.1', '[::1]', '.vercel.app']
     require_https: bool = False
     session_ttl_seconds: int = Field(default=3600, ge=300, le=86400)
     subscriber_api_token: SecretStr | None = None
@@ -57,13 +57,21 @@ class Settings(BaseSettings):
             raise ValueError('MONGODB_URI must be a MongoDB connection URI')
         return value
 
-    @field_validator('allowed_hosts')
+    @field_validator('allowed_hosts', mode='before')
     @classmethod
-    def validate_hosts(cls, value: list[str]) -> list[str]:
-        # Cho phép cấu hình linh hoạt hoặc trả về danh sách an toàn nếu trống
-        if not value:
-            return ['localhost', '127.0.0.1']
-        return value
+    def validate_hosts(cls, value):
+        if isinstance(value, str):
+            hosts = [h.strip() for h in value.split(',') if h.strip()]
+        elif isinstance(value, list):
+            hosts = value
+        else:
+            hosts = ['localhost', '127.0.0.1', '.vercel.app']
+        
+        # Đảm bảo luôn tự động bổ sung wildcard .vercel.app để không bị lỗi 400 preview trên Vercel
+        if '.vercel.app' not in hosts:
+            hosts.append('.vercel.app')
+            
+        return hosts
 
 
 @lru_cache
