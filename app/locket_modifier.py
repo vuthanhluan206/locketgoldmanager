@@ -1,47 +1,31 @@
-import asyncio
+import urllib.request
+import urllib.error
 import json
 import os
-import urllib.error
-import urllib.request
-from fastapi import APIRouter, Request, Response
+import gzip
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from pymongo import MongoClient
 
-router = APIRouter(prefix="/proxy", tags=["Locket Proxy"])
+app = FastAPI(title="Locket Dynamic Cloud Modifier Proxy", version="2.5.0")
 
 UPSTREAM_TARGET = "https://api.locketcamera.com"
 
 MONGO_URI = os.getenv("MONGODB_URI") or os.getenv("MONGO_URI")
-MONGO_DB_NAME = os.getenv("MONGODB_DATABASE", "locket_manager")
 db = None
 if MONGO_URI:
     try:
-        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000, connectTimeoutMS=2000)
-        try:
-            db = client.get_default_database()
-        except Exception:
-            db = client[MONGO_DB_NAME]
+        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
+        db = client.get_default_database()
     except Exception:
-        db = None
+        pass
 
-
-def _fetch_upstream(req: urllib.request.Request, timeout_limit: float):
-    try:
-        with urllib.request.urlopen(req, timeout=timeout_limit) as upstream_response:
-            return (
-                upstream_response.status,
-                dict(upstream_response.headers.items()),
-                upstream_response.read(),
-            )
-    except urllib.error.HTTPError as e:
-        return e.code, dict(e.headers.items()), e.read()
-
-
-@router.get("/install", response_class=Response)
+# --- ENDPOINT TỰ ĐỘNG TẠO VÀ TẢI FILE .MOBILECONFIG CHO IPHONE ---
+@app.get("/install", response_class=Response)
 async def download_profile(request: Request):
     host = request.headers.get("host", "locketgold.vuthanhluan.bond")
     scheme = request.url.scheme
-    pac_url = f"{scheme}://{host}/proxy/proxy.pac"
+    pac_url = f"{scheme}://{host}/proxy.pac"
 
     mobileconfig_content = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -94,131 +78,47 @@ async def download_profile(request: Request):
         headers={"Content-Disposition": "attachment; filename=locket_proxy.mobileconfig"}
     )
 
-
-@router.get("/proxy.pac", response_class=Response)
-async def get_pac_file(request: Request):
-    host = request.headers.get("host", "locketgold.vuthanhluan.bond")
-    pac_content = f"""function FindProxyForURL(url, host) {{
-    if (shExpMatch(host, "*locketcamera.com*") || shExpMatch(host, "*revenuecat.com*")) {{
-        return "PROXY {host}";
-    }}
-    return "DIRECT";
-}}"""
-    return Response(content=pac_content, media_type="application/x-ns-proxy-autoconfig")
-
-
-@router.get("/v1/subscribers/{account_id}", response_class=JSONResponse)
-async def test_subscriber_check(account_id: str):
-    return {
-        "request_date": "2026-06-06T15:00:00Z",
-        "request_date_ms": 1780767600000,
-        "subscriber": {
-            "original_app_user_id": account_id,
-            "non_subscriptions": {
-                "max_video_duration": [
-                    {
-                        "id": "max_duration_300s",
-                        "purchase_date": "2026-01-01T00:00:00Z",
-                        "store": "app_store"
-                    }
-                ]
-            },
-            "first_seen": "2026-01-01T00:00:00Z",
-            "entitlements": {
-                "Gold": {
-                    "expires_date": "2029-12-31T23:59:59Z",
-                    "grace_period_expires_date": None,
-                    "product_identifier": "com.locket.gold.yearly",
-                    "purchase_date": "2026-01-01T00:00:00Z"
-                },
-                "unlimited_video_length": {
-                    "expires_date": "2029-12-31T23:59:59Z",
-                    "grace_period_expires_date": None,
-                    "product_identifier": "com.locket.gold.yearly",
-                    "purchase_date": "2026-01-01T00:00:00Z"
-                },
-                "allow_photo_library_videos": {
-                    "expires_date": "2029-12-31T23:59:59Z",
-                    "grace_period_expires_date": None,
-                    "product_identifier": "com.locket.gold.yearly",
-                    "purchase_date": "2026-01-01T00:00:00Z"
-                },
-                "private_posts": {
-                    "expires_date": "2029-12-31T23:59:59Z",
-                    "grace_period_expires_date": None,
-                    "product_identifier": "com.locket.gold.yearly",
-                    "purchase_date": "2026-01-01T00:00:00Z"
-                }
-            },
-            "subscriptions": {
-                "com.locket.gold.yearly": {
-                    "expires_date": "2029-12-31T23:59:59Z",
-                    "is_sandbox": False,
-                    "original_purchase_date": "2026-01-01T00:00:00Z",
-                    "purchase_date": "2026-01-01T00:00:00Z",
-                    "ownership_type": "PURCHASED",
-                    "store": "app_store"
-                }
-            },
-            "management_url": None,
-            "original_purchase_date": "2026-01-01T00:00:00Z"
-        }
-    }
-
-
-@router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+# --- PROXY CHÍNH CHO ỨNG DỤNG LOCKET ---
+@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def dynamic_reverse_proxy(request: Request, path: str):
     url = f"{UPSTREAM_TARGET}/{path}"
-
+    
     query_params = str(request.url.query)
     if query_params:
         url += f"?{query_params}"
 
     headers = dict(request.headers)
     headers.pop("host", None)
-    headers.pop("content-length", None)
     headers["Host"] = "api.locketcamera.com"
-    headers["Accept-Encoding"] = "identity"
+    headers["Accept-Encoding"] = "identity"  # Tránh nén gzip phức tạp từ upstream nếu không cần thiết
 
     method = request.method
     content_type_header = headers.get("content-type", "")
     auth_header = headers.get("authorization", "")
     user_token = auth_header.replace("Bearer ", "").strip()
 
-    is_upload = method in ["POST", "PUT", "PATCH"] and (
-        "multipart/form-data" in content_type_header 
-        or "video/" in content_type_header 
-        or "posts" in path 
-        or "moments" in path
-    )
-    
+    is_upload = method in ["POST", "PUT", "PATCH"] and ("multipart/form-data" in content_type_header or "posts" in path or "moments" in path)
     body = await request.body()
-
-    if method in ["POST", "PUT", "PATCH"] and ("posts" in path or "moments" in path) and body:
-        try:
-            req_json = json.loads(body.decode("utf-8"))
-            if isinstance(req_json, dict):
-                if "is_private" not in req_json:
-                    req_json["is_private"] = False
-                body = json.dumps(req_json).encode("utf-8")
-        except Exception:
-            pass
 
     try:
         req = urllib.request.Request(url, data=body if body else None, headers=headers, method=method)
-        timeout_limit = 90.0 if is_upload else 30.0
-        upstream_status, upstream_headers, upstream_content = await asyncio.to_thread(
-            _fetch_upstream, req, timeout_limit
-        )
+        timeout_limit = 60.0 if is_upload else 30.0
+
+        with urllib.request.urlopen(req, timeout=timeout_limit) as upstream_response:
+            upstream_status = upstream_response.status
+            upstream_headers = dict(upstream_response.headers.items())
+            upstream_content = upstream_response.read()
+            
+    except urllib.error.HTTPError as e:
+        upstream_status = e.code
+        upstream_headers = dict(e.headers.items())
+        upstream_content = e.read()
     except Exception as exc:
         return JSONResponse(status_code=502, content={"error": f"Bad Gateway to Upstream: {str(exc)}"})
 
-    response_headers = {
-        k: v for k, v in upstream_headers.items()
-        if k.lower() not in ["content-length", "transfer-encoding", "content-encoding"]
-    }
+    response_headers = {k: v for k, v in upstream_headers.items() if k.lower() not in ["content-length", "transfer-encoding", "content-encoding"]}
 
-    if is_upload and "application/json" not in upstream_headers.get("content-type", "").lower():
+    if is_upload:
         return Response(
             content=upstream_content,
             status_code=upstream_status,
@@ -227,39 +127,43 @@ async def dynamic_reverse_proxy(request: Request, path: str):
         )
 
     content_type = upstream_headers.get("content-type", "")
-
-    if "application/json" in content_type.lower() and upstream_content:
+    
+    if "application/json" in content_type and upstream_content:
         try:
             raw_content = upstream_content
             if "gzip" in upstream_headers.get("content-encoding", "").lower():
-                import gzip
                 try:
                     raw_content = gzip.decompress(upstream_content)
                 except Exception:
                     pass
 
             data = json.loads(raw_content.decode("utf-8"))
-
+            
+            # --- ÉP CẤU HÌNH THỜI LƯỢNG QUAY VIDEO (2 PHÚT = 120 GIÂY) & BỘ LỌC ---
             if isinstance(data, dict):
-                data["max_video_duration_seconds"] = 300
-                data["video_max_seconds"] = 300
-                data["duration_limit"] = 300
-                data["max_video_duration"] = 300
-                data["video_recording_limit"] = 300
+                # Thiết lập thời lượng quay video tối đa là 120 giây (2 phút)
+                data["max_video_duration_seconds"] = 120
+                data["video_max_seconds"] = 120
+                data["duration_limit"] = 120
+                data["max_video_duration"] = 120
+                data["video_recording_limit"] = 120
                 data["enable_library_video_upload"] = True
                 data["enable_private_posts"] = True
                 data["is_gold"] = True
-                data["has_ios_subscription"] = True
-                
-                # Mở khóa bộ lọc và tính năng premium
+
+                # Kích hoạt mở khóa toàn bộ các bộ lọc (filters) và hiệu ứng
                 data["unlocked_filters"] = True
+                data["has_unlocked_filters"] = True
                 data["is_premium_user"] = True
+                data["filters_unlocked"] = True
 
                 if "features" in data and isinstance(data["features"], dict):
-                    data["features"]["max_video_duration_seconds"] = 300
-                    data["features"]["video_recording_limit"] = 300
+                    data["features"]["max_video_duration_seconds"] = 120
+                    data["features"]["video_recording_limit"] = 120
                     data["features"]["unlocked_all_filters"] = True
+                    data["features"]["filters_unlocked"] = True
 
+            # --- XỬ LÝ DANH SÁCH NGƯỜI XEM (Viewers) ---
             if "moments" in path or "posts" in path or "viewer" in path:
                 dynamic_viewers = []
                 if db is not None and user_token:
@@ -274,7 +178,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                             })
                     except Exception:
                         pass
-
+                
                 if not dynamic_viewers:
                     dynamic_viewers = [
                         {
@@ -284,7 +188,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                             "viewed_at": "2026-06-06T15:00:00Z"
                         }
                     ]
-
+                
                 if isinstance(data, dict):
                     data["viewers"] = dynamic_viewers
                 elif isinstance(data, list):
@@ -292,29 +196,22 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                         if isinstance(item, dict):
                             item["viewers"] = dynamic_viewers
 
+            # --- XỬ LÝ TRẠNG THÁI VÀ THỜI HẠN GOLD ---
             elif "subscribers" in path or "user" in path:
                 if isinstance(data, dict):
                     if "subscriber" not in data or not isinstance(data["subscriber"], dict):
                         data["subscriber"] = {}
-
+                    
                     is_gold_active = True
                     expiry_date = "2029-12-31T23:59:59Z"
-
+                    
                     if db is not None and user_token:
                         try:
                             account_record = db.accounts.find_one({"api_token": user_token})
                             if account_record:
-                                db_expiry = (
-                                    account_record.get("expires_date")
-                                    or account_record.get("expires_at")
-                                    or account_record.get("gold_expires_at")
-                                )
+                                db_expiry = account_record.get("expires_at") or account_record.get("gold_expires_at")
                                 if db_expiry:
-                                    expiry_date = (
-                                        db_expiry.isoformat().replace("+00:00", "Z")
-                                        if hasattr(db_expiry, "isoformat")
-                                        else str(db_expiry)
-                                    )
+                                    expiry_date = str(db_expiry)
                                 is_gold_active = account_record.get("is_active", True)
                         except Exception:
                             pass
@@ -323,25 +220,21 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                         data["subscriber"]["entitlements"] = {
                             "Gold": {
                                 "expires_date": expiry_date,
-                                "grace_period_expires_date": None,
                                 "product_identifier": "com.locket.gold.yearly",
                                 "purchase_date": "2026-01-01T00:00:00Z"
                             },
                             "unlimited_video_length": {
                                 "expires_date": expiry_date,
-                                "grace_period_expires_date": None,
                                 "product_identifier": "com.locket.gold.yearly",
                                 "purchase_date": "2026-01-01T00:00:00Z"
                             },
                             "allow_photo_library_videos": {
                                 "expires_date": expiry_date,
-                                "grace_period_expires_date": None,
                                 "product_identifier": "com.locket.gold.yearly",
                                 "purchase_date": "2026-01-01T00:00:00Z"
                             },
                             "private_posts": {
                                 "expires_date": expiry_date,
-                                "grace_period_expires_date": None,
                                 "product_identifier": "com.locket.gold.yearly",
                                 "purchase_date": "2026-01-01T00:00:00Z"
                             }
@@ -356,18 +249,9 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                                 "store": "app_store"
                             }
                         }
-                        if "non_subscriptions" not in data["subscriber"]:
-                            data["subscriber"]["non_subscriptions"] = {}
-                        data["subscriber"]["non_subscriptions"]["max_video_duration"] = [
-                            {
-                                "id": "max_duration_300s",
-                                "purchase_date": "2026-01-01T00:00:00Z",
-                                "store": "app_store"
-                            }
-                        ]
-
+            
             return JSONResponse(content=data, status_code=upstream_status, headers=response_headers)
-
+            
         except Exception:
             pass
 
