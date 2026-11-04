@@ -160,12 +160,17 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     user_token = auth_header.replace("Bearer ", "").strip()
 
     is_upload = method in ["POST", "PUT", "PATCH"] and (
-        "multipart/form-data" in content_type_header or "posts" in path or "moments" in path
+        "multipart/form-data" in content_type_header 
+        or "video/" in content_type_header 
+        or "posts" in path 
+        or "moments" in path
     )
+    
     body = await request.body()
 
     try:
         req = urllib.request.Request(url, data=body if body else None, headers=headers, method=method)
+        # Nâng thời gian timeout lên 60 giây để chờ upload video lớn từ thư viện
         timeout_limit = 60.0 if is_upload else 30.0
         upstream_status, upstream_headers, upstream_content = await asyncio.to_thread(
             _fetch_upstream, req, timeout_limit
