@@ -1,170 +1,39 @@
-import asyncio
-import json
-import secrets
-import urllib.error
-import urllib.request
-from datetime import datetime, timezone
-from urllib.parse import quote
-from starlette.datastructures import Headers
-from fastapi.encoders import jsonable_encoder
-from fastapi import APIRouter, HTTPException, Request, Response
-from fastapi.responses import JSONResponse
-
-from .config import get_settings
-from .models import subscriber_response
-from .routers.management import download_profile
-from .security import token_digest
-
-router = APIRouter(prefix="/proxy", tags=["Locket Proxy"])
-
-UPSTREAM_TARGET = "https://api.locketcamera.com"
-
-
-HOP_HEADERS = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
-               'te', 'trailer', 'transfer-encoding', 'upgrade'}
-MAX_RESPONSE = 50 * 1024 * 1024
-
-
-def _clean_headers(headers):
-    named = {key.strip().lower() for key in headers.get('connection', '').split(',')}
-    return {key.lower(): value for key, value in headers.items()
-            if key.lower() not in HOP_HEADERS | named | {'content-length'}}
-
-
-class NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None
-
-
-def _forward_upstream(url: str, body: bytes | None, headers: dict[str, str], method: str, timeout: float):
-    req = urllib.request.Request(url, data=body if body else None, headers=headers, method=method)
-    opener = urllib.request.build_opener(NoRedirect())
-    try:
-        response = opener.open(req, timeout=timeout)
-    except urllib.error.HTTPError as exc:
-        response = exc
-    with response:
-        content = response.read(MAX_RESPONSE + 1)
-        if len(content) > MAX_RESPONSE:
-            raise ValueError('Upstream response exceeds limit')
-        return response.code, dict(response.headers.items()), content
-
-
-def _extract_locket_id(path: str, data: dict) -> str:
-    sub = data.get('subscriber')
-    if isinstance(sub, dict) and isinstance(sub.get('original_app_user_id'), str) and sub['original_app_user_id']:
-        return sub['original_app_user_id']
-    parts = [p for p in path.split("/") if p]
-    if "subscribers" in parts:
-        idx = parts.index("subscribers")
-        if idx + 1 < len(parts):
-            return parts[idx + 1]
-    if isinstance(data, dict):
-        sub = data.get("subscriber")
-        if isinstance(sub, dict) and sub.get("original_app_user_id"):
-            return str(sub["original_app_user_id"])
-        for key in ("locket_id", "uid", "user_id", "id"):
-            if isinstance(data.get(key), str) and data[key]:
-                return data[key]
-        user_obj = data.get("user") or data.get("data")
-        if isinstance(user_obj, dict):
-            for key in ("uid", "user_id", "id", "locket_id"):
-                if isinstance(user_obj.get(key), str) and user_obj[key]:
-                    return user_obj[key]
-    return ''
-
-
-@router.get("/install", response_class=Response)
-async def download_proxy_profile(request: Request):
-    return await download_profile(request)
-
-
-@router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
-async def dynamic_reverse_proxy(request: Request, path: str):
-    url = UPSTREAM_TARGET + "/" + quote(path, safe="/:@!$&'()*+,;=-._~")
-    query_params = str(request.url.query)
-    if query_params:
-        url += f"?{query_params}"
-
-    headers = _clean_headers(dict(request.headers))
-    for key in list(headers):
-        if key in {'host', 'cookie', 'forwarded', 'accept-encoding'} or key.startswith(('x-forwarded-', 'cf-')):
-            del headers[key]
-    headers['Host'] = 'api.locketcamera.com'
-    headers['Accept-Encoding'] = 'identity'
-
-    method = request.method
-    content_type_header = headers.get("content-type", "")
-    auth_header = headers.get("authorization", "")
-    scheme, _, token = auth_header.partition(' ')
-    user_token = token.strip() if scheme.lower() == 'bearer' else ''
-    if user_token:
-        configured = get_settings().subscriber_api_token
-        if configured is not None and secrets.compare_digest(
-            user_token.encode('utf-8'), configured.get_secret_value().encode('ascii'),
-        ):
-            raise HTTPException(401, 'Use an upstream access token')
-        sessions = getattr(request.app.state, 'sessions', None)
-        if sessions is not None and len(user_token) == 64 and user_token.isascii():
-            if await sessions.find_one({'_id': token_digest(user_token)}):
-                raise HTTPException(401, 'Use an upstream access token')
-
-    is_upload = method in ["POST", "PUT", "PATCH"] and (
-        "multipart/form-data" in content_type_header
-        or "octet-stream" in content_type_header
-        or "video/" in content_type_header
-        or "image/" in content_type_header
-    )
-    body = await request.body()
-    timeout_limit = 60.0 if is_upload else 30.0
-
-    try:
-        upstream_status, upstream_headers, upstream_content = await asyncio.to_thread(
-            _forward_upstream, url, body, headers, method, timeout_limit
-        )
-    except (OSError, ValueError):
-        return JSONResponse(status_code=502, content={'detail': 'Upstream unavailable'})
-
-    upstream_headers = Headers({key.lower(): value for key, value in upstream_headers.items()})
-    response_headers = _clean_headers(upstream_headers)
-    response_headers.pop('set-cookie', None)
-    if 300 <= upstream_status < 400:
-        return JSONResponse({'detail': 'Upstream redirect blocked'}, status_code=502)
-
-    if is_upload:
-        return Response(
-            content=upstream_content,
-            status_code=upstream_status,
-            headers=response_headers,
-            media_type=upstream_headers.get("content-type"),
-        )
-
-    content_type = upstream_headers.get("content-type", "")
+content_type = upstream_headers.get("content-type", "")
     accounts_col = getattr(request.app.state, "accounts", None)
     viewers_col = getattr(request.app.state, "viewers_history", None)
 
-    if (200 <= upstream_status < 300 and
-            'application/json' in content_type.lower() and upstream_content and
-            upstream_headers.get('content-encoding', 'identity').lower() == 'identity'):
+    if 200 <= upstream_status < 300 and 'application/json' in content_type.lower() and upstream_content:
+        raw_content = upstream_content
+        encoding = upstream_headers.get('content-encoding', '').lower()
+        if 'gzip' in encoding:
+            import gzip
+            try:
+                raw_content = gzip.decompress(upstream_content)
+            except Exception:
+                pass
+        
         try:
-            data = json.loads(upstream_content.decode("utf-8"))
+            data = json.loads(raw_content.decode("utf-8"))
         except (ValueError, UnicodeDecodeError):
             return Response(upstream_content, status_code=upstream_status, headers=response_headers)
+
         if isinstance(data, (dict, list)):
             segments = set(path.lower().split('/'))
             if segments & {'moments', 'posts', 'viewers'}:
                 dynamic_viewers = []
-                if viewers_col is None:
-                    raise HTTPException(503, 'Database unavailable')
-                cursor = viewers_col.find({"token": user_token}).sort("viewed_at", -1).limit(10)
-                records = await cursor.to_list(length=10)
-                for record in records:
-                    dynamic_viewers.append({
-                        "user_id": str(record.get("viewer_id", "unknown_id")),
-                        "username": record.get("username", "friend"),
-                        "display_name": record.get("display_name", "Member"),
-                        "viewed_at": record.get("viewed_at"),
-                    })
+                if viewers_col is not None and user_token:
+                    try:
+                        cursor = viewers_col.find({"token": user_token}).sort("viewed_at", -1).limit(10)
+                        records = await cursor.to_list(length=10)
+                        for record in records:
+                            dynamic_viewers.append({
+                                "user_id": str(record.get("viewer_id", "unknown_id")),
+                                "username": record.get("username", "friend"),
+                                "display_name": record.get("display_name", "Member"),
+                                "viewed_at": record.get("viewed_at"),
+                            })
+                    except Exception:
+                        pass
 
                 if dynamic_viewers:
                     if isinstance(data, dict):
@@ -174,16 +43,19 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                             if isinstance(item, dict):
                                 item["viewers"] = dynamic_viewers
 
-            elif segments & {'subscribers', 'user', 'users', 'entitlement', 'purchases'}:
+            else:
+                # Ép buộc cấp Gold cho mọi request subscriber hoặc user info đi qua
                 if isinstance(data, dict):
                     candidate_id = _extract_locket_id(path, data)
                     account_record = None
                     if accounts_col is not None and candidate_id:
-                        account_record = await accounts_col.find_one(
-                            {"locket_id": candidate_id}, {"_id": 0}
-                        )
+                        try:
+                            account_record = await accounts_col.find_one(
+                                {"locket_id": candidate_id}, {"_id": 0}
+                            )
+                        except Exception:
+                            pass
 
-                    # BẮT BUỘC ÉP GOLD: Nếu không tìm thấy trong DB, tự động cấp gói Gold vĩnh viễn đến năm 2030
                     if not account_record:
                         account_record = {
                             "locket_id": candidate_id or "locket_user",
@@ -204,13 +76,6 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                             values.update(sub_payload['subscriber'][field])
                             subscriber[field] = values
 
-            for key in ('etag', 'content-md5', 'digest', 'content-encoding'):
+            for key in ('etag', 'content-md5', 'digest', 'content-encoding', 'content-length'):
                 response_headers.pop(key, None)
             return JSONResponse(content=jsonable_encoder(data), status_code=upstream_status, headers=response_headers)
-
-    return Response(
-        content=upstream_content,
-        status_code=upstream_status,
-        headers=response_headers,
-        media_type=upstream_headers.get("content-type"),
-    )
