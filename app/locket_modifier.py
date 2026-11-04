@@ -114,10 +114,36 @@ async def test_subscriber_check(account_id: str):
         "request_date_ms": 1780767600000,
         "subscriber": {
             "original_app_user_id": account_id,
-            "non_subscriptions": {},
+            "non_subscriptions": {
+                "max_video_duration": [
+                    {
+                        "id": "max_duration_300s",
+                        "purchase_date": "2026-01-01T00:00:00Z",
+                        "store": "app_store"
+                    }
+                ]
+            },
             "first_seen": "2026-01-01T00:00:00Z",
             "entitlements": {
                 "Gold": {
+                    "expires_date": "2029-12-31T23:59:59Z",
+                    "grace_period_expires_date": None,
+                    "product_identifier": "com.locket.gold.yearly",
+                    "purchase_date": "2026-01-01T00:00:00Z"
+                },
+                "unlimited_video_length": {
+                    "expires_date": "2029-12-31T23:59:59Z",
+                    "grace_period_expires_date": None,
+                    "product_identifier": "com.locket.gold.yearly",
+                    "purchase_date": "2026-01-01T00:00:00Z"
+                },
+                "allow_photo_library_videos": {
+                    "expires_date": "2029-12-31T23:59:59Z",
+                    "grace_period_expires_date": None,
+                    "product_identifier": "com.locket.gold.yearly",
+                    "purchase_date": "2026-01-01T00:00:00Z"
+                },
+                "private_posts": {
                     "expires_date": "2029-12-31T23:59:59Z",
                     "grace_period_expires_date": None,
                     "product_identifier": "com.locket.gold.yearly",
@@ -160,13 +186,27 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     user_token = auth_header.replace("Bearer ", "").strip()
 
     is_upload = method in ["POST", "PUT", "PATCH"] and (
-        "multipart/form-data" in content_type_header or "posts" in path or "moments" in path
+        "multipart/form-data" in content_type_header 
+        or "video/" in content_type_header 
+        or "posts" in path 
+        or "moments" in path
     )
+    
     body = await request.body()
+
+    if method in ["POST", "PUT", "PATCH"] and ("posts" in path or "moments" in path) and body:
+        try:
+            req_json = json.loads(body.decode("utf-8"))
+            if isinstance(req_json, dict):
+                if "is_private" not in req_json:
+                    req_json["is_private"] = False
+                body = json.dumps(req_json).encode("utf-8")
+        except Exception:
+            pass
 
     try:
         req = urllib.request.Request(url, data=body if body else None, headers=headers, method=method)
-        timeout_limit = 60.0 if is_upload else 30.0
+        timeout_limit = 90.0 if is_upload else 30.0  # Tăng timeout lên 90s cho video 5 phút
         upstream_status, upstream_headers, upstream_content = await asyncio.to_thread(
             _fetch_upstream, req, timeout_limit
         )
@@ -178,7 +218,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
         if k.lower() not in ["content-length", "transfer-encoding", "content-encoding"]
     }
 
-    if is_upload:
+    if is_upload and "application/json" not in upstream_headers.get("content-type", "").lower():
         return Response(
             content=upstream_content,
             status_code=upstream_status,
@@ -199,6 +239,21 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                     pass
 
             data = json.loads(raw_content.decode("utf-8"))
+
+            # Ép cấu hình giới hạn thời gian quay video lên 300 giây (5 phút)
+            if isinstance(data, dict):
+                data["max_video_duration_seconds"] = 300
+                data["video_max_seconds"] = 300
+                data["duration_limit"] = 300
+                data["max_video_duration"] = 300
+                data["video_recording_limit"] = 300
+                data["enable_library_video_upload"] = True
+                data["enable_private_posts"] = True
+                data["is_gold"] = True
+
+                if "features" in data and isinstance(data["features"], dict):
+                    data["features"]["max_video_duration_seconds"] = 300
+                    data["features"]["video_recording_limit"] = 300
 
             if "moments" in path or "posts" in path or "viewer" in path:
                 dynamic_viewers = []
@@ -266,6 +321,24 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                                 "grace_period_expires_date": None,
                                 "product_identifier": "com.locket.gold.yearly",
                                 "purchase_date": "2026-01-01T00:00:00Z"
+                            },
+                            "unlimited_video_length": {
+                                "expires_date": expiry_date,
+                                "grace_period_expires_date": None,
+                                "product_identifier": "com.locket.gold.yearly",
+                                "purchase_date": "2026-01-01T00:00:00Z"
+                            },
+                            "allow_photo_library_videos": {
+                                "expires_date": expiry_date,
+                                "grace_period_expires_date": None,
+                                "product_identifier": "com.locket.gold.yearly",
+                                "purchase_date": "2026-01-01T00:00:00Z"
+                            },
+                            "private_posts": {
+                                "expires_date": expiry_date,
+                                "grace_period_expires_date": None,
+                                "product_identifier": "com.locket.gold.yearly",
+                                "purchase_date": "2026-01-01T00:00:00Z"
                             }
                         }
                         data["subscriber"]["subscriptions"] = {
@@ -278,6 +351,15 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                                 "store": "app_store"
                             }
                         }
+                        if "non_subscriptions" not in data["subscriber"]:
+                            data["subscriber"]["non_subscriptions"] = {}
+                        data["subscriber"]["non_subscriptions"]["max_video_duration"] = [
+                            {
+                                "id": "max_duration_300s",
+                                "purchase_date": "2026-01-01T00:00:00Z",
+                                "store": "app_store"
+                            }
+                        ]
 
             return JSONResponse(content=data, status_code=upstream_status, headers=response_headers)
 

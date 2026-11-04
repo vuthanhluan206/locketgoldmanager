@@ -78,7 +78,7 @@ class SecurityMiddleware:
         if scope['type'] != 'http':
             return await self.app(scope, receive, send)
 
-        # Bỏ qua giới hạn 8KiB và CSP cho luồng Proxy của app Locket
+        # Bỏ qua giới hạn 8KiB và kiểm tra body cho toàn bộ luồng Proxy
         if scope['path'].startswith('/proxy'):
             return await self.app(scope, receive, send)
 
