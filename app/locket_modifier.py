@@ -1,40 +1,46 @@
 import urllib.request
 import urllib.error
 import json
+import os
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
-from app.database import db
+from pymongo import MongoClient
 
-app = FastAPI(title="Locket Dynamic Cloud Modifier Proxy", version="2.1.0")
+app = FastAPI(title="Locket Dynamic Cloud Modifier Proxy", version="2.2.0")
 
 UPSTREAM_TARGET = "https://api.locketcamera.com"
+
+# Khởi tạo kết nối MongoDB trực tiếp an toàn dựa trên biến môi trường của dự án
+MONGO_URI = os.getenv("MONGODB_URI") or os.getenv("MONGO_URI")
+db = None
+if MONGO_URI:
+    try:
+        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
+        # Lấy tên database từ URI hoặc mặc định
+        db = client.get_default_database()
+    except Exception:
+        pass
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def dynamic_reverse_proxy(request: Request, path: str):
     url = f"{UPSTREAM_TARGET}/{path}"
     
-    # Lấy query parameters nếu có
     query_params = str(request.url.query)
     if query_params:
         url += f"?{query_params}"
 
-    # Lấy headers từ client
     headers = dict(request.headers)
     headers.pop("host", None)
     headers["Host"] = "api.locketcamera.com"
 
-    # Lấy body của request (nếu là POST/PUT)
     body = await request.body()
     method = request.method
 
-    # Trích xuất Token xác thực từ Header
     auth_header = headers.get("authorization", "")
     user_token = auth_header.replace("Bearer ", "").strip()
 
     try:
-        # Sử dụng urllib chuẩn của Python
         req = urllib.request.Request(url, data=body if body else None, headers=headers, method=method)
-        
         with urllib.request.urlopen(req, timeout=30.0) as upstream_response:
             upstream_status = upstream_response.status
             upstream_headers = dict(upstream_response.headers.items())
@@ -58,14 +64,17 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                 if isinstance(data, dict):
                     dynamic_viewers = []
                     if db is not None and user_token:
-                        cursor = db.viewers_history.find({"token": user_token}).sort("viewed_at", -1).limit(5)
-                        async for record in cursor:
-                            dynamic_viewers.append({
-                                "user_id": record.get("viewer_id", "unknown_id"),
-                                "username": record.get("username", "bạn bè"),
-                                "display_name": record.get("display_name", "Thành viên"),
-                                "viewed_at": record.get("viewed_at", "2026-06-06T15:00:00Z")
-                            })
+                        try:
+                            cursor = db.viewers_history.find({"token": user_token}).sort("viewed_at", -1).limit(5)
+                            for record in cursor:
+                                dynamic_viewers.append({
+                                    "user_id": str(record.get("viewer_id", "unknown_id")),
+                                    "username": record.get("username", "bạn bè"),
+                                    "display_name": record.get("display_name", "Thành viên"),
+                                    "viewed_at": record.get("viewed_at", "2026-06-06T15:00:00Z")
+                                })
+                        except Exception:
+                            pass
                     
                     if not dynamic_viewers:
                         dynamic_viewers = [
@@ -86,14 +95,16 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                     expiry_date = "2029-12-31T23:59:59Z"
                     
                     if db is not None and user_token:
-                        account_record = await db.accounts.find_one({"api_token": user_token})
-                        if account_record:
-                            # Đọc trực tiếp thời gian từ DB (hỗ trợ expires_at hoặc gold_expires_at)
-                            db_expiry = account_record.get("expires_at") or account_record.get("gold_expires_at")
-                            if db_expiry:
-                                expiry_date = str(db_expiry)
-                            
-                            is_gold_active = account_record.get("is_active", True)
+                        try:
+                            account_record = db.accounts.find_one({"api_token": user_token})
+                            if account_record:
+                                db_expiry = account_record.get("expires_at") or account_record.get("gold_expires_at")
+                                if db_expiry:
+                                    expiry_date = str(db_expiry)
+                                
+                                is_gold_active = account_record.get("is_active", True)
+                        except Exception:
+                            pass
 
                     if is_gold_active:
                         data["subscriber"]["entitlements"] = {
