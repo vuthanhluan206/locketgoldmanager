@@ -11,7 +11,6 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from .config import get_settings
 
 MAX_BODY = 8192
-MAX_PROXY_BODY = 50 * 1024 * 1024
 
 
 def client_ip(scope) -> str:
@@ -35,7 +34,7 @@ def security_headers(nonce: str, https: bool) -> dict[str, str]:
         'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
         'Content-Security-Policy': (
             f"default-src 'none'; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; "
-            "img-src 'self'; connect-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; "
+            "img-src 'self' data:; connect-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; "
             "form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
         ),
     }
@@ -78,12 +77,15 @@ class SecurityMiddleware:
     async def __call__(self, scope, receive, send):
         if scope['type'] != 'http':
             return await self.app(scope, receive, send)
+
+        # Bỏ qua giới hạn 8KiB và CSP cho luồng Proxy của app Locket
+        if scope['path'].startswith('/proxy'):
+            return await self.app(scope, receive, send)
+
         nonce = secrets.token_urlsafe(24)
         scope.setdefault('state', {})['csp_nonce'] = nonce
         headers = Headers(scope=scope)
-        https = scope['scheme'] == 'https'
-        path = scope.get('path', '')
-        is_proxy = path == '/proxy' or path.startswith('/proxy/')
+        https = scope['scheme'] == 'https' or headers.get('x-forwarded-proto') == 'https'
 
         async def secured_send(message):
             if message['type'] == 'http.response.start':
@@ -102,32 +104,27 @@ class SecurityMiddleware:
         ip = client_ip(scope)
         if not self.limiter.allow((ip, 'all'), 120):
             return await reject(429, 'Too many requests', True)
-        if path.rstrip('/') == '/api/admin/login':
+        if scope['path'].rstrip('/') == '/api/admin/login':
             if (not self.limiter.allow((ip, 'login'), 10)
                     or not self.limiter.allow(('global', 'login'), 30)):
                 return await reject(429, 'Too many login attempts', True)
-
-        body_limit = MAX_PROXY_BODY if is_proxy else MAX_BODY
-        timeout_seconds = 60 if is_proxy else 5
-        limit_msg = 'Request body exceeds 50 MiB' if is_proxy else 'Request body exceeds 8 KiB'
-
         length = headers.get('content-length')
         if length is not None:
             if not length.isascii() or not length.isdecimal():
                 return await reject(400, 'Invalid Content-Length')
-            if len(length) > 10 or int(length) > body_limit:
-                return await reject(413, limit_msg)
+            if len(length) > 10 or int(length) > MAX_BODY:
+                return await reject(413, 'Request body exceeds 8 KiB')
 
         body = bytearray()
         try:
-            async with asyncio.timeout(timeout_seconds):
+            async with asyncio.timeout(5):
                 while True:
                     message = await receive()
                     if message['type'] == 'http.disconnect':
                         return
                     body.extend(message.get('body', b''))
-                    if len(body) > body_limit:
-                        return await reject(413, limit_msg)
+                    if len(body) > MAX_BODY:
+                        return await reject(413, 'Request body exceeds 8 KiB')
                     if not message.get('more_body', False):
                         break
         except TimeoutError:
