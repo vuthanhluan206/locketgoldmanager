@@ -33,7 +33,6 @@ def _clean_headers(headers):
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        # Never forward credentials to another destination.
         return None
 
 
@@ -181,10 +180,22 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                     account_record = None
                     if accounts_col is None:
                         raise HTTPException(503, 'Database unavailable')
+                    
                     if candidate_id:
                         account_record = await accounts_col.find_one(
                             {"locket_id": candidate_id}, {"_id": 0}
                         )
+                    
+                    # QUAN TRỌNG: Nếu không tìm thấy theo ID cụ thể, ta lấy bản ghi bất kỳ trong DB 
+                    # hoặc cấp mặc định hạn mức Gold vĩnh viễn (đến năm 2030) để chắc chắn app hiện VIP.
+                    if not account_record:
+                        account_record = await accounts_col.find_one({}, {"_id": 0})
+                    
+                    if not account_record:
+                        account_record = {
+                            "locket_id": candidate_id or "locket_user",
+                            "expires_date": datetime(2030, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+                        }
 
                     now = datetime.now(timezone.utc)
                     sub_payload = subscriber_response(candidate_id or "locket_user", account_record, now)
