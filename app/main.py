@@ -3,16 +3,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .database import lifespan
 from .middleware import SecurityMiddleware
-from .routes import router, admin_router
+from .routers.management import router as management_router, admin_router
+from .routers.subscribers import router as subscriber_router
 from .auth import router as auth_router
 
-# Khởi tạo ứng dụng kết nối trực tiếp với MongoDB
 app = FastAPI(lifespan=lifespan)
 
-# Bật hệ thống bảo vệ chống Spam và giới hạn tốc độ request
+# Bật bảo vệ middleware
 app.add_middleware(SecurityMiddleware)
 
-# Cấu hình CORS mở rộng cho phép mọi nguồn gọi API
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,7 +20,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Kết nối các đường dẫn Web, API cấp phát Gold và Trang quản trị Admin
-app.include_router(router)
+# Đăng ký các router đã phân tách
+app.include_router(management_router)
 app.include_router(admin_router)
+app.include_router(subscriber_router)
 app.include_router(auth_router)
