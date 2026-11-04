@@ -3,6 +3,7 @@ import urllib.error
 import json
 import os
 import gzip
+import asyncio
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 from pymongo import MongoClient
@@ -169,7 +170,12 @@ async def dynamic_reverse_proxy(request: Request, path: str):
 
             data = json.loads(raw_content.decode("utf-8"))
 
-            # --- BỔ SUNG CƠ CHẾ KHẮC PHỤC BỘ LỌC (FILTERS) & THỜI LƯỢNG VIDEO ---
+            # --- TÍNH NĂNG DEBUG LOG: Kiểm tra cấu trúc JSON trả về từ Locket ---
+            if "filter" in path or "config" in path or "settings" in path or "user" in path:
+                print(f"\n[DEBUG LOCKET PATH]: {path}")
+                print(f"[DEBUG JSON DATA]: {json.dumps(data, indent=2, ensure_ascii=False)[:800]}\n")
+
+            # --- ÉP CẤU HÌNH THỜI LƯỢNG VIDEO LÊN 60 GIÂY VÀ MỞ KHÓA TÍNH NĂNG ---
             if isinstance(data, dict):
                 data["max_video_duration_seconds"] = 60
                 data["video_max_seconds"] = 60
@@ -181,20 +187,18 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                 data["is_gold"] = True
                 data["has_ios_subscription"] = True
                 
-                # Các biến khóa chuyên biệt kích hoạt bộ lọc ảnh/video (Filters)
+                # Các cờ mở khóa bộ lọc
                 data["unlocked_filters"] = True
                 data["has_unlocked_filters"] = True
                 data["is_premium_user"] = True
                 data["filters_unlocked"] = True
                 data["camera_filters_enabled"] = True
-                data["enable_retro_filters"] = True
 
                 if "features" in data and isinstance(data["features"], dict):
                     data["features"]["max_video_duration_seconds"] = 60
                     data["features"]["video_recording_limit"] = 60
                     data["features"]["unlocked_all_filters"] = True
                     data["features"]["filters_unlocked"] = True
-                    data["features"]["camera_filters_enabled"] = True
 
             # --- 1. XỬ LÝ DANH SÁCH NGƯỜI XEM (Viewers) ---
             if "moments" in path or "posts" in path or "viewer" in path:
