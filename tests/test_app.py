@@ -409,3 +409,19 @@ def test_single_admin_page_hosts_dns_manager_and_legacy_redirect(client):
     legacy = http.get('/dns/dashboard', follow_redirects=False)
     assert legacy.status_code == 307
     assert legacy.headers['location'] == '/admin-gmnWJ5nG3qZRcdku3eBtkIka'
+
+
+def test_root_ca_inventory_is_admin_only(client):
+    http = client[0]
+    for method in ('get', 'put', 'delete'):
+        opts = {'json': {'pem': 'test'}} if method == 'put' else {}
+        assert getattr(http, method)('/api/admin/certificates/root', **opts).status_code == 401
+
+
+def test_root_ca_rejects_private_keys_and_malformed_pem():
+    from fastapi import HTTPException
+    from app.routers.certificates import inspect_certificate
+    for invalid in ['PRIVATE KEY', '-----BEGIN CERTIFICATE-----\\nnot-base64\\n-----END CERTIFICATE-----']:
+        with pytest.raises(HTTPException) as exc:
+            inspect_certificate(invalid)
+        assert exc.value.status_code == 422
