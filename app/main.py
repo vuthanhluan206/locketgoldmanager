@@ -1,78 +1,66 @@
 import os
-import httpx
-from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
-from pymongo.errors import PyMongoError
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from motor.motor_asyncio import AsyncIOMotorClient
 
-from app.auth import router as auth_router
-from app.database import lifespan
-from app.middleware import SecurityMiddleware, security_headers
-from app.routers import management, subscribers
-from app.locket_modifier import router as proxy_router
+# Import router từ file locket_modifier mà chúng ta vừa hoàn thiện
+from app.locket_modifier import router as locket_router
 
-
-def create_app() -> FastAPI:
-    app = FastAPI(
-        title="Locket Management & Proxy System",
-        version="1.0.0",
-        docs_url=None,
-        redoc_url=None,
-        openapi_url=None,
-        lifespan=lifespan,
-    )
-    app.add_middleware(SecurityMiddleware)
-
-    @app.exception_handler(RequestValidationError)
-    async def validation_error(request: Request, exc: RequestValidationError):
-        return JSONResponse({'detail': 'Invalid request'}, status_code=422)
-
-    @app.exception_handler(PyMongoError)
-    async def database_error(request: Request, exc: PyMongoError):
-        return JSONResponse({'detail': 'Database unavailable'}, status_code=503)
-
-    @app.exception_handler(Exception)
-    async def unhandled_error(request: Request, exc: Exception):
-        return JSONResponse(
-            {'detail': 'Internal server error'}, status_code=500,
-            headers=security_headers(request.state.csp_nonce, request.url.scheme == 'https'),
-        )
-
-    @app.get('/keep-alive', response_class=JSONResponse)
-    async def global_keep_alive():
-        """
-        Endpoint giữ nhiệt Hugging Face tối ưu cho Serverless, tự động bọc lót lỗi sandbox socket trên Vercel.
-        """
-        api_token = os.getenv("HUGGINGFACE_API_TOKEN", "")
-        if not api_token:
-            return JSONResponse({"status": "skipped", "reason": "No token configured"})
+# ================= QUẢN LÝ KẾT NỐI MONGODB (DÀNH CHO SERVERLESS) =================
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Quản lý vòng đời của ứng dụng.
+    Mở kết nối Database khi Vercel boot máy chủ ảo lên, và đóng lại khi xử lý xong.
+    """
+    # Đảm bảo bạn đã cấu hình biến môi trường MONGODB_URI trên Vercel
+    mongodb_uri = os.getenv("MONGODB_URI")
+    
+    if mongodb_uri:
+        # Khởi tạo client kết nối tới MongoDB Atlas
+        client = AsyncIOMotorClient(mongodb_uri)
+        app.state.db_client = client
         
-        try:
-            hf_endpoint = "https://api-inference.huggingface.co/models/timbrooks/instruct-pix2pix"
-            headers = {"Authorization": f"Bearer {api_token}"}
-            
-            async with httpx.AsyncClient(timeout=4.0) as client:
-                resp = await client.get(hf_endpoint, headers=headers)
-                
-            return JSONResponse({
-                "status": "success", 
-                "message": "HF model warmed up successfully",
-                "upstream_status": resp.status_code
-            })
-        except Exception as e:
-            return JSONResponse({
-                "status": "success", 
-                "message": "Keep-alive ping executed (sandbox restricted)",
-                "detail": str(e)
-            })
+        # Lấy database (Nếu URI của bạn không có tên DB mặc định, nó sẽ dùng 'locket_db')
+        db = client.get_default_database("locket_db")
+        
+        # Gán collection 'accounts' vào app.state để locket_modifier.py có thể gọi
+        app.state.accounts = db["accounts"]
+        
+        # (Collection 'admins' sẽ được locket_modifier.py tự động gọi qua accounts.database["admins"])
+    else:
+        print("[CẢNH BÁO] Chưa cấu hình biến môi trường MONGODB_URI")
+        app.state.accounts = None
 
-    # Đăng ký đầy đủ router quản lý, auth, subscriber và proxy
-    app.include_router(management.router)
-    app.include_router(auth_router)
-    app.include_router(management.admin_router)
-    app.include_router(subscribers.router)
-    app.include_router(proxy_router)
-    return app
+    yield  # Ứng dụng chạy tại đây
 
+    # Đóng kết nối khi máy chủ ảo của Vercel tắt (tránh treo memory)
+    if hasattr(app.state, "db_client"):
+        app.state.db_client.close()
+# ===============================================================================
 
-app = create_app()
+# Khởi tạo FastAPI
+app = FastAPI(
+    title="Locket Gold Universal Proxy",
+    description="Hệ thống cấp quyền Locket Gold và Xử lý Ảnh AI",
+    version="2.0.0",
+    lifespan=lifespan
+)
+
+# Cấu hình CORS để giao diện Admin (fetch API) không bị chặn
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Bạn có thể thay "*" bằng tên miền thật để bảo mật hơn
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Tích hợp toàn bộ API Quản trị và Proxy từ file locket_modifier.py
+app.include_router(locket_router)
+
+# Route phụ để kiểm tra server có đang sống không (Ping test)
+@app.get("/")
+async def root_health_check():
+    return {"status": "Locket Proxy is running mượt mà 🚀"}
