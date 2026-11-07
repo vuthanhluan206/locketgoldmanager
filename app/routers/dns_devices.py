@@ -160,6 +160,44 @@ async def renew_device(device_id: str, data: RenewInput, request: Request):
     return render(updated)
 
 
+class SetExpiryInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expires_at: AwareDatetime
+
+
+@admin_router.post("/devices/{device_id}/set-expiry")
+async def set_device_expiry(device_id: str, data: SetExpiryInput, request: Request):
+    """Set an exact DNS expiry, including a past date for controlled testing.
+
+    Linked managed accounts share an expiry, so changing their date can also
+    affect other linked devices. It never changes third-party subscriptions.
+    """
+    if not re.fullmatch(r"[0-9a-f]{24}", device_id):
+        raise HTTPException(404, "Device not found")
+    coll = collection(request)
+    doc = await coll.find_one({"_id": device_id, "enabled": True})
+    if not doc:
+        raise HTTPException(404, "Device not found")
+    if doc.get("locket_id"):
+        account = await request.app.state.accounts.find_one(
+            {"locket_id": doc["locket_id"]}, {"_id": 1}
+        )
+        if not account:
+            raise HTTPException(409, "Linked managed account missing")
+        await request.app.state.accounts.update_one(
+            {"locket_id": doc["locket_id"]},
+            {"$set": {"expires_date": data.expires_at}},
+        )
+    updated = await coll.find_one_and_update(
+        {"_id": device_id, "enabled": True},
+        {"$set": {"expires_at": data.expires_at}},
+        return_document=True,
+    )
+    if not updated:
+        raise HTTPException(404, "Device not found")
+    return render(updated)
+
+
 @admin_router.put("/devices/{device_id}")
 async def update_device(device_id: str, data: DeviceInput, request: Request):
     if not re.fullmatch(r"[0-9a-f]{24}", device_id):
