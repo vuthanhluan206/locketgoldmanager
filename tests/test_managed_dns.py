@@ -71,3 +71,47 @@ def test_known_device_blocks_matching_domain(monkeypatch):
         assert response.status_code == 200
         assert response.headers["content-type"] == "application/dns-message"
         assert dns.message.from_wire(response.content).rcode() == dns.rcode.NXDOMAIN
+
+
+def test_linked_device_access_requires_both_expiries():
+    import asyncio
+    from unittest.mock import AsyncMock
+    from app.managed_access import device_active
+    now = datetime.now(timezone.utc)
+    accounts = AsyncMock()
+    accounts.find_one.return_value = {
+        "expires_date": now + timedelta(days=10), "is_active": True
+    }
+    device = {
+        "locket_id": "sample_account",
+        "enabled": True,
+        "expires_at": now + timedelta(days=2),
+    }
+    assert asyncio.run(device_active(device, accounts, now)) is True
+    accounts.find_one.assert_awaited_with(
+        {"locket_id": "sample_account"}, {"expires_date": 1, "is_active": 1}
+    )
+    accounts.find_one.return_value["expires_date"] = now - timedelta(seconds=1)
+    assert asyncio.run(device_active(device, accounts, now)) is False
+    accounts.find_one.return_value = None
+    assert asyncio.run(device_active(device, accounts, now)) is False
+
+
+def test_unlinked_device_behavior_and_expiry_fail_closed():
+    import asyncio
+    from unittest.mock import AsyncMock
+    from app.managed_access import device_active
+    now = datetime.now(timezone.utc)
+    accounts = AsyncMock()
+    device = {
+        "enabled": True, "expires_at": now + timedelta(days=1)
+    }
+    assert asyncio.run(device_active(device, accounts, now)) is True
+    accounts.find_one.assert_not_awaited()
+    device["enabled"] = False
+    assert asyncio.run(device_active(device, accounts, now)) is False
+    device["enabled"] = True
+    device["expires_at"] = now - timedelta(seconds=1)
+    assert asyncio.run(device_active(device, accounts, now)) is False
+    device["expires_at"] = "not-a-date"
+    assert asyncio.run(device_active(device, accounts, now)) is False
