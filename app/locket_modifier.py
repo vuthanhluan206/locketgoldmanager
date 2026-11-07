@@ -5,7 +5,6 @@ import urllib.error
 import urllib.request
 import httpx
 import os
-import time
 from datetime import datetime, timezone, timedelta
 from urllib.parse import quote
 from starlette.datastructures import Headers
@@ -18,7 +17,6 @@ from .models import subscriber_response
 from .routers.management import download_profile
 from .security import token_digest
 
-# Không dùng prefix để khớp với các đường dẫn API trong file HTML gốc
 router = APIRouter(tags=["Locket Proxy"])
 
 HOP_HEADERS = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
@@ -27,11 +25,20 @@ MAX_RESPONSE = 50 * 1024 * 1024
 
 ADMIN_PATH = os.getenv("ADMIN_PATH", "/admin")
 
-# ================= 1. CÁC API QUẢN TRỊ (PHẢI ĐẶT TRƯỚC HÀM PROXY) =================
+# ================= 1. TRANG CHỦ VÀ CÁC API QUẢN TRỊ (KHỚP VỚI INDEX.HTML GỐC) =================
+
+@router.get("/", response_class=FileResponse)
+async def get_root_page():
+    """Phục vụ file index.html nguyên bản khi truy cập trang chủ /"""
+    current_dir = os.path.dirname(os.path.realpath(__file__))
+    file_path = os.path.join(current_dir, "..", "web", "index.html")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Không tìm thấy file giao diện web/index.html")
+    return FileResponse(file_path)
 
 @router.get(ADMIN_PATH, response_class=FileResponse)
 async def get_admin_page():
-    """Trả về file index.html nguyên bản của bạn"""
+    """Đường dẫn Admin dự phòng"""
     current_dir = os.path.dirname(os.path.realpath(__file__))
     file_path = os.path.join(current_dir, "..", "web", "index.html")
     if not os.path.exists(file_path):
@@ -40,7 +47,7 @@ async def get_admin_page():
 
 @router.post("/api/admin/login")
 async def api_admin_login(req: Request):
-    """Xử lý đăng nhập từ fetch('/api/admin/login')"""
+    """Xử lý đăng nhập từ file index.html gốc"""
     data = await req.json()
     email = data.get("email", "")
     password = data.get("password", "")
@@ -49,18 +56,17 @@ async def api_admin_login(req: Request):
     if accounts_col is None:
         raise HTTPException(503, "Lỗi DB")
     
+    # Kiểm tra trong collection admins hoặc accounts tùy cấu hình của bạn
     admin_user = await accounts_col.database["admins"].find_one({"username": email, "password": password})
     if not admin_user:
         raise HTTPException(status_code=401, detail="Email hoặc mật khẩu không đúng")
         
-    # Tạo token đơn giản (Trong thực tế nên dùng PyJWT)
     token = secrets.token_hex(32)
     expires_at = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
     return {"access_token": token, "expires_at": expires_at}
 
 @router.get("/api/admin/me")
 async def api_admin_me(req: Request):
-    """Xác thực session từ fetch('/api/admin/me')"""
     auth = req.headers.get("Authorization")
     if not auth or not auth.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -72,7 +78,6 @@ async def api_admin_logout():
 
 @router.get("/admin/accounts")
 async def api_get_accounts(req: Request, skip: int = 0, limit: int = 50):
-    """Đổ dữ liệu ra bảng Dashboard"""
     accounts_col = getattr(req.app.state, "accounts", None)
     if accounts_col is None:
         raise HTTPException(503, "Lỗi DB")
@@ -80,7 +85,6 @@ async def api_get_accounts(req: Request, skip: int = 0, limit: int = 50):
     cursor = accounts_col.find({"status": "active"}).skip(skip).limit(limit)
     accounts = await cursor.to_list(length=limit)
     
-    # Format lại để khớp với JS: row.locket_id, row.expires_date
     result = []
     for acc in accounts:
         result.append({
@@ -91,7 +95,6 @@ async def api_get_accounts(req: Request, skip: int = 0, limit: int = 50):
 
 @router.post("/admin/add-account")
 async def api_add_account(req: Request):
-    """Thêm/Sửa tài khoản từ Modal"""
     data = await req.json()
     accounts_col = getattr(req.app.state, "accounts", None)
     
@@ -109,12 +112,11 @@ async def api_add_account(req: Request):
 
 @router.delete("/admin/accounts/{locket_id}")
 async def api_delete_account(req: Request, locket_id: str):
-    """Xóa tài khoản"""
     accounts_col = getattr(req.app.state, "accounts", None)
     await accounts_col.delete_one({"locket_id": locket_id})
     return Response(status_code=204)
 
-# ================= 2. CÁC ROUTE CỦA LOCKET PROXY =================
+# ================= 2. HỖ TRỢ XỬ LÝ AI & PROXY =================
 
 async def process_image_with_ai(image_bytes: bytes, prompt: str) -> bytes:
     api_token = os.getenv("HUGGINGFACE_API_TOKEN", "")
@@ -187,11 +189,10 @@ function FindProxyForURL(url, host) {{
 """
     return Response(content=pac_content.strip(), media_type="application/x-ns-proxy-autoconfig")
 
-# ================= 3. REVERSE PROXY (BẮT TOÀN BỘ REQUEST CÒN LẠI) =================
+# ================= 3. REVERSE PROXY ĐỘNG =================
 
 @router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def dynamic_reverse_proxy(request: Request, path: str):
-    # Phục vụ file tĩnh (CSS/JS/ICO) nếu có
     if request.method == "GET":
         ext = path.split('.')[-1].lower() if '.' in path else ""
         if ext in ['css', 'js', 'png', 'jpg', 'ico']:
