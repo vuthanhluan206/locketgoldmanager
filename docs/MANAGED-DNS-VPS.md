@@ -127,10 +127,10 @@ already establishes trust in your DNS server.
 
 ## 5. Failure and expiry behavior
 
-- A revoked/expired device continues to receive **ordinary upstream DNS**
+- A known revoked/expired device continues to receive **ordinary upstream DNS**
   with no customized blocking; expiry removes **managed DNS policy** but
-  does not forcibly disconnect Internet. If backend is unavailable and policy
-  is uncached, the same default applies.
+  does not forcibly disconnect Internet. If the manager is unavailable with no cached policy, the gateway returns HTTP 503
+  rather than becoming an open public resolver. Unknown device tokens return 403.
 - Policy refresh is at most ~30 seconds under ordinary traffic; this is
   near-real-time, not a push stream.
 - Download links expire for profile retrieval when the device expires.
