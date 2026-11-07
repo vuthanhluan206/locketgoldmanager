@@ -221,7 +221,8 @@ def test_upsert_injection_and_subscriber(client):
         body['expires_date'] = expiry
         assert http.post('/admin/add-account', headers=headers, json=body).status_code == 422
     accounts.find_one.return_value = {'locket_id': 'alice', 'expires_date': future}
-    assert 'Gold' in http.get('/v1/subscribers/alice', headers=headers).json()['subscriber']['entitlements']
+    assert http.get('/v1/subscribers/alice', headers=headers).json()['managed_access']['active'] is True
+    assert http.get('/v1/subscribers/alice', headers=headers).json()['subscriber']['entitlements'] == {}
     accounts.find_one.return_value = None
     assert http.get('/v1/subscribers/missing', headers=headers).json()['subscriber']['entitlements'] == {}
     assert http.get('/admin/accounts?skip=10001', headers=headers).status_code == 422
@@ -280,7 +281,8 @@ def test_date_only_expiry_is_stored_as_mongodb_datetime(client):
 def test_legacy_expiry_and_invalid_records_fail_closed():
     now = datetime(2026, 11, 3, 12, tzinfo=timezone.utc)
     result = subscriber_response('id', {'expires_date': '2026-11-03'}, now)
-    assert result['subscriber']['entitlements']['Gold']['expires_date'] == '2026-11-03T23:59:59Z'
+    assert result['managed_access']['expires_at'] == '2026-11-03T23:59:59Z'
+    assert result['subscriber']['entitlements'] == {}
     for value in ['not-a-date', None, '2026-11-03T12:00:00']:
         assert subscriber_response('id', {'expires_date': value}, now)['subscriber']['entitlements'] == {}
 
