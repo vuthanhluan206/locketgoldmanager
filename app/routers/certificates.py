@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from hashlib import sha256
 
 from cryptography import x509
+from cryptography.exceptions import InvalidSignature, UnsupportedAlgorithm
 from cryptography.hazmat.primitives import serialization
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
@@ -33,7 +34,7 @@ def inspect_certificate(pem: str) -> dict:
                 raise ValueError("Certificate cannot sign certificates")
         except x509.ExtensionNotFound:
             pass
-    except (ValueError, UnicodeError, x509.ExtensionNotFound, x509.InvalidVersion) as exc:
+    except (ValueError, TypeError, UnicodeError, InvalidSignature, UnsupportedAlgorithm, x509.ExtensionNotFound, x509.InvalidVersion) as exc:
         raise HTTPException(422, "Invalid, expired or non-root CA certificate") from exc
     normalized = cert.public_bytes(serialization.Encoding.PEM).decode("ascii")
     return {
