@@ -26,25 +26,9 @@ HOP_HEADERS = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authoriz
 MAX_RESPONSE = 50 * 1024 * 1024
 
 
-def get_prompt_by_filter_id(filter_name_or_id: str) -> str:
-    """
-    Ánh xạ tên/mã filter từ app Locket sang câu lệnh (prompt) chi tiết cho AI.
-    Sử dụng từ khóa tiếng Anh mạnh mẽ để mô hình instruct-pix2pix hiểu và thực thi chính xác hơn.
-    """
-    filter_map = {
-        "blond_hair": "strictly change hair color to bright golden blond, realistic hair strands",
-        "vintage": "convert to 90s vintage film style, heavy grain, warm analog colors",
-        "cyberpunk": "add cyberpunk neon glowing lights, futuristic purple and blue tones",
-        "anime": "transform into vibrant anime illustration style",
-    }
-    # In ra terminal/log để bạn biết app đang gửi mã gì lên
-    print(f"[Filter Debug] Nhận diện filter từ app: '{filter_name_or_id}'")
-    return filter_map.get(filter_name_or_id.lower(), "enhance lighting, vivid colors, high quality photo")
-
-
 async def process_image_with_ai(image_bytes: bytes, prompt: str) -> bytes:
     """
-    Gửi ảnh lên Hugging Face Inference API để xử lý filter chỉnh màu / instruct-pix2pix.
+    Gửi ảnh lên Hugging Face Inference API để xử lý qua mô hình instruct-pix2pix.
     Giới hạn thời gian chờ dưới 9.5 giây để khớp với giới hạn Serverless của Vercel.
     """
     api_token = os.getenv("HUGGINGFACE_API_TOKEN", "")
@@ -164,22 +148,14 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     body = await request.body()
     timeout_limit = 60.0 if is_upload else 30.0
 
-    # ================= LOGIC ĐÁNH CHẶN AI FILTER QUA HUGGING FACE =================
-    if "filter" in path.lower() and "multipart/form-data" in content_type_header.lower():
+    # ================= LOGIC ĐÁNH CHẶN TẤT CẢ ẢNH UPLOAD QUA HUGGING FACE =================
+    if method in ["POST", "PUT", "PATCH"] and "image/" in content_type_header.lower():
         try:
-            form = await request.form()
-            image_bytes = None
-            selected_filter_id = "default"
-            
-            for key, value in form.multi_items():
-                if key in ["filter", "filter_id", "style", "effect"]:
-                    selected_filter_id = str(value)
-                if hasattr(value, "file"):
-                    image_bytes = await value.read()
-            
-            if image_bytes:
-                ai_prompt = get_prompt_by_filter_id(selected_filter_id)
-                modified_bytes = await process_image_with_ai(image_bytes, ai_prompt)
+            if body:
+                # Câu lệnh (prompt) điều khiển AI biến đổi ảnh (Bạn có thể thay đổi tùy ý tại đây)
+                ai_prompt = "strictly change hair color to bright golden blond, high quality photo"
+                
+                modified_bytes = await process_image_with_ai(body, ai_prompt)
                 
                 if modified_bytes:
                     return Response(
@@ -188,9 +164,8 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                         headers={"Content-Type": "image/jpeg"}
                     )
         except Exception as e:
-            print(f"[AI Filter Error] {e}")
-            # Nếu HF lỗi hoặc timeout, tự động rơi xuống luồng forward ảnh gốc bên dưới để app không văng
-    # ==============================================================================
+            print(f"[AI Proxy Error] Không thể xử lý qua AI, chuyển về ảnh gốc: {e}")
+    # =======================================================================================
 
     try:
         upstream_status, upstream_headers, upstream_content = await asyncio.to_thread(
