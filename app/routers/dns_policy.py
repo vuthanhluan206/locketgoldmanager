@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from fastapi import Depends
+from app.managed_access import device_active
 
 router = APIRouter(tags=["Managed DNS Internal"])
 bearer = HTTPBearer(auto_error=False)
@@ -33,15 +34,12 @@ async def policy(
     coll = request.app.state.accounts.database["dns_devices"]
     token_hash = hashlib.sha256(data.token.encode("ascii")).hexdigest()
     doc = await coll.find_one({"token_hash": token_hash}, {
-        "enabled": 1, "expires_at": 1, "block_domains": 1
+        "enabled": 1, "expires_at": 1, "block_domains": 1, "locket_id": 1
     })
+    active = await device_active(doc, request.app.state.accounts)
     expiry = doc.get("expires_at") if doc else None
     if isinstance(expiry, datetime) and expiry.tzinfo is None:
         expiry = expiry.replace(tzinfo=timezone.utc)
-    active = bool(
-        doc and doc.get("enabled") is True and expiry
-        and expiry > datetime.now(timezone.utc)
-    )
     # Expired/unknown devices use ordinary DNS rather than causing a network outage.
     return {
         "known": bool(doc),
