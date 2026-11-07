@@ -1,12 +1,13 @@
+import os
+import httpx
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pymongo.errors import PyMongoError
 
 from app.auth import router as auth_router
 from app.database import lifespan
-from app.middleware import SecurityMiddleware
+from app.middleware import SecurityMiddleware, security_headers
 from app.routers import management, subscribers
 from app.locket_modifier import router as proxy_router
 
@@ -17,14 +18,8 @@ def create_app() -> FastAPI:
         version="1.0.0",
         docs_url=None,
         redoc_url=None,
+        openapi_url=None,
         lifespan=lifespan,
-    )
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
     )
     app.add_middleware(SecurityMiddleware)
 
@@ -36,6 +31,32 @@ def create_app() -> FastAPI:
     async def database_error(request: Request, exc: PyMongoError):
         return JSONResponse({'detail': 'Database unavailable'}, status_code=503)
 
+    @app.exception_handler(Exception)
+    async def unhandled_error(request: Request, exc: Exception):
+        return JSONResponse(
+            {'detail': 'Internal server error'}, status_code=500,
+            headers=security_headers(request.state.csp_nonce, request.url.scheme == 'https'),
+        )
+
+    @app.get('/keep-alive', response_class=JSONResponse)
+    async def global_keep_alive():
+        """
+        Endpoint giữ nhiệt Hugging Face đặt trực tiếp ở gốc, tránh lỗi 404 do tiền tố proxy.
+        """
+        api_token = os.getenv("HUGGINGFACE_API_TOKEN", "")
+        if not api_token:
+            return JSONResponse({"status": "skipped", "reason": "No token configured"})
+        
+        try:
+            hf_endpoint = "https://api-inference.huggingface.co/models/timbrooks/instruct-pix2pix"
+            headers = {"Authorization": f"Bearer {api_token}"}
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.get(hf_endpoint, headers=headers)
+            return JSONResponse({"status": "success", "message": "HF model warmed up successfully"})
+        except Exception as e:
+            return JSONResponse({"status": "warning", "detail": str(e)})
+
+    # Đăng ký đầy đủ router quản lý (trang chủ, admin, profile), auth, subscriber và proxy
     app.include_router(management.router)
     app.include_router(auth_router)
     app.include_router(management.admin_router)
