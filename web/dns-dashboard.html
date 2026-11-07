@@ -25,15 +25,28 @@ a{color:#205a9a}small{color:#58677d}#status{font-weight:600}
 </main><script nonce="__NONCE__">
 (()=>{
 const $=id=>document.getElementById(id);
-const raw=localStorage.getItem('locket_admin_session');
-let session;try{session=JSON.parse(raw||'null')}catch{}
-if(!session?.access_token){$('status').textContent='Hãy đăng nhập vào trang quản trị trước khi dùng công cụ này.';return}
+const loginUrl='/admin-gmnWJ5nG3qZRcdku3eBtkIka';
+function loginHelp(message){
+$('status').replaceChildren();
+$('status').append(document.createTextNode(message+' '));
+const link=document.createElement('a');link.href=loginUrl;link.textContent='Đăng nhập lại';
+$('status').append(link);
+}
+function currentSession(){
+let s;try{s=JSON.parse(localStorage.getItem('locket_admin_session')||'null')}catch{}
+if(!s?.access_token||!Number.isFinite(Date.parse(s.expires_at))||Date.parse(s.expires_at)<=Date.now())return null;
+return s;
+}
 async function api(path,options={}){
+const session=currentSession();
+if(!session){loginHelp('Phiên quản trị đã hết hạn.');throw new Error('Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại rồi mở lại DNS Manager.')}
 const res=await fetch(path,{...options,cache:'no-store',credentials:'omit',
 headers:{'Authorization':'Bearer '+session.access_token,'Content-Type':'application/json',...(options.headers||{})}});
+if(res.status===401){localStorage.removeItem('locket_admin_session');loginHelp('Phiên quản trị không hợp lệ hoặc đã hết hạn.');throw new Error('Phiên đăng nhập không hợp lệ. Hãy đăng nhập lại rồi mở lại DNS Manager.')}
 if(!res.ok)throw new Error('HTTP '+res.status+': '+(await res.text()).slice(0,180));
 if(res.status===204)return null;return await res.json()
 }
+if(!currentSession()){loginHelp('Hãy đăng nhập vào trang quản trị trước khi dùng công cụ này.');return}
 async function refresh(){
 const list=await api('/api/admin/dns/devices');$('rows').replaceChildren();
 for(const d of list){
