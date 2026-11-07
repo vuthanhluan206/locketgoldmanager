@@ -1,6 +1,5 @@
 import os
-import asyncio
-import urllib.request
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -42,29 +41,28 @@ def create_app() -> FastAPI:
     @app.get('/keep-alive', response_class=JSONResponse)
     async def global_keep_alive():
         """
-        Endpoint giữ nhiệt Hugging Face đặt trực tiếp ở gốc, dùng urllib để tránh lỗi socket trên Vercel.
+        Endpoint giữ nhiệt Hugging Face đặt trực tiếp ở gốc, dùng httpx.Client cục bộ để tránh lỗi socket trên Vercel.
         """
         api_token = os.getenv("HUGGINGFACE_API_TOKEN", "")
         if not api_token:
             return JSONResponse({"status": "skipped", "reason": "No token configured"})
         
-        def _ping_hf():
-            hf_endpoint = "https://api-inference.huggingface.co/models/timbrooks/instruct-pix2pix"
-            req = urllib.request.Request(
-                hf_endpoint,
-                headers={"Authorization": f"Bearer {api_token}"},
-                method="GET"
-            )
-            with urllib.request.urlopen(req, timeout=5) as response:
-                return response.status
-
         try:
-            await asyncio.to_thread(_ping_hf)
-            return JSONResponse({"status": "success", "message": "HF model warmed up successfully"})
+            hf_endpoint = "https://api-inference.huggingface.co/models/timbrooks/instruct-pix2pix"
+            headers = {"Authorization": f"Bearer {api_token}"}
+            
+            with httpx.Client(timeout=5.0) as client:
+                resp = client.get(hf_endpoint, headers=headers)
+                
+            return JSONResponse({
+                "status": "success", 
+                "message": "HF model warmed up successfully",
+                "upstream_status": resp.status_code
+            })
         except Exception as e:
             return JSONResponse({"status": "warning", "detail": str(e)})
 
-    # Đăng ký đầy đủ router quản lý (trang chủ, admin, profile), auth, subscriber và proxy
+    # Đăng ký đầy đủ router quản lý, auth, subscriber và proxy
     app.include_router(management.router)
     app.include_router(auth_router)
     app.include_router(management.admin_router)
