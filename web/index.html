@@ -762,19 +762,7 @@
       </form>
       <p class="status" id="loginMessage" role="status" aria-live="polite"></p>
       <div class="login-footer"><a class="quiet" href="/">← Back to downloads</a></div>
-            <section class="directory-panel" id="rootCaWorkspace" aria-labelledby="rootCaTitle" style="margin-top:20px">
-        <div class="directory-heading"><div class="section-title"><h3 id="rootCaTitle">Chứng chỉ gốc (Root CA)</h3></div></div>
-        <p class="quiet">Chỉ lưu chứng chỉ công khai PEM và kiểm tra thông tin. Không tải private key. Không tự cài lên iPhone hoặc dùng để thay thế chứng chỉ HTTPS của Locket/RevenueCat.</p>
-        <form id="rootCaForm">
-          <div class="field"><label for="rootCaPem">Nội dung Root CA (.pem / .crt)</label>
-            <textarea id="rootCaPem" rows="6" maxlength="16384" required placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----" style="width:100%;font-family:monospace"></textarea>
-          </div>
-          <button id="rootCaSave" type="submit">Kiểm tra và lưu chứng chỉ vào MongoDB</button>
-          <button class="secondary" id="rootCaDelete" type="button">Xóa chứng chỉ đã lưu</button>
-        </form>
-        <p class="status" id="rootCaMessage" role="status" aria-live="polite"></p>
-        <pre id="rootCaInfo" style="white-space:pre-wrap;word-break:break-word">Chưa kiểm tra chứng chỉ</pre>
-      </section>
+      
     </section>
     <script nonce="__NONCE__">
       delete document.body.dataset.loginRendering;
@@ -954,7 +942,6 @@
           $('dashboard').hidden = true; $('loginScreen').hidden = false;
           $('accounts').replaceChildren(); $('dnsRows').replaceChildren(); $('identity').textContent = '';
           $('dnsResult').hidden = true; $('dnsLink').textContent='';$('dnsDownload').removeAttribute('href');
-          $('rootCaPem').value='';$('rootCaInfo').textContent='';$('rootCaMessage').textContent='';
           $('accountForm').reset(); $('adminMessage').textContent = '';
         }
         async function api(path, options = {}, auth = true) {
@@ -1106,35 +1093,11 @@
         };
 
 
-        async function loadRootCa() {
-          const result = await api('/api/admin/certificates/root');
-          if(!session)return;
-          $('rootCaInfo').textContent = result.configured
-            ? 'Đã lưu chứng chỉ (không tự phân phối)\nTên: '+result.subject+'\nSHA-256: '+result.fingerprint_sha256+
-              '\nHiệu lực: '+new Date(result.not_before).toLocaleString()+' — '+new Date(result.not_after).toLocaleString()
-            : 'Chưa có chứng chỉ gốc được lưu.';
-        }
-        $('rootCaForm').onsubmit=async event=>{
-          event.preventDefault();$('rootCaSave').disabled=true;$('rootCaMessage').textContent='';
-          try {
-            await api('/api/admin/certificates/root',{method:'PUT',body:JSON.stringify({pem:$('rootCaPem').value.trim()})});
-            $('rootCaPem').value='';
-            $('rootCaMessage').textContent='Đã kiểm tra và lưu chứng chỉ công khai vào MongoDB. Không tự cài lên thiết bị.';
-            await loadRootCa();
-          } catch(error){$('rootCaMessage').textContent=error.message}
-          finally{$('rootCaSave').disabled=false}
-        };
-        $('rootCaDelete').onclick=async()=>{
-          if(!confirm('Xóa chứng chỉ gốc khỏi kho quản trị?'))return;
-          try{await api('/api/admin/certificates/root',{method:'DELETE'});$('rootCaPem').value='';await loadRootCa();$('rootCaMessage').textContent='Đã xóa chứng chỉ.'}
-          catch(error){$('rootCaMessage').textContent=error.message}
-        };
-
         async function enter() {
           if (!session || !Number.isFinite(Date.parse(session.expires_at)) || Date.parse(session.expires_at) <= Date.now()) { clearSession(); return; }
           const admin = await api('/api/admin/me');
           $('identity').textContent = admin.email;
-          await Promise.all([load(),loadDns(),loadRootCa()]);
+          await Promise.all([load(),loadDns()]);
           if (!session) return;
           $('loginScreen').hidden = true; $('dashboard').hidden = false;
           clearTimeout(timer);
