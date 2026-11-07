@@ -8,7 +8,7 @@ from app.auth import router as auth_router
 from app.database import lifespan
 from app.middleware import SecurityMiddleware
 from app.routers import management
-from app.routers import dns_devices, dns_policy, certificates
+from app.routers import dns_devices, dns_policy
 
 
 def create_app() -> FastAPI:
@@ -42,7 +42,6 @@ def create_app() -> FastAPI:
     app.include_router(dns_devices.admin_router)
     app.include_router(dns_devices.router)
     app.include_router(dns_policy.router)
-    app.include_router(certificates.router)
     # Legacy HTTPS response rewriter is intentionally disabled in DNS deployment.
     # It is not a DNS gateway and must not be used for purchase validation.
     return app
