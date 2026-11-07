@@ -7,14 +7,13 @@ from pymongo.errors import PyMongoError
 from app.auth import router as auth_router
 from app.database import lifespan
 from app.middleware import SecurityMiddleware
-from app.routers import management, subscribers
+from app.routers import management
 from app.routers import dns_devices, dns_policy
-import os
 
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="Locket Management & Proxy System",
+        title="Managed DNS and Account Management",
         version="1.0.0",
         docs_url=None,
         redoc_url=None,
@@ -40,7 +39,6 @@ def create_app() -> FastAPI:
     app.include_router(management.router)
     app.include_router(auth_router)
     app.include_router(management.admin_router)
-    app.include_router(subscribers.router)
     app.include_router(dns_devices.admin_router)
     app.include_router(dns_devices.router)
     app.include_router(dns_policy.router)
