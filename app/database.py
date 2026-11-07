@@ -5,6 +5,7 @@ from cryptography.exceptions import InvalidSignature, UnsupportedAlgorithm
 from cryptography import x509
 from fastapi import FastAPI, Request
 from pymongo import AsyncMongoClient
+from pymongo.errors import PyMongoError
 from .config import get_settings
 from .profile import build_profile
 
@@ -30,15 +31,18 @@ async def lifespan(app: FastAPI):
         serverSelectionTimeoutMS=5000, connectTimeoutMS=5000,
         socketTimeoutMS=5000, timeoutMS=5000, maxPoolSize=20,
     )
+    db = client[settings.mongodb_database]
+    # Set collection handles even when Atlas is temporarily unavailable.
+    # Database-backed routes will return 503 via the PyMongoError handler,
+    # while the public HTML pages can still render.
+    app.state.accounts = db.accounts
+    app.state.admins = db.admins
+    app.state.sessions = db.sessions
+    app.state.login_limits = db.login_limits
+    app.state.viewers_history = db.viewers_history
+
     try:
         await client.admin.command('ping')
-        db = client[settings.mongodb_database]
-        app.state.accounts = db.accounts
-        app.state.admins = db.admins
-        app.state.sessions = db.sessions
-        app.state.login_limits = db.login_limits
-        app.state.viewers_history = db.viewers_history
-
         await app.state.accounts.create_index('locket_id', unique=True)
         await db.admins.create_index('email', unique=True)
         await db.sessions.create_index('expires_at', expireAfterSeconds=0)
@@ -48,6 +52,11 @@ async def lifespan(app: FastAPI):
         await db.admins.update_one({'_id': 'superadmin'}, {
             '$setOnInsert': admin_document(settings),
         }, upsert=True)
+    except PyMongoError as exc:
+        # Do not make static pages unavailable due to an Atlas network outage.
+        # Do not log the MongoDB URI or credentials.
+        logger.error('DATABASE_STARTUP_UNAVAILABLE: %s', type(exc).__name__)
+    try:
         yield
     finally:
         await client.close()
