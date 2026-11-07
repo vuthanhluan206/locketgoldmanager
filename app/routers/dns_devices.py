@@ -12,6 +12,8 @@ from fastapi.responses import HTMLResponse
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 from app.dns_profile import build_dns_profile
+from app.models import AccountId
+from app.managed_access import device_active
 from app.security import require_admin
 
 router = APIRouter(tags=["Managed DNS"])
@@ -40,6 +42,7 @@ def collection(request: Request):
 class DeviceInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     label: str = Field(min_length=1, max_length=80)
+    locket_id: AccountId | None = None
     expires_at: AwareDatetime
     block_domains: list[str] = Field(default_factory=list, max_length=100)
 
@@ -57,7 +60,7 @@ class DeviceInput(BaseModel):
 
 def render(doc: dict) -> dict:
     return {
-        "id": doc["_id"], "label": doc["label"],
+        "id": doc["_id"], "label": doc["label"], "locket_id": doc.get("locket_id"),
         "enabled": bool(doc["enabled"]),
         "expires_at": doc["expires_at"],
         "block_domains": doc.get("block_domains", []),
@@ -69,11 +72,15 @@ async def create_device(data: DeviceInput, request: Request):
     if data.expires_at <= datetime.now(timezone.utc):
         raise HTTPException(422, "expires_at must be in the future")
     origin = dns_origin()
+    if data.locket_id:
+        account = await request.app.state.accounts.find_one({"locket_id": data.locket_id}, {"_id": 1})
+        if account is None:
+            raise HTTPException(422, "Linked Locket ID not found in managed accounts")
     token = secrets.token_urlsafe(32)
     device_id = secrets.token_hex(12)
     doc = {
         "_id": device_id, "token_hash": digest(token),
-        "label": data.label, "expires_at": data.expires_at,
+        "label": data.label, "locket_id": data.locket_id, "expires_at": data.expires_at,
         "enabled": True, "block_domains": data.block_domains,
         "created_at": datetime.now(timezone.utc),
     }
@@ -94,11 +101,16 @@ async def update_device(device_id: str, data: DeviceInput, request: Request):
         raise HTTPException(404, "Device not found")
     if data.expires_at <= datetime.now(timezone.utc):
         raise HTTPException(422, "expires_at must be in the future")
+    if data.locket_id:
+        account = await request.app.state.accounts.find_one({"locket_id": data.locket_id}, {"_id": 1})
+        if account is None:
+            raise HTTPException(422, "Linked Locket ID not found in managed accounts")
     coll = collection(request)
     doc = await coll.find_one_and_update(
         {"_id": device_id, "enabled": True},
         {"$set": {
             "label": data.label,
+            "locket_id": data.locket_id,
             "expires_at": data.expires_at,
             "block_domains": data.block_domains,
         }},
@@ -130,7 +142,7 @@ async def download_profile(token: str, request: Request):
     if not TOKEN_RE.fullmatch(token):
         raise HTTPException(404, "Profile not found")
     doc = await collection(request).find_one({"token_hash": digest(token), "enabled": True})
-    if not doc or doc["expires_at"].replace(tzinfo=doc["expires_at"].tzinfo or timezone.utc) <= datetime.now(timezone.utc):
+    if not await device_active(doc, request.app.state.accounts):
         raise HTTPException(404, "Profile not found")
     content = build_dns_profile(f"{dns_origin()}/dns-query/{token}", "Managed Encrypted DNS")
     return Response(content, media_type="application/x-apple-aspen-config", headers={
