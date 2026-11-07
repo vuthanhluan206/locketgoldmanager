@@ -111,7 +111,7 @@ async def download_proxy_profile(request: Request):
 @router.get("/proxy.pac", response_class=Response)
 async def get_proxy_pac(request: Request):
     """
-    Trả về file cấu hình PAC để định tuyến các request locket qua proxy của bạn.
+    Trả về file cấu hình PAC để định tuyến locket qua domain của bạn.
     """
     host = request.headers.get("host", "locketgold.vuthanhluan.bond")
     pac_content = f"""
@@ -123,6 +123,16 @@ function FindProxyForURL(url, host) {{
 }}
 """
     return Response(content=pac_content.strip(), media_type="application/x-ns-proxy-autoconfig")
+
+
+@router.get("/{filename}", include_in_schema=False)
+async def handle_static_files(filename: str):
+    """
+    Bắt các request file tĩnh ngầm từ thiết bị để làm sạch nhật ký log trên Vercel.
+    """
+    if any(filename.endswith(ext) for ext in [".png", ".ico", ".txt", ".xml", ".json"]):
+        return Response(status_code=204)
+    raise HTTPException(status_code=404, detail="Not Found")
 
 
 @router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
@@ -165,21 +175,18 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     body = await request.body()
     timeout_limit = 60.0 if is_upload else 30.0
 
-    # ================= LOGIC ĐÁNH CHẶN TẤT CẢ ẢNH UPLOAD QUA HUGGING FACE =================
+    # ================= LOGIC ĐÁNH CHẶN VÀ SỬA ẢNH (ĐỔI TÓC ĐỎ) TRONG PROXY =================
     if method in ["POST", "PUT", "PATCH"] and "image/" in content_type_header.lower():
         try:
             if body:
-                ai_prompt = "strictly change hair color to bright golden blond, high quality photo"
+                # Prompt cấu hình đổi màu tóc thành màu đỏ rực rỡ để test
+                ai_prompt = "strictly change hair color to vibrant fiery red hair, highly detailed, realistic hair texture"
                 modified_bytes = await process_image_with_ai(body, ai_prompt)
                 
                 if modified_bytes:
-                    return Response(
-                        content=modified_bytes,
-                        status_code=200,
-                        headers={"Content-Type": "image/jpeg"}
-                    )
+                    body = modified_bytes
         except Exception as e:
-            print(f"[AI Proxy Error] Không thể xử lý qua AI, chuyển về ảnh gốc: {e}")
+            print(f"[AI Proxy Error] Không thể xử lý qua AI, giữ nguyên ảnh gốc: {e}")
     # =======================================================================================
 
     try:
