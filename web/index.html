@@ -948,141 +948,118 @@
           }
           return response.status === 204 ? null : response.json();
         }
-        async function load() {
-          const rows = await api('/admin/accounts?skip=' + skip + '&limit=' + limit);
-          if (!session) return;
-          const body = $('accounts'); body.replaceChildren();
-          for (const [rowIndex, row] of rows.entries()) {
-            const tr = document.createElement('tr');
-            const number = document.createElement('td');
-            number.className = 'row-number'; number.textContent = String(skip + rowIndex + 1); tr.append(number);
-            for (const [index, value] of [row.locket_id, new Date(row.expires_date).toLocaleString('en-US'), new Date(row.expires_date) > new Date() ? 'Managed active' : 'Expired'].entries()) {
-              const td = document.createElement('td');
-              const label = document.createElement('span'); label.textContent = value;
-              if (index === 0) {
-                const name = document.createElement('span'); name.className = 'account-name';
-                const crown = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-                crown.setAttribute('viewBox', '0 0 32 32'); crown.setAttribute('class', 'account-crown'); crown.setAttribute('aria-hidden', 'true');
-                const symbol = document.createElementNS('http://www.w3.org/2000/svg', 'use');
-                symbol.setAttribute('href', '#gold-crown'); crown.append(symbol);
-                name.append(crown, label); td.append(name);
-              } else {
-                label.className = index === 1 ? 'account-expiry' : 'account-status' + (value === 'Managed active' ? ' is-gold' : '');
-                td.append(label);
-              }
-              tr.append(td);
-            }
-            const actions = document.createElement('td');
-            const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary'; edit.textContent = 'Edit';
-            edit.onclick = () => {
-              $('accountId').value = row.locket_id;
-              const date = new Date(row.expires_date);
-              $('expiry').value = new Date(date - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-              openAccountDialog(true);
-            };
-            const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary'; remove.textContent = 'Delete';
-            remove.onclick = async () => {
-              if (!confirm('Delete account ' + row.locket_id + '?')) return;
-              remove.disabled = true;
-              try { await api('/admin/accounts/' + encodeURIComponent(row.locket_id), { method: 'DELETE' }); await load(); }
-              catch (error) { $('adminMessage').textContent = error.message; }
-              finally { remove.disabled = false; }
-            };
-            const check = document.createElement('button'); check.type = 'button'; check.className = 'secondary'; check.textContent = 'Check API';
-            check.onclick = async () => {
-              check.disabled = true;
-              try {
-                const result = await api('/v1/subscribers/' + encodeURIComponent(row.locket_id));
-                $('adminMessage').textContent = 'API result for ' + row.locket_id + ': ' + (result.managed_access?.active ? 'managed access is active (not verified Gold).' : 'no managed access or expired.');
-              } catch (error) { $('adminMessage').textContent = error.message; }
-              finally { check.disabled = false; }
-            };
-            for (const [button, pathData] of [
-              [edit, 'm15 4 5 5M4 20l5-1L21 7l-5-5L4 14Z'],
-              [check, 'm9 8-4 4 4 4m6-8 4 4-4 4'],
-              [remove, 'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7'],
-            ]) {
-              button.title = button.textContent;
-              button.setAttribute('aria-label', button.textContent + ' · ' + row.locket_id);
-              const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-              icon.setAttribute('viewBox', '0 0 24 24'); icon.setAttribute('class', 'ui-icon'); icon.setAttribute('aria-hidden', 'true');
-              const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-              path.setAttribute('d', pathData); icon.append(path); button.replaceChildren(icon);
-            }
-            actions.append(edit, check, remove); tr.append(actions); body.append(tr);
-          }
-          if (!rows.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 5; td.textContent = 'No accounts yet.'; tr.append(td); body.append(tr); }
-          $('previous').disabled = skip === 0; $('next').disabled = rows.length < limit || skip + limit > 10000;
-          $('page').textContent = 'Page ' + (skip / limit + 1);
-        }
-
+        let dnsDevices = [];
         function asLocalInput(iso) {
           const d = new Date(iso);
-          return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0,16);
+          return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16);
         }
-        async function loadDns() {
-          const list = await api('/api/admin/dns/devices');
-          if (!session) return;
-          const body = $('dnsRows'); body.replaceChildren();
-          for (const d of list) {
-            const tr = document.createElement('tr');
-            for (const value of [d.label, d.locket_id || '—', new Date(d.expires_at).toLocaleString(), d.enabled ? (new Date(d.expires_at) > new Date() ? 'Còn hạn DNS' : 'Hết hạn DNS') : 'Đã thu hồi']) {
-              const td = document.createElement('td'); td.textContent = value; tr.append(td);
-            }
-            const actions = document.createElement('td');
-            const dateInput = document.createElement('input');
-            dateInput.type = 'datetime-local'; dateInput.value = asLocalInput(d.expires_at);
-            dateInput.setAttribute('aria-label','Ngày hết hạn của '+d.label);
-            dateInput.disabled = !d.enabled;
-            const save = document.createElement('button'); save.type = 'button'; save.className = 'secondary'; save.textContent = 'Lưu ngày'; save.disabled = !d.enabled;
-            save.onclick = async () => {
-              const selected = new Date(dateInput.value);
-              if (Number.isNaN(selected.getTime())) { $('dnsMessage').textContent = 'Ngày giờ không hợp lệ'; return; }
-              if (selected <= new Date() && !confirm('Đặt ngày quá khứ sẽ khiến chính sách DNS hết hạn. Điều này không thu hồi Gold thật. Tiếp tục?')) return;
-              save.disabled = true;
-              try {
-                await api('/api/admin/dns/devices/'+d.id+'/set-expiry', {method:'POST',body:JSON.stringify({expires_at:selected.toISOString()})});
-                $('dnsMessage').textContent = 'Đã lưu hạn DNS trong MongoDB. Token không đổi.';
-                await Promise.all([loadDns(),load()]);
-              } catch (error) { $('dnsMessage').textContent = error.message; }
-              finally { save.disabled = false; }
-            };
-            const revoke = document.createElement('button'); revoke.type = 'button'; revoke.className = 'secondary'; revoke.textContent = 'Thu hồi'; revoke.disabled = !d.enabled;
-            revoke.onclick = async () => {
-              if (!confirm('Thu hồi cấu hình DNS của '+d.label+'?')) return;
-              revoke.disabled = true;
-              try { await api('/api/admin/dns/devices/'+d.id+'/revoke', {method:'POST'}); await loadDns(); }
-              catch(error){ $('dnsMessage').textContent = error.message; }
-              finally { revoke.disabled = false; }
-            };
-            actions.append(dateInput,save,revoke); tr.append(actions);body.append(tr);
+        function revealDnsLink(result) {
+          const url = new URL(result.profile_download_url, location.origin).href;
+          $('dnsLink').textContent = url;
+          $('dnsDownload').href = url;
+          $('dnsResult').hidden = false;
+        }
+        function addDeviceActions(container, device) {
+          const item = document.createElement('div');
+          item.style.marginBottom = '10px';
+          const name = document.createElement('span');
+          name.textContent = device.label + ' · ' + (device.enabled ? (new Date(device.expires_at)>new Date()?'DNS còn hạn':'DNS hết hạn') : 'Đã thu hồi');
+          item.append(name);
+          const controls = document.createElement('div');
+          controls.style.display='flex';controls.style.flexWrap='wrap';controls.style.gap='6px';
+          const input = document.createElement('input');
+          input.type='datetime-local';input.value=asLocalInput(device.expires_at);
+          input.setAttribute('aria-label','Ngày hết hạn DNS: '+device.label);
+          input.disabled=!device.enabled;
+          const update = document.createElement('button');
+          update.type='button';update.className='secondary';update.textContent='Lưu hạn DNS';
+          update.disabled=!device.enabled;
+          update.onclick=async()=>{
+            const selected=new Date(input.value);
+            if(Number.isNaN(selected.getTime())){$('adminMessage').textContent='Ngày không hợp lệ';return}
+            if(selected<=new Date()&&!confirm('Đặt ngày quá khứ khiến chính sách DNS hết hạn. Không ảnh hưởng Gold thật. Tiếp tục?'))return;
+            update.disabled=true;
+            try {
+              await api('/api/admin/dns/devices/'+device.id+'/set-expiry',{method:'POST',body:JSON.stringify({expires_at:selected.toISOString()})});
+              $('adminMessage').textContent='Đã lưu hạn DNS và tài khoản liên kết trong MongoDB.';
+              await load();
+            } catch(error) {$('adminMessage').textContent=error.message}
+            finally {update.disabled=false}
+          };
+          const revoke = document.createElement('button');
+          revoke.type='button';revoke.className='secondary';revoke.textContent='Thu hồi';
+          revoke.disabled=!device.enabled;
+          revoke.onclick=async()=>{
+            if(!confirm('Thu hồi DNS cho '+device.label+'?'))return;
+            revoke.disabled=true;
+            try {
+              await api('/api/admin/dns/devices/'+device.id+'/revoke',{method:'POST'});
+              await load();
+            }catch(error){$('adminMessage').textContent=error.message}
+            finally{revoke.disabled=false}
+          };
+          controls.append(input,update,revoke);
+          item.append(controls);container.append(item);
+        }
+        async function load() {
+          const [rows, devices] = await Promise.all([
+            api('/admin/accounts?skip='+skip+'&limit='+limit),
+            api('/api/admin/dns/devices')
+          ]);
+          if(!session)return;
+          dnsDevices = devices;
+          const tbody=$('accounts');tbody.replaceChildren();
+          const grouped=new Map();
+          for(const device of devices){
+            if(!device.locket_id)continue;
+            if(!grouped.has(device.locket_id))grouped.set(device.locket_id,[]);
+            grouped.get(device.locket_id).push(device);
           }
-          if(!list.length) { const tr=document.createElement('tr');const td=document.createElement('td');td.colSpan=5;td.textContent='Chưa có cấu hình DNS';tr.append(td);body.append(tr); }
+          for(const [index,account] of rows.entries()){
+            const tr=document.createElement('tr');
+            for(const value of [String(skip+index+1),account.locket_id,new Date(account.expires_date).toLocaleString(),new Date(account.expires_date)>new Date()?'Còn hạn quản lý':'Hết hạn quản lý']){
+              const td=document.createElement('td');td.textContent=value;tr.append(td);
+            }
+            const dnsTd=document.createElement('td');
+            const linked=grouped.get(account.locket_id)||[];
+            if(!linked.length){dnsTd.textContent='Chưa cấp link DNS'}
+            else for(const device of linked)addDeviceActions(dnsTd,device);
+            tr.append(dnsTd);
+            const actions=document.createElement('td');
+            const edit=document.createElement('button');
+            edit.type='button';edit.className='secondary';edit.textContent='Sửa / Cấp DNS';
+            edit.onclick=()=>{
+              $('accountId').value=account.locket_id;
+              $('expiry').value=asLocalInput(account.expires_date);
+              $('dnsLabel').value='';$('dnsBlocks').value='';
+              openAccountDialog(true);
+            };
+            const remove=document.createElement('button');
+            remove.type='button';remove.className='secondary';remove.textContent='Xóa';
+            remove.onclick=async()=>{
+              if(!confirm('Xóa tài khoản '+account.locket_id+'? DNS đã liên kết sẽ ngừng áp dụng chính sách nhưng token vẫn tồn tại; hãy thu hồi thiết bị riêng nếu cần.'))return;
+              remove.disabled=true;
+              try{await api('/admin/accounts/'+encodeURIComponent(account.locket_id),{method:'DELETE'});await load()}
+              catch(error){$('adminMessage').textContent=error.message}
+              finally{remove.disabled=false}
+            };
+            actions.append(edit,remove);tr.append(actions);tbody.append(tr);
+          }
+          if(!rows.length){
+            const tr=document.createElement('tr');const td=document.createElement('td');
+            td.colSpan=6;td.textContent='Chưa có tài khoản. Chọn Thêm tài khoản / DNS để bắt đầu.';
+            tr.append(td);tbody.append(tr);
+          }
+          $('previous').disabled=skip===0;
+          $('next').disabled=rows.length<limit||skip+limit>10000;
+          $('page').textContent='Trang '+(skip/limit+1)+' · '+devices.length+' thiết bị DNS';
         }
-        $('dnsRefresh').onclick = () => loadDns().catch(error => $('dnsMessage').textContent=error.message);
-        $('dnsForm').onsubmit = async event => {
-          event.preventDefault(); $('dnsCreate').disabled=true;$('dnsResult').hidden=true;$('dnsMessage').textContent='';
-          try {
-            const expiry = new Date($('dnsExpiry').value);
-            if (Number.isNaN(expiry.getTime()) || expiry <= new Date()) throw Error('Để tạo link mới, hãy chọn ngày trong tương lai.');
-            const result = await api('/api/admin/dns/devices/linked', {method:'POST',body:JSON.stringify({
-              locket_id:$('dnsId').value.trim(),label:$('dnsLabel').value.trim(),expires_at:expiry.toISOString(),
-              block_domains:$('dnsBlocks').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean)
-            })});
-            const url = new URL(result.profile_download_url,location.origin).href;
-            $('dnsLink').textContent=url;$('dnsDownload').href=url;$('dnsResult').hidden=false;
-            $('dnsMessage').textContent='Đã lưu tài khoản quản lý và cấu hình DNS trong MongoDB. Hãy lưu link riêng này.';
-            await Promise.all([loadDns(),load()]);
-          } catch(error) { $('dnsMessage').textContent=error.message; }
-          finally { $('dnsCreate').disabled=false; }
-        };
-
 
         async function enter() {
           if (!session || !Number.isFinite(Date.parse(session.expires_at)) || Date.parse(session.expires_at) <= Date.now()) { clearSession(); return; }
           const admin = await api('/api/admin/me');
           $('identity').textContent = admin.email;
-          await Promise.all([load(),loadDns()]);
+          await load();
           if (!session) return;
           $('loginScreen').hidden = true; $('dashboard').hidden = false;
           clearTimeout(timer);
@@ -1110,9 +1087,25 @@
           event.preventDefault(); $('save').disabled = true;
           $('accountMessage').textContent = '';
           try {
-            await api('/admin/add-account', { method: 'POST', body: JSON.stringify({ locket_id: $('accountId').value, expires_date: new Date($('expiry').value).toISOString() }) });
-            accountDialog.close();
-            $('adminMessage').textContent = 'Account saved.'; await load();
+            const expiry=new Date($('expiry').value);
+            if(Number.isNaN(expiry.getTime()))throw Error('Ngày hết hạn không hợp lệ');
+            const id=$('accountId').value.trim();
+            const label=$('dnsLabel').value.trim();
+            if(label){
+              if(expiry<=new Date())throw Error('Cấp link mới cần chọn ngày hết hạn trong tương lai.');
+              const result=await api('/api/admin/dns/devices/linked',{method:'POST',body:JSON.stringify({
+                locket_id:id,label,expires_at:expiry.toISOString(),
+                block_domains:$('dnsBlocks').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)
+              })});
+              revealDnsLink(result);
+              $('adminMessage').textContent='Đã lưu tài khoản và cấp link DNS. Hãy sao chép link vì chỉ hiển thị một lần.';
+            } else {
+              await api('/admin/add-account',{method:'POST',body:JSON.stringify({
+                locket_id:id,expires_date:expiry.toISOString()
+              })});
+              $('adminMessage').textContent='Đã lưu tài khoản quản lý.';
+            }
+            accountDialog.close();await load();
           } catch (error) {
             $(accountDialog.open ? 'accountMessage' : 'adminMessage').textContent = error.message;
           }
