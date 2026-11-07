@@ -816,19 +816,25 @@
           <div class="field"><label for="expiry">Expires at · local time</label><input id="expiry"
               type="datetime-local" required></div>
         </div>
+        <div class="field"><label for="dnsLabel">Tên thiết bị để cấp link DNS (tùy chọn)</label><input id="dnsLabel" maxlength="80" placeholder="iPhone 15 — để trống nếu chỉ lưu tài khoản"></div>
+        <div class="field"><label for="dnsBlocks">Tên miền DNS cần chặn, mỗi dòng một tên miền (tùy chọn)</label><textarea id="dnsBlocks" rows="2" style="width:100%" placeholder="ads.example.com"></textarea></div>
+        <p class="quiet">Nếu có tên thiết bị, tài khoản và DNS được lưu cùng một thao tác. Chỉ dùng ngày tương lai khi cấp link mới. Muốn thử hết hạn DNS, dùng nút đổi ngày ở thiết bị đã có.</p>
         <p class="status" id="accountMessage" role="status" aria-live="polite"></p>
         <div class="dialog-actions">
           <button class="secondary" id="cancelAccount" type="button">Cancel</button>
-          <button id="save" type="submit"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>&nbsp; Save account</button>
+          <button id="save" type="submit"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>&nbsp; Lưu tài khoản / cấp link</button>
         </div>
       </form>
       </dialog>
       <section class="directory-panel" aria-labelledby="directoryTitle">
       <div class="directory-heading">
-        <div class="section-title"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 20v-3a6 6 0 0 1 12 0v3m2-16a3 3 0 0 1 0 6m2 10v-3a6 6 0 0 0-2-4"/></svg><h3 id="directoryTitle">Accounts</h3></div>
-        <button id="addAccount" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add account</button>
+        <div class="section-title"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 20v-3a6 6 0 0 1 12 0v3m2-16a3 3 0 0 1 0 6m2 10v-3a6 6 0 0 0-2-4"/></svg><h3 id="directoryTitle">Tài khoản &amp; thiết bị DNS</h3></div>
+        <button id="addAccount" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Thêm tài khoản / DNS</button>
       </div>
       <p class="status" id="adminMessage" role="status" aria-live="polite"></p>
+        <p class="quiet">Quản lý tài khoản và DNS ở cùng một danh sách. Link DNS chỉ hiển thị một lần lúc cấp để bảo vệ token; không cần cài lại khi đổi hạn.</p>
+        <div id="dnsResult" hidden><p class="quiet">Link riêng chỉ hiện khi tạo. Đừng đăng công khai hoặc chụp ảnh kèm token.</p><pre id="dnsLink" style="white-space:pre-wrap;word-break:break-all;user-select:all"></pre><a id="dnsDownload" href="#">Tải cấu hình .mobileconfig</a></div>
+
       <div class="scroll">
         <table>
           <thead>
@@ -847,27 +853,6 @@
           class="quiet" id="page"></span><button class="secondary" id="next" type="button">Next →</button></div>
       </section>
       </div>
-      <section class="directory-panel" id="dnsWorkspace" aria-labelledby="dnsTitle" style="margin-top:20px">
-        <div class="directory-heading"><div class="section-title"><h3 id="dnsTitle">Thiết bị &amp; Link DNS</h3></div>
-          <button class="secondary" id="dnsRefresh" type="button">Làm mới</button></div>
-        <p class="quiet">Một trang quản trị: tạo hoặc cập nhật Locket ID, lưu hạn quản lý vào MongoDB và cấp link DNS riêng. Đây không phải quyền thuê bao Gold của Locket.</p>
-        <form id="dnsForm" style="margin:12px 0">
-          <div class="row" style="flex-wrap:wrap">
-            <div class="field"><label for="dnsId">Locket ID</label><input id="dnsId" required maxlength="128" pattern="[A-Za-z0-9_$:@.\\-]+" autocomplete="off" placeholder="user_123"></div>
-            <div class="field"><label for="dnsLabel">Tên thiết bị</label><input id="dnsLabel" required maxlength="80" placeholder="iPhone thử nghiệm"></div>
-            <div class="field"><label for="dnsExpiry">Ngày giờ hết hạn</label><input id="dnsExpiry" type="datetime-local" required></div>
-          </div>
-          <div class="field"><label for="dnsBlocks">Tên miền chặn (mỗi dòng một tên miền, có thể để trống)</label><textarea id="dnsBlocks" rows="2" style="width:100%;max-width:600px" placeholder="ads.example.com"></textarea></div>
-          <button id="dnsCreate" type="submit">Lưu ID và tạo link DNS</button>
-        </form>
-        <p class="status" id="dnsMessage" role="status" aria-live="polite"></p>
-        <div id="dnsResult" hidden><p class="quiet">Link riêng chỉ hiện khi tạo. Đừng đăng công khai hoặc chụp ảnh kèm token.</p><pre id="dnsLink" style="white-space:pre-wrap;word-break:break-all;user-select:all"></pre><a id="dnsDownload" href="#">Tải cấu hình .mobileconfig</a></div>
-        <div class="scroll"><table>
-          <thead><tr><th>Thiết bị</th><th>Locket ID</th><th>Hết hạn DNS</th><th>Trạng thái</th><th>Chọn ngày &amp; thao tác</th></tr></thead>
-          <tbody id="dnsRows"></tbody>
-        </table></div>
-        <p class="quiet">Cho phép chọn ngày quá khứ để kiểm thử hết hạn DNS. Trạng thái Gold thật không thay đổi. Đổi hạn tài khoản liên kết có thể ảnh hưởng những thiết bị cùng Locket ID.</p>
-      </section>
     </section>
     <script nonce="__NONCE__">
       (() => {
@@ -940,7 +925,7 @@
           clearTimeout(timer); session = null;
           try { localStorage.removeItem(key); } catch { }
           $('dashboard').hidden = true; $('loginScreen').hidden = false;
-          $('accounts').replaceChildren(); $('dnsRows').replaceChildren(); $('identity').textContent = '';
+          $('accounts').replaceChildren(); $('identity').textContent = '';
           $('dnsResult').hidden = true; $('dnsLink').textContent='';$('dnsDownload').removeAttribute('href');
           $('accountForm').reset(); $('adminMessage').textContent = '';
         }
