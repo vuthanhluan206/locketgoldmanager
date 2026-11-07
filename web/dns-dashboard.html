@@ -11,13 +11,13 @@ button:disabled{opacity:.5}pre{white-space:pre-wrap;word-break:break-word;backgr
 table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #ddd;padding:10px;text-align:left}
 a{color:#205a9a}small{color:#58677d}#status{font-weight:600}
 </style></head><body><main><h1>Managed DNS</h1>
-<p>Thời hạn DNS là quyền truy cập dịch vụ quản lý, không phải quyền Locket Gold. Liên kết ID yêu cầu tài khoản đã được tạo trong trang quản trị.  <a href="/admin-gmnWJ5nG3qZRcdku3eBtkIka">Trang quản trị chính</a></p>
-<section><h2>Tạo cấu hình thiết bị</h2><form id="deviceForm">
+<p>Tạo Locket ID quản lý và link DNS chỉ bằng một thao tác. Thời hạn ở đây chỉ áp dụng cho dịch vụ DNS, không cấp quyền Locket Gold.  <a href="/admin-gmnWJ5nG3qZRcdku3eBtkIka">Trang quản trị chính</a></p>
+<section><h2>Tạo ID + Link DNS</h2><form id="deviceForm">
 <label>Tên thiết bị<input id="label" maxlength="80" required placeholder="iPhone 15"></label>
-<label>Locket ID (tùy chọn, phải tồn tại trong Quản lý tài khoản)<input id="locketId" maxlength="128" placeholder="Locket ID"></label>
+<label>Locket ID <input id="locketId" maxlength="128" required pattern="[A-Za-z0-9_$:@.\\-]+" placeholder="Locket ID"></label>
 <label>Hết hạn (giờ trên thiết bị)<input id="expiry" type="datetime-local" required></label>
 <label>Chặn tên miền (mỗi dòng một tên miền)<textarea id="domains" rows="4" placeholder="ads.example.com"></textarea></label>
-<button id="create">Tạo cấu hình</button></form>
+<button id="create">Tạo ID &amp; lấy link DNS</button></form>
 <p id="status" role="status"></p><div id="result" hidden><p><strong>Liên kết cấu hình riêng (chỉ hiện một lần):</strong></p>
 <pre id="url"></pre><a id="download" href="#">Tải .mobileconfig</a></div></section>
 <section><h2>Thiết bị</h2><button id="refresh" type="button">Làm mới</button>
@@ -43,10 +43,9 @@ const td=document.createElement('td');td.textContent=val;tr.appendChild(td)}
 const td=document.createElement('td');
 const renew=document.createElement('button');renew.textContent='Gia hạn 30 ngày';renew.disabled=!d.enabled;
 renew.onclick=async()=>{try{
-const start=Math.max(Date.now(),new Date(d.expires_at).getTime());
-await api('/api/admin/dns/devices/'+d.id,{method:'PUT',body:JSON.stringify({
-label:d.label,locket_id:d.locket_id||null,expires_at:new Date(start+30*86400000).toISOString(),
-block_domains:d.block_domains})});await refresh()
+await api('/api/admin/dns/devices/'+d.id+'/renew',{method:'POST',body:JSON.stringify({days:30})});
+$('status').textContent='Đã gia hạn DNS và thời hạn tài khoản liên kết (nếu có). Không cần tải lại file.';
+await refresh()
 }catch(e){$('status').textContent=e.message}};
 td.appendChild(renew);
 const b=document.createElement('button');b.textContent='Thu hồi';b.disabled=!d.enabled;
@@ -59,12 +58,12 @@ e.preventDefault();$('create').disabled=true;$('result').hidden=true;$('status')
 try{
 const expiry=new Date($('expiry').value);
 if(Number.isNaN(expiry.getTime()))throw Error('Ngày hết hạn không hợp lệ');
-const d=await api('/api/admin/dns/devices',{method:'POST',body:JSON.stringify({
+const d=await api('/api/admin/dns/devices/linked',{method:'POST',body:JSON.stringify({
 label:$('label').value,locket_id:$('locketId').value.trim()||null,expires_at:expiry.toISOString(),
 block_domains:$('domains').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)})});
 const url=new URL(d.profile_download_url,location.origin).href;
 $('url').textContent=url;$('download').href=url;$('result').hidden=false;
-$('status').textContent='Đã tạo. Lưu liên kết ngay: token sẽ không được hiển thị lại.';
+$('status').textContent='Đã tạo. Đã tạo hoặc cập nhật ID quản lý và link DNS. Lưu liên kết ngay: token sẽ không được hiển thị lại.';
 await refresh()
 }catch(e){$('status').textContent=e.message}
 finally{$('create').disabled=false}
