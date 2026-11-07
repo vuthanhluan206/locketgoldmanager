@@ -111,7 +111,7 @@ async def download_proxy_profile(request: Request):
 @router.get("/proxy.pac", response_class=Response)
 async def get_proxy_pac(request: Request):
     """
-    Trả về file cấu hình PAC để định tuyến locket qua domain của bạn.
+    Trả về file cấu hình PAC để định tuyến qua domain của bạn.
     """
     host = request.headers.get("host", "locketgold.vuthanhluan.bond")
     pac_content = f"""
@@ -128,7 +128,7 @@ function FindProxyForURL(url, host) {{
 @router.get("/{filename}", include_in_schema=False)
 async def handle_static_files(filename: str):
     """
-    Bắt các request file tĩnh ngầm từ thiết bị để làm sạch nhật ký log trên Vercel.
+    Bắt các request file tĩnh ngầm để làm sạch nhật ký log trên Vercel.
     """
     if any(filename.endswith(ext) for ext in [".png", ".ico", ".txt", ".xml", ".json"]):
         return Response(status_code=204)
@@ -175,11 +175,14 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     body = await request.body()
     timeout_limit = 60.0 if is_upload else 30.0
 
-    # ================= LOGIC ĐÁNH CHẶN VÀ SỬA ẢNH (ĐỔI TÓC ĐỎ) TRONG PROXY =================
-    if method in ["POST", "PUT", "PATCH"] and "image/" in content_type_header.lower():
+    # ================= LOGIC XỬ LÝ ẢNH QUA AI (ĐỔI TÓC ĐỎ) =================
+    if method in ["POST", "PUT", "PATCH"] and (
+        "multipart/form-data" in content_type_header.lower()
+        or "octet-stream" in content_type_header.lower()
+        or "image/" in content_type_header.lower()
+    ):
         try:
             if body:
-                # Prompt cấu hình đổi màu tóc thành màu đỏ rực rỡ để test
                 ai_prompt = "strictly change hair color to vibrant fiery red hair, highly detailed, realistic hair texture"
                 modified_bytes = await process_image_with_ai(body, ai_prompt)
                 
@@ -187,7 +190,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                     body = modified_bytes
         except Exception as e:
             print(f"[AI Proxy Error] Không thể xử lý qua AI, giữ nguyên ảnh gốc: {e}")
-    # =======================================================================================
+    # ======================================================================
 
     try:
         upstream_status, upstream_headers, upstream_content = await asyncio.to_thread(
