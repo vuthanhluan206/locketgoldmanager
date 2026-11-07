@@ -1081,7 +1081,7 @@
             if (Number.isNaN(expiry.getTime()) || expiry <= new Date()) throw Error('Để tạo link mới, hãy chọn ngày trong tương lai.');
             const result = await api('/api/admin/dns/devices/linked', {method:'POST',body:JSON.stringify({
               locket_id:$('dnsId').value.trim(),label:$('dnsLabel').value.trim(),expires_at:expiry.toISOString(),
-              block_domains:$('dnsBlocks').value.split(/\\r?\\n/).map(s=>s.trim()).filter(Boolean)
+              block_domains:$('dnsBlocks').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean)
             })});
             const url = new URL(result.profile_download_url,location.origin).href;
             $('dnsLink').textContent=url;$('dnsDownload').href=url;$('dnsResult').hidden=false;
