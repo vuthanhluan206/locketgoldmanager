@@ -1110,8 +1110,8 @@
           const result = await api('/api/admin/certificates/root');
           if(!session)return;
           $('rootCaInfo').textContent = result.configured
-            ? 'Đã lưu chứng chỉ (không tự phân phối)\\nTên: '+result.subject+'\\nSHA-256: '+result.fingerprint_sha256+
-              '\\nHiệu lực: '+new Date(result.not_before).toLocaleString()+' — '+new Date(result.not_after).toLocaleString()
+            ? 'Đã lưu chứng chỉ (không tự phân phối)\nTên: '+result.subject+'\nSHA-256: '+result.fingerprint_sha256+
+              '\nHiệu lực: '+new Date(result.not_before).toLocaleString()+' — '+new Date(result.not_after).toLocaleString()
             : 'Chưa có chứng chỉ gốc được lưu.';
         }
         $('rootCaForm').onsubmit=async event=>{
