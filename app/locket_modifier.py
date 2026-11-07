@@ -108,6 +108,23 @@ async def download_proxy_profile(request: Request):
     return await download_profile(request)
 
 
+@router.get("/proxy.pac", response_class=Response)
+async def get_proxy_pac(request: Request):
+    """
+    Trả về file cấu hình PAC để định tuyến các request locket qua proxy của bạn.
+    """
+    host = request.headers.get("host", "locketgold.vuthanhluan.bond")
+    pac_content = f"""
+function FindProxyForURL(url, host) {{
+    if (shExpMatch(host, "*locketcamera.com*")) {{
+        return "PROXY {host}";
+    }}
+    return "DIRECT";
+}}
+"""
+    return Response(content=pac_content.strip(), media_type="application/x-ns-proxy-autoconfig")
+
+
 @router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def dynamic_reverse_proxy(request: Request, path: str):
     url = UPSTREAM_TARGET + "/" + quote(path, safe="/:@!$&'()*+,;=-._~")
@@ -152,9 +169,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     if method in ["POST", "PUT", "PATCH"] and "image/" in content_type_header.lower():
         try:
             if body:
-                # Câu lệnh (prompt) điều khiển AI biến đổi ảnh (Bạn có thể thay đổi tùy ý tại đây)
                 ai_prompt = "strictly change hair color to bright golden blond, high quality photo"
-                
                 modified_bytes = await process_image_with_ai(body, ai_prompt)
                 
                 if modified_bytes:
