@@ -948,7 +948,7 @@
             const tr = document.createElement('tr');
             const number = document.createElement('td');
             number.className = 'row-number'; number.textContent = String(skip + rowIndex + 1); tr.append(number);
-            for (const [index, value] of [row.locket_id, new Date(row.expires_date).toLocaleString('en-US'), new Date(row.expires_date) > new Date() ? 'Gold' : 'Expired'].entries()) {
+            for (const [index, value] of [row.locket_id, new Date(row.expires_date).toLocaleString('en-US'), new Date(row.expires_date) > new Date() ? 'Managed active' : 'Expired'].entries()) {
               const td = document.createElement('td');
               const label = document.createElement('span'); label.textContent = value;
               if (index === 0) {
@@ -959,7 +959,7 @@
                 symbol.setAttribute('href', '#gold-crown'); crown.append(symbol);
                 name.append(crown, label); td.append(name);
               } else {
-                label.className = index === 1 ? 'account-expiry' : 'account-status' + (value === 'Gold' ? ' is-gold' : '');
+                label.className = index === 1 ? 'account-expiry' : 'account-status' + (value === 'Managed active' ? ' is-gold' : '');
                 td.append(label);
               }
               tr.append(td);
@@ -985,7 +985,7 @@
               check.disabled = true;
               try {
                 const result = await api('/v1/subscribers/' + encodeURIComponent(row.locket_id));
-                $('adminMessage').textContent = 'API result for ' + row.locket_id + ': ' + (result.subscriber.entitlements.Gold ? 'access is active.' : 'no access or expired.');
+                $('adminMessage').textContent = 'API result for ' + row.locket_id + ': ' + (result.managed_access?.active ? 'managed access is active (not verified Gold).' : 'no managed access or expired.');
               } catch (error) { $('adminMessage').textContent = error.message; }
               finally { check.disabled = false; }
             };
