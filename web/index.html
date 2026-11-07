@@ -843,6 +843,7 @@
               <th scope="col">Account</th>
               <th scope="col">Expires at</th>
               <th scope="col">Status</th>
+              <th scope="col">Thiết bị DNS</th>
               <th scope="col">Actions</th>
             </tr>
           </thead>
@@ -1060,7 +1061,7 @@
               const empty=document.createElement('td');tr.append(empty);tbody.append(tr);
             }
           }
-          if(!rows.length){
+          if(!rows.length && devices.length===0){
             const tr=document.createElement('tr');const td=document.createElement('td');
             td.colSpan=6;td.textContent='Chưa có tài khoản. Chọn Thêm tài khoản / DNS để bắt đầu.';
             tr.append(td);tbody.append(tr);
