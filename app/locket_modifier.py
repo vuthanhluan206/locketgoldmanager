@@ -22,36 +22,39 @@ from .security import token_digest
 # Đọc đường dẫn Admin từ Vercel, mặc định là /admin
 ADMIN_PATH = os.getenv("ADMIN_PATH", "/admin")
 
-# Lưu ý: Router đã có prefix="/proxy", nên URL truy cập thực tế sẽ là /proxy/admin (hoặc /proxy/ADMIN_PATH)
-router = APIRouter(prefix="/proxy", tags=["Locket Proxy"])
+# ================= ĐÃ GỠ BỎ PREFIX="/proxy" ĐỂ ADMIN NẰM Ở GỐC =================
+router = APIRouter(tags=["Locket Proxy"])
 
 HOP_HEADERS = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
                'te', 'trailer', 'transfer-encoding', 'upgrade'}
 MAX_RESPONSE = 50 * 1024 * 1024
 
-# ================= GIAO DIỆN & BẢO MẬT ADMIN (CLOUDFLARE + MONGODB) =================
 FAILED_LOGIN_ATTEMPTS = {}
 MAX_FAILURES = 5
-LOCKOUT_TIME = 300  # Khóa IP 5 phút nếu spam sai mật khẩu
+LOCKOUT_TIME = 300 
 
 class AccountRequest(BaseModel):
-    admin_user: str      # Nhận từ form đăng nhập của web/index.html
-    admin_pass: str      # Nhận từ form đăng nhập của web/index.html
+    admin_user: str      
+    admin_pass: str      
     locket_id: str
     note: str = ""
 
+# ĐƯỜNG DẪN ADMIN HOẠT ĐỘNG Ở GỐC (VD: domain.com/admin)
 @router.get(ADMIN_PATH, response_class=FileResponse)
 async def get_admin_page():
-    """Load trực tiếp giao diện Admin tĩnh của bạn"""
-    return FileResponse("web/index.html")
+    # Khắc phục triệt để lỗi 500 vỡ giao diện trên Vercel bằng đường dẫn tuyệt đối
+    current_dir = os.path.dirname(os.path.realpath(__file__))
+    file_path = os.path.join(current_dir, "..", "web", "index.html")
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Không tìm thấy file giao diện web/index.html")
+    return FileResponse(file_path)
 
 @router.post(f"{ADMIN_PATH}/add")
 async def api_add_account(req: Request, data: AccountRequest):
-    """API để giao diện web/index.html gọi fetch POST ngầm lên"""
     client_ip = req.headers.get("cf-connecting-ip") or req.headers.get("x-forwarded-for") or req.client.host
     now = time.time()
     
-    # 1. Kiểm tra Rate Limiting (chống Brute-force IP)
     if client_ip in FAILED_LOGIN_ATTEMPTS:
         attempts, last_fail = FAILED_LOGIN_ATTEMPTS[client_ip]
         if attempts >= MAX_FAILURES:
@@ -66,7 +69,6 @@ async def api_add_account(req: Request, data: AccountRequest):
     
     admins_col = accounts_col.database["admins"]
     
-    # 2. Xác thực tài khoản Admin trong MongoDB
     admin_user_db = await admins_col.find_one({
         "username": data.admin_user, 
         "password": data.admin_pass
@@ -79,7 +81,6 @@ async def api_add_account(req: Request, data: AccountRequest):
             FAILED_LOGIN_ATTEMPTS[client_ip] = (1, now)
         raise HTTPException(status_code=401, detail="Sai tài khoản hoặc mật khẩu Quản trị!")
 
-    # 3. Đăng nhập đúng -> Xóa lịch sử lỗi và Cấp Gold
     if client_ip in FAILED_LOGIN_ATTEMPTS:
         del FAILED_LOGIN_ATTEMPTS[client_ip]
         
@@ -152,11 +153,12 @@ def _extract_locket_id(path: str, data: dict, request_headers: dict) -> str:
             return parts[idx + 1]
     return ''
 
-@router.get("/install", response_class=Response)
+# ================= CÁC ĐƯỜNG DẪN PROXY LOCKET ĐƯỢC GẮN CHỮ /proxy THỦ CÔNG =================
+@router.get("/proxy/install", response_class=Response)
 async def download_proxy_profile(request: Request):
     return await download_profile(request)
 
-@router.get("/proxy.pac", response_class=Response)
+@router.get("/proxy/proxy.pac", response_class=Response)
 async def get_proxy_pac(request: Request):
     host = request.headers.get("host", "locketgold.vuthanhluan.bond")
     pac_content = f"""
@@ -169,13 +171,13 @@ function FindProxyForURL(url, host) {{
 """
     return Response(content=pac_content.strip(), media_type="application/x-ns-proxy-autoconfig")
 
-@router.get("/{filename}", include_in_schema=False)
+@router.get("/proxy/{filename}", include_in_schema=False)
 async def handle_static_files(filename: str):
     if any(filename.endswith(ext) for ext in [".png", ".ico", ".txt", ".xml", ".json"]):
         return Response(status_code=204)
     raise HTTPException(status_code=404, detail="Not Found")
 
-@router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+@router.api_route("/proxy/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def dynamic_reverse_proxy(request: Request, path: str):
     original_host = request.headers.get("host", "")
     if "revenuecat.com" in original_host:
@@ -251,7 +253,6 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                 if isinstance(data, dict):
                     candidate_id = _extract_locket_id(path, data, dict(request.headers))
                     
-                    # Chỉ cấp Gold nếu ID tồn tại và có trạng thái "active" trong Database
                     if accounts_col is not None and candidate_id:
                         account_record = await accounts_col.find_one({"locket_id": candidate_id, "status": "active"}, {"_id": 0})
                         
