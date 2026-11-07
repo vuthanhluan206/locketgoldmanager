@@ -5,6 +5,7 @@ import urllib.error
 import urllib.request
 import httpx
 import os
+import time
 from datetime import datetime, timezone
 from urllib.parse import quote
 from starlette.datastructures import Headers
@@ -19,45 +20,88 @@ from .models import subscriber_response
 from .routers.management import download_profile
 from .security import token_digest
 
+# Định nghĩa đường dẫn Admin động từ biến môi trường (Mặc định là /admin nếu chưa cài)
+ADMIN_PATH = os.getenv("ADMIN_PATH", "/admin")
+
 router = APIRouter(prefix="/proxy", tags=["Locket Proxy"])
 
 HOP_HEADERS = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
                'te', 'trailer', 'transfer-encoding', 'upgrade'}
 MAX_RESPONSE = 50 * 1024 * 1024
 
-# ================= CƠ CHẾ BẢO MẬT ADMIN (BIẾN MÔI TRƯỜNG) =================
+
+# ================= BẢO MẬT ADMIN & CHỐNG BRUTE-FORCE CLOUDFLARE =================
 security = HTTPBasic()
 
-def verify_admin(credentials: HTTPBasicCredentials = Depends(security)):
-    # Đặt biến môi trường ADMIN_PASSWORD trên Vercel, mặc định là 'admin123' nếu quên cấu hình
-    admin_password = os.getenv("ADMIN_PASSWORD", "admin123")
+# Bộ nhớ đệm lưu số lần đăng nhập sai của các IP
+FAILED_LOGIN_ATTEMPTS = {}
+MAX_FAILURES = 5
+LOCKOUT_TIME = 300  # Khóa IP trong 300 giây (5 phút)
+
+async def verify_admin(request: Request, credentials: HTTPBasicCredentials = Depends(security)):
+    # 1. Lấy IP thực của người dùng từ Cloudflare (CF-Connecting-IP)
+    client_ip = request.headers.get("cf-connecting-ip") or request.headers.get("x-forwarded-for") or request.client.host
+    now = time.time()
     
-    is_user_ok = secrets.compare_digest(credentials.username, "admin")
-    is_pass_ok = secrets.compare_digest(credentials.password, admin_password)
+    # 2. Kiểm tra giới hạn IP (Rate Limiting)
+    if client_ip in FAILED_LOGIN_ATTEMPTS:
+        attempts, last_fail = FAILED_LOGIN_ATTEMPTS[client_ip]
+        if attempts >= MAX_FAILURES:
+            if now - last_fail < LOCKOUT_TIME:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="IP của bạn đã bị khóa tạm thời do nhập sai mật khẩu quá nhiều lần."
+                )
+            else:
+                del FAILED_LOGIN_ATTEMPTS[client_ip] # Hết giờ phạt, mở khóa
+
+    # 3. Lấy collection 'admins' từ MongoDB (Tái sử dụng kết nối từ app.state)
+    accounts_col = getattr(request.app.state, "accounts", None)
+    if accounts_col is None:
+        raise HTTPException(503, "Không thể kết nối Database")
+    admins_col = accounts_col.database["admins"] # Tạo/gọi collection 'admins'
     
-    if not (is_user_ok and is_pass_ok):
+    # 4. Xác thực tài khoản Admin trong Database
+    admin_user = await admins_col.find_one({
+        "username": credentials.username, 
+        "password": credentials.password
+    })
+    
+    if not admin_user:
+        # Ghi nhận 1 lần đăng nhập sai cho IP này
+        if client_ip in FAILED_LOGIN_ATTEMPTS:
+            FAILED_LOGIN_ATTEMPTS[client_ip] = (FAILED_LOGIN_ATTEMPTS[client_ip][0] + 1, now)
+        else:
+            FAILED_LOGIN_ATTEMPTS[client_ip] = (1, now)
+            
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Tài khoản hoặc mật khẩu Quản trị viên không chính xác",
             headers={"WWW-Authenticate": "Basic"},
         )
+    
+    # Đăng nhập thành công -> Xóa lịch sử lỗi của IP này
+    if client_ip in FAILED_LOGIN_ATTEMPTS:
+        del FAILED_LOGIN_ATTEMPTS[client_ip]
+        
     return credentials.username
 
 class AccountRequest(BaseModel):
     locket_id: str
     note: str = ""
 
-@router.get("/admin", response_class=FileResponse)
+# Đăng ký route bằng biến ADMIN_PATH
+@router.get(ADMIN_PATH, response_class=FileResponse)
 async def get_admin_page(admin_user: str = Depends(verify_admin)):
-    """Trả về file web/index.html. Trình duyệt sẽ yêu cầu nhập user/pass trước khi hiển thị"""
+    """Đường dẫn động, yêu cầu đăng nhập DB và kiểm tra IP"""
     return FileResponse("web/index.html")
 
-@router.post("/admin/add")
+@router.post(f"{ADMIN_PATH}/add")
 async def api_add_account(req: Request, data: AccountRequest, admin_user: str = Depends(verify_admin)):
-    """API thêm ID vào MongoDB, được bảo vệ bởi Basic Auth"""
+    """API thêm ID vào MongoDB cũng được bảo vệ nghiêm ngặt"""
     accounts_col = getattr(req.app.state, "accounts", None)
     if accounts_col is None:
-        raise HTTPException(503, "Không thể kết nối đến cơ sở dữ liệu")
+        raise HTTPException(503, "Database unavailable")
     
     await accounts_col.update_one(
         {"locket_id": data.locket_id},
@@ -70,7 +114,7 @@ async def api_add_account(req: Request, data: AccountRequest, admin_user: str = 
         upsert=True
     )
     return {"status": "success", "message": f"Đã cấp quyền Gold cho ID: {data.locket_id}"}
-# ==========================================================================
+# ====================================================================================
 
 async def process_image_with_ai(image_bytes: bytes, prompt: str) -> bytes:
     api_token = os.getenv("HUGGINGFACE_API_TOKEN", "")
@@ -112,9 +156,7 @@ def _forward_upstream(url: str, body: bytes | None, headers: dict[str, str], met
         return response.code, dict(response.headers.items()), content
 
 def _extract_locket_id(path: str, data: dict, request_headers: dict) -> str:
-    """Định vị ID chính xác bằng cách quét ưu tiên Header của RevenueCat"""
     headers_lower = {k.lower(): v for k, v in request_headers.items()}
-    
     for hk in ["x-app-user-id", "x-revenuecat-app-user-id", "x-locket-user-id"]:
         if hk in headers_lower and headers_lower[hk]:
             return headers_lower[hk]
@@ -229,8 +271,6 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                 if isinstance(data, dict):
                     candidate_id = _extract_locket_id(path, data, dict(request.headers))
                     
-                    # ================= SỬA LỖI CẤP GOLD HÀNG LOẠT =================
-                    # Chỉ kiểm tra và ghi đè JSON nếu lấy được ID và ID đó TỒN TẠI trong MongoDB
                     if accounts_col is not None and candidate_id:
                         account_record = await accounts_col.find_one({"locket_id": candidate_id, "status": "active"}, {"_id": 0})
                         
@@ -250,8 +290,6 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                                     values.pop(key, None)
                                     values.update(sub_payload['subscriber'][field])
                                     subscriber[field] = values
-                    # Nếu account_record là None, code sẽ bỏ qua việc thêm entitlements 
-                    # và trả về JSON gốc (tài khoản không có Gold).
 
             for key in ('etag', 'content-md5', 'digest', 'content-encoding'):
                 response_headers.pop(key, None)
