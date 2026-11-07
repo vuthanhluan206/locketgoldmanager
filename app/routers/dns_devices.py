@@ -1,5 +1,6 @@
 """Admin-managed device DNS profiles. Never handles third-party purchase receipts."""
 import hashlib
+from pathlib import Path
 import os
 import re
 import secrets
@@ -7,6 +8,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 from app.dns_profile import build_dns_profile
@@ -86,6 +88,27 @@ async def create_device(data: DeviceInput, request: Request):
     }
 
 
+@admin_router.put("/devices/{device_id}")
+async def update_device(device_id: str, data: DeviceInput, request: Request):
+    if not re.fullmatch(r"[0-9a-f]{24}", device_id):
+        raise HTTPException(404, "Device not found")
+    if data.expires_at <= datetime.now(timezone.utc):
+        raise HTTPException(422, "expires_at must be in the future")
+    coll = collection(request)
+    doc = await coll.find_one_and_update(
+        {"_id": device_id, "enabled": True},
+        {"$set": {
+            "label": data.label,
+            "expires_at": data.expires_at,
+            "block_domains": data.block_domains,
+        }},
+        return_document=True,
+    )
+    if doc is None:
+        raise HTTPException(404, "Device not found")
+    return render(doc)
+
+
 @admin_router.get("/devices")
 async def list_devices(request: Request):
     records = await collection(request).find({}, {"token_hash": 0}).sort("created_at", -1).limit(100).to_list(100)
@@ -116,3 +139,9 @@ async def download_profile(token: str, request: Request):
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "no-referrer",
     })
+
+
+@router.get("/dns/dashboard", response_class=HTMLResponse, include_in_schema=False)
+async def dns_dashboard(request: Request):
+    page = (Path(__file__).resolve().parents[2] / "web" / "dns-dashboard.html").read_text(encoding="utf-8")
+    return HTMLResponse(page.replace("__NONCE__", request.state.csp_nonce), headers={"Cache-Control": "no-store"})

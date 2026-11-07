@@ -64,6 +64,7 @@ async def lookup_policy(request: Request, token: str) -> dict:
         if not isinstance(obj.get("block_domains"), list):
             raise ValueError("Invalid policy")
         policy = {
+            "known": obj.get("known") is True,
             "block_domains": [
                 x.lower().rstrip(".") for x in obj["block_domains"]
                 if isinstance(x, str) and len(x) < 254
@@ -78,7 +79,7 @@ async def lookup_policy(request: Request, token: str) -> dict:
         log.warning("Policy service unavailable: %s", type(exc).__name__)
         if cached:
             return cached[1]
-        return {"block_domains": []}
+        raise HTTPException(503, "Policy temporarily unavailable")
 
 
 def denied_domain(domain: str, blocked: list[str]) -> bool:
@@ -110,6 +111,8 @@ async def handle(request: Request, token: str) -> Response:
     if len(query.question) != 1:
         raise HTTPException(400, "Exactly one DNS question is required")
     policy = await lookup_policy(request, token)
+    if not policy["known"]:
+        raise HTTPException(403, "Unregistered DNS configuration")
     qname = query.question[0].name.to_text()
     if denied_domain(qname, policy["block_domains"]):
         answer = dns.message.make_response(query)

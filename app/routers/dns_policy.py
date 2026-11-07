@@ -44,6 +44,7 @@ async def policy(
     )
     # Expired/unknown devices use ordinary DNS rather than causing a network outage.
     return {
+        "known": bool(doc),
         "active": active,
         "expires_at": expiry.isoformat() if expiry else None,
         "block_domains": doc.get("block_domains", []) if active else [],
