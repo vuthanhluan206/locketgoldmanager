@@ -28,16 +28,18 @@ MAX_RESPONSE = 50 * 1024 * 1024
 
 def get_prompt_by_filter_id(filter_name_or_id: str) -> str:
     """
-    Ánh xạ tên/mã filter từ app Locket sang câu lệnh (prompt) tương ứng cho AI.
-    Bạn có thể tự do thay đổi hoặc bổ sung các kiểu filter tại đây.
+    Ánh xạ tên/mã filter từ app Locket sang câu lệnh (prompt) chi tiết cho AI.
+    Sử dụng từ khóa tiếng Anh mạnh mẽ để mô hình instruct-pix2pix hiểu và thực thi chính xác hơn.
     """
     filter_map = {
-        "blond_hair": "dye hair blond, high quality, realistic",
-        "vintage": "vintage 90s film grain, warm tones, cinematic",
-        "cyberpunk": "cyberpunk neon lighting, futuristic style, vivid colors",
-        "anime": "transform into anime style, vibrant illustration",
+        "blond_hair": "strictly change hair color to bright golden blond, realistic hair strands",
+        "vintage": "convert to 90s vintage film style, heavy grain, warm analog colors",
+        "cyberpunk": "add cyberpunk neon glowing lights, futuristic purple and blue tones",
+        "anime": "transform into vibrant anime illustration style",
     }
-    return filter_map.get(filter_name_or_id.lower(), "enhance lighting, warm cinematic filter, high quality")
+    # In ra terminal/log để bạn biết app đang gửi mã gì lên
+    print(f"[Filter Debug] Nhận diện filter từ app: '{filter_name_or_id}'")
+    return filter_map.get(filter_name_or_id.lower(), "enhance lighting, vivid colors, high quality photo")
 
 
 async def process_image_with_ai(image_bytes: bytes, prompt: str) -> bytes:
