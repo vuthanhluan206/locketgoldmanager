@@ -259,7 +259,19 @@ def test_password_hash_and_settings(password_pair):
 def test_expiry_boundary():
     now = datetime.now(timezone.utc)
     for account in [None, {'expires_date': now}, {'expires_date': now - timedelta(seconds=1)}]:
-        assert subscriber_response('id', account, now)['subscriber']['entitlements'] == {}
+        result = subscriber_response('id', account, now)
+        assert result['subscriber']['entitlements'] == {}
+        assert result['managed_access']['active'] is False
+        assert result['managed_access']['gold_verified'] is False
+
+
+def test_local_account_cannot_manufacture_gold():
+    now = datetime.now(timezone.utc)
+    result = subscriber_response('id', {'expires_date': now + timedelta(days=30)}, now)
+    assert result['managed_access']['active'] is True
+    assert result['managed_access']['gold_verified'] is False
+    assert result['subscriber']['entitlements'] == {}
+    assert result['subscriber']['subscriptions'] == {}
 
 
 def test_date_only_expiry_is_stored_as_mongodb_datetime(client):
