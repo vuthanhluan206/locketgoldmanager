@@ -1,5 +1,6 @@
 """Admin-managed device DNS profiles. Never handles third-party purchase receipts."""
 import hashlib
+from pathlib import Path
 import os
 import re
 import secrets
@@ -7,6 +8,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 from app.dns_profile import build_dns_profile
@@ -116,3 +118,9 @@ async def download_profile(token: str, request: Request):
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "no-referrer",
     })
+
+
+@router.get("/dns/dashboard", response_class=HTMLResponse, include_in_schema=False)
+async def dns_dashboard(request: Request):
+    page = (Path(__file__).resolve().parents[2] / "web" / "dns-dashboard.html").read_text(encoding="utf-8")
+    return HTMLResponse(page.replace("__NONCE__", request.state.csp_nonce), headers={"Cache-Control": "no-store"})
