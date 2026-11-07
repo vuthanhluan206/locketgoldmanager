@@ -20,7 +20,7 @@ a{color:#205a9a}small{color:#58677d}#status{font-weight:600}
 <button id="create">Tạo ID &amp; lấy link DNS</button></form>
 <p id="status" role="status"></p><div id="result" hidden><p><strong>Liên kết cấu hình riêng (chỉ hiện một lần):</strong></p>
 <pre id="url"></pre><a id="download" href="#">Tải .mobileconfig</a></div></section>
-<section><h2>Thiết bị</h2><button id="refresh" type="button">Làm mới</button>
+<section><h2>Thiết bị</h2><small>Chọn ngày giờ rồi bấm Lưu. Có thể chọn ngày đã qua để thử hết hạn DNS (không thay đổi thuê bao Gold thật). Nếu nhiều thiết bị dùng chung Locket ID, thay đổi hạn tài khoản sẽ ảnh hưởng các thiết bị liên kết.</small><button id="refresh" type="button">Làm mới</button>
 <div style="overflow:auto"><table><thead><tr><th>Tên</th><th>Locket ID</th><th>Hết hạn</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody id="rows"></tbody></table></div></section>
 </main><script nonce="__NONCE__">
 (()=>{
@@ -41,10 +41,21 @@ const tr=document.createElement('tr');
 for(const val of [d.label,d.locket_id||"—",new Date(d.expires_at).toLocaleString(),d.enabled?'Đang bật':'Đã thu hồi']){
 const td=document.createElement('td');td.textContent=val;tr.appendChild(td)}
 const td=document.createElement('td');
-const renew=document.createElement('button');renew.textContent='Gia hạn 30 ngày';renew.disabled=!d.enabled;
+const dateField=document.createElement('input');
+dateField.type='datetime-local';
+dateField.setAttribute('aria-label','Chọn ngày và giờ hết hạn cho '+d.label);
+const current=new Date(d.expires_at);
+const local=new Date(current.getTime()-current.getTimezoneOffset()*60000);
+dateField.value=local.toISOString().slice(0,16);
+dateField.disabled=!d.enabled;
+td.appendChild(dateField);
+const renew=document.createElement('button');renew.textContent='Lưu ngày hết hạn';renew.disabled=!d.enabled;
 renew.onclick=async()=>{try{
-await api('/api/admin/dns/devices/'+d.id+'/renew',{method:'POST',body:JSON.stringify({days:30})});
-$('status').textContent='Đã gia hạn DNS và thời hạn tài khoản liên kết (nếu có). Không cần tải lại file.';
+const selected=new Date(dateField.value);
+if(Number.isNaN(selected.getTime()))throw Error('Hãy chọn ngày giờ hợp lệ');
+if(selected.getTime()<=Date.now()&&!confirm('Ngày đã qua: chính sách DNS sẽ hết hạn. Việc này KHÔNG làm Locket Gold thật hết hạn. Tiếp tục?'))return;
+await api('/api/admin/dns/devices/'+d.id+'/set-expiry',{method:'POST',body:JSON.stringify({expires_at:selected.toISOString()})});
+$('status').textContent='Đã cập nhật ngày hết hạn DNS và tài khoản quản lý liên kết. Không cần cài lại profile.';
 await refresh()
 }catch(e){$('status').textContent=e.message}};
 td.appendChild(renew);
