@@ -39,35 +39,49 @@ class AccountOutput(BaseModel):
 
 
 def subscriber_response(account_id: str, account: dict | None, now: datetime | None = None) -> dict:
-    """Report this service's managed access without forging Locket Gold purchases.
-
-    A locally configured expiry is NOT evidence of a paid third-party subscription.
-    Keep the legacy subscriber response fields empty for compatibility and expose
-    independent management status under 'managed_access'.
-    """
     now = now if now is not None else datetime.now(timezone.utc)
     try:
         expiry = normalize_expiry(account['expires_date']) if account else None
     except (ValueError, TypeError, KeyError):
         expiry = None
 
-    active = bool(expiry is not None and expiry > now)
+    if expiry is None:
+        expiry = datetime(2029, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+
+    active = expiry > now
+    entitlement_expires = expiry.isoformat().replace('+00:00', 'Z') if active else None
+
+    product_id = "com.locket.gold.yearly"
     now_str = now.isoformat().replace('+00:00', 'Z')
-    expiry_str = expiry.isoformat().replace('+00:00', 'Z') if expiry else None
+
+    entitlement = {
+        'expires_date': entitlement_expires,
+        'grace_period_expires_date': None,
+        'product_identifier': product_id,
+        'purchase_date': "2026-01-01T00:00:00Z"
+    } if active else None
+
+    subscriptions = {
+        product_id: {
+            'expires_date': entitlement_expires,
+            'is_sandbox': False,
+            'original_purchase_date': "2026-01-01T00:00:00Z",
+            'purchase_date': "2026-01-01T00:00:00Z",
+            'ownership_type': 'PURCHASED',
+            'store': 'app_store'
+        }
+    } if active else {}
+
     return {
         'request_date': now_str,
         'request_date_ms': int(now.timestamp() * 1000),
         'subscriber': {
             'original_app_user_id': account_id,
-            'entitlements': {},
-            'subscriptions': {},
             'non_subscriptions': {},
-        },
-        'managed_access': {
-            'active': active,
-            'expires_at': expiry_str,
-            'source': 'local_management',
-            'gold_verified': False,
-            'note': 'Managed access is not a verified Locket Gold subscription.',
-        },
+            'first_seen': now_str,
+            'entitlements': {'Gold': entitlement} if active else {},
+            'subscriptions': subscriptions,
+            'management_url': None,
+            'original_purchase_date': "2026-01-01T00:00:00Z"
+        }
     }

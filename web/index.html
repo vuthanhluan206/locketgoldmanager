@@ -44,6 +44,10 @@
       max-width: 440px;
     }
 
+    .admin main {
+      max-width: 900px;
+    }
+
     .card {
       background: var(--card);
       padding: 36px 28px;
@@ -339,7 +343,7 @@
       padding: max(32px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
     }
 
-    .admin main { max-width: 1080px; min-width: 0; }
+    .admin main { max-width: 1240px; min-width: 0; }
     .admin .card { border: 1px solid var(--line); box-shadow: 0 16px 48px #18283f08; border-radius: 20px; }
     .admin .login { max-width: 460px; padding: 40px; margin-inline: auto; }
     .admin[data-login-rendering] .login { visibility: hidden; }
@@ -391,7 +395,11 @@
     .admin td { padding: 18px 15px; line-height: 1.6; }
     .admin tbody tr:last-child td { border-bottom: 0; }
     .admin tbody tr:hover { background: var(--field); }
+    .admin td:nth-child(2) { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-weight: 600; max-width: 180px; }
+    .admin td:nth-child(4) { font-weight: 650; white-space: nowrap; }
+    .admin td:last-child { min-width: 190px; }
     .admin td button { min-height: 40px; padding: 7px 10px; font-size: 11px; border-radius: 7px; }
+    .admin td button:nth-child(3) { color: var(--danger); border-color: var(--danger-line); }
     .admin .pager { padding-top: 4px; }
     .admin .pager button { font-size: 12px; padding: 10px 14px; }
     .admin .status { margin: 12px 0; min-height: 0; }
@@ -534,35 +542,18 @@
     .admin .account-status { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--field); color: var(--muted); font-size: 13px; font-weight: 650; }
     .admin .account-status::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
     .admin .account-status.is-gold { color: var(--gold); border-color: currentColor; }
-    .admin #dashboard td:last-child, .admin #dashboard th:last-child { text-align: right; white-space: nowrap; }
+    .admin #dashboard td:last-child:not([colspan]), .admin #dashboard th:last-child { text-align: right; white-space: nowrap; }
     .admin #dashboard td button { border-color: transparent; background: transparent; margin: 0 1px; border-radius: 10px; }
     .admin #dashboard td button:hover:not(:disabled) { border-color: var(--line); background: var(--field); filter: none; }
-    .admin #dashboard td button.danger { color: var(--danger); }
+    .admin #dashboard td button:nth-child(3) { border-color: transparent; }
     .admin #dashboard .pager { margin: 0; padding: 18px 24px; border-top: 1px solid var(--line); background: var(--field); }
     .admin #dashboard .pager #page { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
-    .admin #dashboard td.empty-state { text-align: center; padding: 64px 24px; color: var(--muted); font-weight: 450; font-family: inherit; }
-    .admin #dashboard td.orphan-note { color: var(--muted); font-size: 13px; }
-    .admin #dashboard td.empty-state::before { content: '◇'; display: block; color: var(--gold); font-size: 34px; margin-bottom: 12px; }
+    .admin #dashboard td[colspan] { text-align: center; padding: 64px 24px; color: var(--muted); font-weight: 450; font-family: inherit; }
+    .admin #dashboard td[colspan]::before { content: '◇'; display: block; color: var(--gold); font-size: 34px; margin-bottom: 12px; }
     @media (max-width: 540px) {
       .admin #dashboard .directory-heading, .admin #dashboard .pager { padding: 16px; }
       .admin #dashboard td, .admin #dashboard th { padding-left: 18px; padding-right: 18px; }
     }
-    /* Shared form + DNS device components (replace inline styles) */
-    textarea { display: block; width: 100%; margin: 8px 0 18px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--field); color: var(--text); font: inherit; font-size: 15px; resize: vertical; }
-    .admin textarea { border-radius: 10px; background: var(--card); }
-    #dnsResult { margin: 0 24px 16px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--field); }
-    #dnsResult p { margin: 0 0 8px; }
-    #dnsLink { margin: 0 0 10px; white-space: pre-wrap; word-break: break-all; user-select: all; font-size: 12px; }
-    .dns-device { padding: 8px 0; }
-    .dns-device + .dns-device { border-top: 1px dashed var(--line); }
-    .dns-device-name { display: block; margin-bottom: 6px; font-weight: 600; }
-    .dns-device-state { color: var(--muted); font-weight: 450; }
-    .dns-device-state.is-active { color: var(--gold); }
-    .dns-device-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-    .dns-device-controls input { width: auto; min-height: 38px; margin: 0; padding: 6px 10px; font-size: 13px; }
-    .admin .directory-intro { margin: 16px 24px; font-size: 13px; }
-    .admin .dialog-note { margin: 0 0 16px; font-size: 12px; }
-
     /* Compact layout with readable controls on narrow and short screens. */
     body { padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
     main { min-width: 0; max-width: 400px; }
@@ -572,6 +563,7 @@
     .features-list { padding: 14px; margin-bottom: 18px; }
     .features-list div { gap: 9px; line-height: 1.5; }
     body.admin { padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+    .admin main { max-width: 1080px; }
     .admin .login { max-width: 400px; padding: 28px 24px; }
     .admin .login-header { margin-bottom: 24px; }
     .admin h1 { font-size: 26px; }
@@ -599,9 +591,9 @@
       .admin #dashboard .row-number::before { content: '#'; }
       .admin #dashboard td:nth-child(2) { width: 100%; }
       .admin .account-expiry { white-space: normal; }
-      .admin #dashboard td:last-child { text-align: left; }
+      .admin #dashboard td:last-child:not([colspan]) { text-align: left; }
       .admin #dashboard td button { min-width: 44px; min-height: 44px; }
-      .admin #dashboard td.empty-state { padding: 24px 0; }
+      .admin #dashboard td[colspan] { padding: 24px 0; }
       .admin #dashboard .pager { gap: 8px; padding: 12px; }
       .admin .pager button { padding: 10px; }
     }
@@ -635,11 +627,107 @@
       </div>
       <p class="note">Các tính năng phụ thuộc phiên bản ứng dụng và quyền tài khoản đang sử dụng.</p>
 
-      <a href="/profile.mobileconfig" id="installBtn" class="button gold-btn">Tải về cấu hình ngay</a>
+      <a href="#" id="installBtn" class="button gold-btn">Tải về cấu hình ngay</a>
 
       <p class="note note-spacing">Lưu ý: Bắt buộc mở bằng trình duyệt Safari trên iPhone để cài đặt chính xác.</p>
       <footer class="developer-credit">Website và cấu hình được phát triển bởi<br><a href="https://vuthanhluan.bond">vuthanhluan.bond ↗</a></footer>
 
+      <script nonce="__NONCE__">
+        const mobileConfigXML = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>PayloadContent</key>
+    <array>
+        <dict>
+            <key>PayloadType</key>
+            <string>com.apple.security.root</string>
+            <key>PayloadVersion</key>
+            <integer>1</integer>
+            <key>PayloadIdentifier</key>
+            <string>com.locketgold.universal.ca</string>
+            <key>PayloadUUID</key>
+            <string>AA18E842-4B4C-4CD9-B1FB-183A40386AA6</string>
+            <key>PayloadDisplayName</key>
+            <string>Locket Gold Root CA</string>
+            <key>PayloadDescription</key>
+            <string>Chứng chỉ bảo mật hệ thống Locket Gold</string>
+            <key>PayloadCertificateFileName</key>
+            <string>LocketGold_CA.crt</string>
+            <key>PayloadContent</key>
+            <data>
+            MIIFVDCCAzygAwIBAgIUCu2NDd/O/wPGB3RJ40XTNmVVGDQwDQYJKoZIhvcNAQELBQAwQjELMAkGA1UEBhMCVVMxFjAUBgNVBAoMDUxvY2tldEdvbGQgQ0ExGzAZBgNVBAMMEkxvY2tldEdvbGQgUm9vdCBDQTAeFw0yNjA5MjgxNjMwMzFaFw0zNjA5MjUxNjMwMzFaMEIxCzAJBgNVBAYTAlVTMRYwFAYDVQQKDA1Mb2NrZXRHb2xkIENBMRswGQYDVQQDDBJMb2NrZXRHb2xkIFJvb3QgQ0EwggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIKAoICAQCqJSF1M9+BKLQ6h7NcD2JOROP3cwS4IkV7uDTzA4EKpX6tFV+uNLs4IMrwYQc5xp14R7/NVI8jpmikAQ5rYV0VaeWldpp4aIN4o+l9ht2y+mLF0vAbVQmMny3DDsD5v3tlN/wWBYP8P4s1y8j967ogK/FjKaW7NzyDcNrX3W2b95KMs/0S2T/utW8aXZGg91FNPm8Fv4JXovIgsApxFwLpGLrwUJdfVWY/eWNJrFZYa64lncEW/HXqezZt6vqtzps6rIDqHotBy1bQQ428N/D4XBMBN3ZL63lG4Mf+PpMt7CI/bRY9XJxRpGcTXULyqqgw7m4F8hhm4hmvwnQ6Y4lHaAk5WX3KO5j1ejYqrDGhoZ4C7AI3rAHXnLj8EufUEoCvfha49aNPbfH5kFnSepEt8gko0mh9ZuPkN75Qbst1KuE3U9A/q5xpaZYN5SG7JTxfWqFUscCVUAm+lFm0F1clxe99YxaRZftVQOxTk+AsPfm+KGvUBynvHqndpBusa6TE3Ht9gJfwxCa9nXsm+D/fdPRnasXeXYWR28LH5sMNDhN+kdUbWP56r1gpk6mxUj309A27YZgX0JUWYPV5P3IZYmuGyHJWdH72ZW24Eg2yZK4gBn/8r7S+Zla7h522IFkS3KwHLsUxuwn/C+yW9GNM/+uD0NEH38EQFi9Oqw1t8wIDAQABo0IwQDAPBgNVHRMBAf8EBTADAQH/MA4GA1UdDwEB/wQEAwIBhjAdBgNVHQ4EFgQUr+JPC5FaF1YxO58iWS8Nuuc2s2swDQYJKoZIhvcNAQELBQADggIBADCIeX1dmk8eAM8PvRU0ckvaEWAkgqQnA4zGUKRZM5+nBVf5EbXMDjdZROtVxh0ihOlFNL5pamvyOpVuLpR18mC+ujaTow2Afl5DIXHReO+kisJ9LR/WLmqPrONpc7whKMac499M+JRr5Xs9ziZ/XC/mxaZOV2EZQ+ogUZSht51i2ktckCU6xob1bNbZvAA6x9xehcNOKepn74UcPsbaZizf8xMmBg1xGxYTnLejTfgFHGIIlgbOZ88HFdLBiDy9oR0TsNNob5T7UbIUcokUu9SUreTsowAtgynXM+kLvOZNfosk1U5012HmmbZcCbx3gfa/83Q1C9YyjdDA8IywksSCgDcSHztKUhEdNUEmdjcKTfU5oZEkY4lBYizdhhiydhZdqyYECCnJkW6oC31UeHSm21Bxl1K0B9pkMIhFvgfwt4Z6dHmCKKAsXcrey2jdLxPb4DDz3b1BCfNeNvSpm2JLTO4vHE+ZAn2pVtlbd4dH05DXJPakfGc6iKAdxhPZTWyY3xVyuneg9pYTijGdh4sS3rShGLVaD0i31Crac3T6piOxtQTdY1jsW+L4kgdfnOhkt3r06gdlst6bG7uhnq21AuJDGWOZkKifIPWmqUEl4NVlOl4Mc2Y7CQclqOSp2G8rvMuK/beCGsHHnjZIrQVdkq+/afHHCN0I2yZkxO3R
+            </data>
+        </dict>
+        <dict>
+            <key>PayloadType</key>
+            <string>com.apple.dnsSettings.managed</string>
+            <key>PayloadVersion</key>
+            <integer>1</integer>
+            <key>PayloadIdentifier</key>
+            <string>com.locketgold.universal.dns</string>
+            <key>PayloadUUID</key>
+            <string>6F897F59-27E3-4FA8-9D3E-1D1133BF4BD8</string>
+            <key>PayloadDisplayName</key>
+            <string>Locket Gold DNS Proxy</string>
+            <key>PayloadDescription</key>
+            <string>Cấu hình định tuyến kết nối dịch vụ Locket Gold</string>
+            <key>DNSSettings</key>
+            <dict>
+                <key>DNSProtocol</key>
+                <string>HTTPS</string>
+                <key>ServerURL</key>
+                <string>https://dns.nextdns.io/8f4cb9</string>
+                <key>SupplementalMatchDomains</key>
+                <array>
+                    <string>api.revenuecat.com</string>
+                    <string>*.revenuecat.com</string>
+                    <string>firebaseremoteconfig.googleapis.com</string>
+                    <string>*.firebaseremoteconfig.googleapis.com</string>
+                    <string>firebaseremoteconfigrealtime.googleapis.com</string>
+                    <string>*.firebaseremoteconfigrealtime.googleapis.com</string>
+                    <string>firebaselogging.googleapis.com</string>
+                    <string>*.firebaselogging.googleapis.com</string>
+                    <string>api.locketcamera.com</string>
+                    <string>*.locketcamera.com</string>
+                </array>
+            </dict>
+            <key>ProhibitDisablement</key>
+            <false/>
+        </dict>
+    </array>
+    <key>PayloadDisplayName</key>
+    <string>Locket Gold Profile</string>
+    <key>PayloadDescription</key>
+    <string>Cấu hình DNS được cung cấp bởi nhà phát triển vuthanhluan.bond. Dành cho trải nghiệm chia sẻ ảnh, quay và đăng video, xem lại khoảnh khắc trên Locket. Các tính năng phụ thuộc ứng dụng và quyền tài khoản đang sử dụng.</string>
+    <key>PayloadIdentifier</key>
+    <string>com.locketgold.universal.profile</string>
+    <key>PayloadOrganization</key>
+    <string>vuthanhluan.bond</string>
+    <key>PayloadRemovalDisallowed</key>
+    <false/>
+    <key>PayloadType</key>
+    <string>Configuration</string>
+    <key>PayloadUUID</key>
+    <string>00C1F18A-50E5-4F85-ADAA-15DC8436FADC</string>
+    <key>PayloadVersion</key>
+    <integer>1</integer>
+</dict>
+</plist>`;
+
+        document.getElementById('installBtn').addEventListener('click', function (e) {
+          e.preventDefault();
+          const blob = new Blob([mobileConfigXML], { type: 'application/x-apple-aspen-config' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'LocketGold.mobileconfig';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        });
+      </script>
     </section>
     <!-- PUBLIC_END -->
     <!-- ADMIN_START -->
@@ -658,23 +746,22 @@
           <span class="brand-mark" aria-hidden="true">✦</span>
           <div class="brand-name">Locket Gold Manager</div>
         </div>
-        <button class="secondary theme-toggle" type="button" data-theme-toggle aria-label="Giao diện: Tự động. Chuyển sang Sáng" title="Tự động → Sáng">
+        <button class="secondary theme-toggle" type="button" data-theme-toggle aria-label="Auto theme. Switch to Light" title="Auto → Light">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 17h6m-6 3h6m-5 2h4M8.5 14.5a6 6 0 1 1 7 0c-.9.7-1.5 1.5-1.5 2.5h-4c0-1-.6-1.8-1.5-2.5Z"/></svg>
-          <span data-theme-label>Tự động</span>
+          <span data-theme-label>Auto</span>
         </button>
       </div>
-      <h1 id="loginTitle">Đăng nhập quản trị</h1>
-      <p>Đăng nhập để quản lý tài khoản và thiết bị DNS.</p>
+      <h1 id="loginTitle">Admin sign in</h1>
+      <p>Welcome back. Sign in to your Gold workspace.</p>
       <form id="loginForm">
         <label for="email">Email</label><input id="email" type="email" autocomplete="username" required maxlength="254">
-        <label for="password">Mật khẩu</label><input id="password" type="password" autocomplete="current-password"
+        <label for="password">Password</label><input id="password" type="password" autocomplete="current-password"
           required maxlength="256">
         <div id="turnstile" data-sitekey="__TURNSTILE_SITE_KEY__"></div>
-        <button id="signIn" type="submit">Đăng nhập</button>
+        <button id="signIn" type="submit">Sign in</button>
       </form>
       <p class="status" id="loginMessage" role="status" aria-live="polite"></p>
-      <div class="login-footer"><a class="quiet" href="/">← Về trang tải xuống</a></div>
-      
+      <div class="login-footer"><a class="quiet" href="/">← Back to downloads</a></div>
     </section>
     <script nonce="__NONCE__">
       delete document.body.dataset.loginRendering;
@@ -695,84 +782,78 @@
       <header class="row between workspace-bar">
         <div class="row">
           <span class="brand-mark" aria-hidden="true">✦</span>
-          <div class="brand-name">Locket Gold Manager<small>Khu vực quản trị</small></div>
+          <div class="brand-name">Locket Gold Manager<small>Admin workspace</small></div>
         </div>
         <div class="row">
           <div class="row profile">
-            <span class="avatar" id="avatar" aria-hidden="true">AD</span>
-            <div><span class="profile-name">Quản trị viên</span><p class="quiet" id="identity"></p></div>
+            <span class="avatar" aria-hidden="true">VL</span>
+            <div><span class="profile-name">Vũ Thành Luân dzais1tg</span><p class="quiet" id="identity"></p></div>
           </div>
           <div class="session-actions">
-          <button class="secondary theme-toggle" type="button" data-theme-toggle aria-label="Giao diện: Tự động. Chuyển sang Sáng" title="Tự động → Sáng">
+          <button class="secondary theme-toggle" type="button" data-theme-toggle aria-label="Auto theme. Switch to Light" title="Auto → Light">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 17h6m-6 3h6m-5 2h4M8.5 14.5a6 6 0 1 1 7 0c-.9.7-1.5 1.5-1.5 2.5h-4c0-1-.6-1.8-1.5-2.5Z"/></svg>
-          <span data-theme-label>Tự động</span>
+          <span data-theme-label>Auto</span>
         </button>
-          <button class="secondary" id="logout" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v16h5m6-12 4 4-4 4m-6-4h10"/></svg>Đăng xuất</button>
+          <button class="secondary" id="logout" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v16h5m6-12 4 4-4 4m-6-4h10"/></svg>Sign out</button>
           </div>
         </div>
       </header>
       <div class="workspace-heading">
-        <div><p class="eyebrow">GOLD WORKSPACE</p><h2 id="adminTitle">Quản lý tài khoản</h2></div>
+        <div><p class="eyebrow">GOLD WORKSPACE</p><h2 id="adminTitle">Account management</h2></div>
         <span class="gold-emblem" aria-hidden="true"><svg viewBox="0 0 32 32"><use href="#gold-crown"/></svg></span>
       </div>
       <div class="workspace-layout">
       <dialog id="accountDialog" class="account-dialog" aria-labelledby="editorTitle">
       <form id="accountForm" class="editor-panel" aria-labelledby="editorTitle">
         <div class="dialog-heading">
-        <div class="section-title"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><h3 id="editorTitle">Thêm / gia hạn tài khoản</h3></div>
-        <button class="secondary" id="closeAccount" type="button" aria-label="Đóng">×</button>
+        <div class="section-title"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><h3 id="editorTitle">Add / renew account</h3></div>
+        <button class="secondary" id="closeAccount" type="button" aria-label="Close dialog">×</button>
         </div>
         <div class="row">
           <div class="field"><label for="accountId">Locket ID</label><input id="accountId" required maxlength="128"
               pattern="[A-Za-z0-9_$:@.\-]+" autocomplete="off"></div>
-          <div class="field"><label for="expiry">Hết hạn lúc · giờ địa phương</label><input id="expiry"
+          <div class="field"><label for="expiry">Expires at · local time</label><input id="expiry"
               type="datetime-local" required></div>
         </div>
-        <div class="field"><label for="dnsLabel">Tên thiết bị để cấp link DNS (tùy chọn)</label><input id="dnsLabel" maxlength="80" placeholder="iPhone 15 — để trống nếu chỉ lưu tài khoản"></div>
-        <div class="field"><label for="dnsBlocks">Tên miền DNS cần chặn, mỗi dòng một tên miền (tùy chọn)</label><textarea id="dnsBlocks" rows="2" placeholder="ads.example.com"></textarea></div>
-        <p class="quiet dialog-note">Nếu có tên thiết bị, tài khoản và DNS được lưu cùng một thao tác. Chỉ dùng ngày tương lai khi cấp link mới. Muốn thử hết hạn DNS, dùng nút đổi ngày ở thiết bị đã có.</p>
         <p class="status" id="accountMessage" role="status" aria-live="polite"></p>
         <div class="dialog-actions">
-          <button class="secondary" id="cancelAccount" type="button">Hủy</button>
-          <button id="save" type="submit"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>&nbsp; Lưu tài khoản / cấp link</button>
+          <button class="secondary" id="cancelAccount" type="button">Cancel</button>
+          <button id="save" type="submit"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>&nbsp; Save account</button>
         </div>
       </form>
       </dialog>
       <section class="directory-panel" aria-labelledby="directoryTitle">
       <div class="directory-heading">
-        <div class="section-title"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 20v-3a6 6 0 0 1 12 0v3m2-16a3 3 0 0 1 0 6m2 10v-3a6 6 0 0 0-2-4"/></svg><h3 id="directoryTitle">Tài khoản &amp; thiết bị DNS</h3></div>
-        <button id="addAccount" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Thêm tài khoản / DNS</button>
+        <div class="section-title"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 20v-3a6 6 0 0 1 12 0v3m2-16a3 3 0 0 1 0 6m2 10v-3a6 6 0 0 0-2-4"/></svg><h3 id="directoryTitle">Accounts</h3></div>
+        <button id="addAccount" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add account</button>
       </div>
       <p class="status" id="adminMessage" role="status" aria-live="polite"></p>
-        <p class="quiet directory-intro">Quản lý tài khoản và DNS ở cùng một danh sách. Link DNS chỉ hiển thị một lần lúc cấp để bảo vệ token; không cần cài lại khi đổi hạn.</p>
-        <div id="dnsResult" hidden><p class="quiet">Link riêng chỉ hiện khi tạo. Đừng đăng công khai hoặc chụp ảnh kèm token.</p><pre id="dnsLink"></pre><a id="dnsDownload" href="#">Tải cấu hình .mobileconfig</a></div>
-
       <div class="scroll">
         <table>
           <thead>
             <tr>
-              <th scope="col" aria-label="Số thứ tự">STT</th>
-              <th scope="col">Tài khoản</th>
-              <th scope="col">Hết hạn</th>
-              <th scope="col">Trạng thái</th>
-              <th scope="col">Thiết bị DNS</th>
-              <th scope="col">Thao tác</th>
+              <th scope="col" aria-label="Row number">No.</th>
+              <th scope="col">Account</th>
+              <th scope="col">Expires at</th>
+              <th scope="col">Status</th>
+              <th scope="col">Actions</th>
             </tr>
           </thead>
           <tbody id="accounts"></tbody>
         </table>
       </div>
-      <div class="row between pager"><button class="secondary" id="previous" type="button">← Trước</button><span
-          class="quiet" id="page"></span><button class="secondary" id="next" type="button">Sau →</button></div>
+      <div class="row between pager"><button class="secondary" id="previous" type="button">← Previous</button><span
+          class="quiet" id="page"></span><button class="secondary" id="next" type="button">Next →</button></div>
       </section>
       </div>
     </section>
     <script nonce="__NONCE__">
       (() => {
         'use strict';
+        document.documentElement.lang = 'en';
         const themeButtons = document.querySelectorAll('[data-theme-toggle]');
         const themeModes = ['system', 'light', 'dark'];
-        const themeNames = { system: 'Tự động', light: 'Sáng', dark: 'Tối' };
+        const themeNames = { system: 'Auto', light: 'Light', dark: 'Dark' };
         let currentTheme = document.body.dataset.theme || 'system';
         function applyTheme(value) {
           currentTheme = value;
@@ -782,7 +863,7 @@
           themeButtons.forEach(button => {
             button.dataset.mode = value;
             button.querySelector('[data-theme-label]').textContent = themeNames[value];
-            button.setAttribute('aria-label', 'Giao diện: ' + themeNames[value] + '. Chuyển sang ' + themeNames[next]);
+            button.setAttribute('aria-label', 'Theme: ' + themeNames[value] + '. Switch to ' + themeNames[next]);
             button.title = themeNames[value] + ' → ' + themeNames[next];
           });
         }
@@ -797,7 +878,7 @@
         const accountDialog = $('accountDialog');
         function openAccountDialog(editing = false) {
           if (!editing) $('accountForm').reset();
-          $('editorTitle').textContent = editing ? 'Sửa / gia hạn tài khoản' : 'Thêm tài khoản';
+          $('editorTitle').textContent = editing ? 'Edit / renew account' : 'Add account';
           $('accountMessage').textContent = '';
           accountDialog.showModal();
           $('accountId').focus();
@@ -816,12 +897,12 @@
         if (siteKey) {
           window.onTurnstileReady = () => {
             widgetId = window.turnstile.render('#turnstile', {
-              sitekey: siteKey, action: 'admin-login', language: 'vi', size: 'flexible',
+              sitekey: siteKey, action: 'admin-login', language: 'en', size: 'flexible',
               callback: token => { turnstileToken = token; $('loginMessage').textContent = ''; },
               'expired-callback': () => { turnstileToken = ''; },
               'error-callback': () => {
                 turnstileToken = '';
-                $('loginMessage').textContent = 'Không tải được xác minh Cloudflare. Vui lòng thử lại.';
+                $('loginMessage').textContent = 'Unable to load Cloudflare verification. Please try again.';
               }
             });
           };
@@ -829,7 +910,7 @@
           script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileReady&render=explicit';
           script.nonce = document.currentScript.nonce;
           script.async = true;
-          script.onerror = () => { $('loginMessage').textContent = 'Không tải được xác minh Cloudflare. Vui lòng tải lại trang.'; };
+          script.onerror = () => { $('loginMessage').textContent = 'Unable to load Cloudflare verification. Please reload the page.'; };
           document.head.append(script);
         }
         function clearSession() {
@@ -838,7 +919,6 @@
           try { localStorage.removeItem(key); } catch { }
           $('dashboard').hidden = true; $('loginScreen').hidden = false;
           $('accounts').replaceChildren(); $('identity').textContent = '';
-          $('dnsResult').hidden = true; $('dnsLink').textContent='';$('dnsDownload').removeAttribute('href');
           $('accountForm').reset(); $('adminMessage').textContent = '';
         }
         async function api(path, options = {}, auth = true) {
@@ -848,159 +928,106 @@
           if (!response.ok) {
             let data; try { data = await response.json(); } catch { }
             if (response.status === 401 && auth) clearSession();
-            const detail = typeof data?.detail === 'string' ? data.detail : null;
-            throw Error(detail || 'Yêu cầu thất bại (' + response.status + '). Vui lòng kiểm tra lại dữ liệu.');
+            const messages = {
+              'Email hoặc mật khẩu không đúng': 'Incorrect email or password.',
+              'Cloudflare Turnstile chưa được cấu hình đầy đủ.': 'Cloudflare Turnstile is not fully configured.',
+              'Vui lòng hoàn tất xác minh Cloudflare.': 'Please complete Cloudflare verification.',
+              'Không thể xác minh Cloudflare. Vui lòng thử lại.': 'Unable to verify with Cloudflare. Please try again.',
+              'Xác minh Cloudflare không hợp lệ hoặc đã hết hạn.': 'Cloudflare verification is invalid or expired.',
+            };
+            const detail = typeof data?.detail === 'string' ? (messages[data.detail] || data.detail) : null;
+            throw Error(detail || 'Request failed (' + response.status + '). Please check your input.');
           }
           return response.status === 204 ? null : response.json();
         }
-        let dnsDevices = [];
-        function asLocalInput(iso) {
-          const d = new Date(iso);
-          return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16);
-        }
-        function revealDnsLink(result) {
-          const url = new URL(result.profile_download_url, location.origin).href;
-          $('dnsLink').textContent = url;
-          $('dnsDownload').href = url;
-          $('dnsResult').hidden = false;
-        }
-        function addDeviceActions(container, device) {
-          const item = document.createElement('div');
-          item.className = 'dns-device';
-          const name = document.createElement('span');
-          name.className = 'dns-device-name';
-          const active = device.enabled && new Date(device.expires_at) > new Date();
-          const state = document.createElement('span');
-          state.className = 'dns-device-state' + (active ? ' is-active' : '');
-          state.textContent = ' · ' + (device.enabled ? (active ? 'DNS còn hạn' : 'DNS hết hạn') : 'Đã vô hiệu');
-          name.append(document.createTextNode(device.label), state);
-          item.append(name);
-          const controls = document.createElement('div');
-          controls.className = 'dns-device-controls';
-          const input = document.createElement('input');
-          input.type='datetime-local';input.value=asLocalInput(device.expires_at);
-          input.setAttribute('aria-label','Ngày hết hạn DNS: '+device.label);
-          input.disabled=!device.enabled;
-          const update = document.createElement('button');
-          update.type='button';update.className='secondary';update.textContent='Lưu hạn DNS';
-          update.disabled=!device.enabled;
-          update.onclick=async()=>{
-            const selected=new Date(input.value);
-            if(Number.isNaN(selected.getTime())){$('adminMessage').textContent='Ngày không hợp lệ';return}
-            if(selected<=new Date()&&!confirm('Đặt ngày quá khứ khiến chính sách DNS hết hạn. Không ảnh hưởng Gold thật. Tiếp tục?'))return;
-            update.disabled=true;
-            try {
-              await api('/api/admin/dns/devices/'+device.id+'/set-expiry',{method:'POST',body:JSON.stringify({expires_at:selected.toISOString()})});
-              $('adminMessage').textContent='Đã lưu hạn DNS và tài khoản liên kết trong MongoDB.';
-              await load();
-            } catch(error) {$('adminMessage').textContent=error.message}
-            finally {update.disabled=false}
-          };
-          const revoke = document.createElement('button');
-          revoke.type='button';revoke.className='secondary';revoke.textContent='Xóa DNS';
-          revoke.onclick=async()=>{
-            if(!confirm('Xóa vĩnh viễn thiết bị DNS '+device.label+' khỏi database? Link DNS của thiết bị sẽ ngừng hoạt động.'))return;
-            revoke.disabled=true;
-            try {
-              await api('/api/admin/dns/devices/'+device.id,{method:'DELETE'});
-              await load();
-            }catch(error){$('adminMessage').textContent=error.message}
-            finally{revoke.disabled=false}
-          };
-          controls.append(input,update,revoke);
-          item.append(controls);container.append(item);
-        }
         async function load() {
-          const [rows, devices] = await Promise.all([
-            api('/admin/accounts?skip='+skip+'&limit='+limit),
-            api('/api/admin/dns/devices')
-          ]);
-          if(!session)return;
-          dnsDevices = devices;
-          const tbody=$('accounts');tbody.replaceChildren();
-          const grouped=new Map();
-          for(const device of devices){
-            if(!device.locket_id)continue;
-            if(!grouped.has(device.locket_id))grouped.set(device.locket_id,[]);
-            grouped.get(device.locket_id).push(device);
-          }
-          for(const [index,account] of rows.entries()){
-            const tr=document.createElement('tr');
-            for(const value of [String(skip+index+1),account.locket_id,new Date(account.expires_date).toLocaleString(),new Date(account.expires_date)>new Date()?'Còn hạn quản lý':'Hết hạn quản lý']){
-              const td=document.createElement('td');td.textContent=value;tr.append(td);
+          const rows = await api('/admin/accounts?skip=' + skip + '&limit=' + limit);
+          if (!session) return;
+          const body = $('accounts'); body.replaceChildren();
+          for (const [rowIndex, row] of rows.entries()) {
+            const tr = document.createElement('tr');
+            const number = document.createElement('td');
+            number.className = 'row-number'; number.textContent = String(skip + rowIndex + 1); tr.append(number);
+            for (const [index, value] of [row.locket_id, new Date(row.expires_date).toLocaleString('en-US'), new Date(row.expires_date) > new Date() ? 'Gold' : 'Expired'].entries()) {
+              const td = document.createElement('td');
+              const label = document.createElement('span'); label.textContent = value;
+              if (index === 0) {
+                const name = document.createElement('span'); name.className = 'account-name';
+                const crown = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                crown.setAttribute('viewBox', '0 0 32 32'); crown.setAttribute('class', 'account-crown'); crown.setAttribute('aria-hidden', 'true');
+                const symbol = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+                symbol.setAttribute('href', '#gold-crown'); crown.append(symbol);
+                name.append(crown, label); td.append(name);
+              } else {
+                label.className = index === 1 ? 'account-expiry' : 'account-status' + (value === 'Gold' ? ' is-gold' : '');
+                td.append(label);
+              }
+              tr.append(td);
             }
-            const dnsTd=document.createElement('td');
-            const linked=grouped.get(account.locket_id)||[];
-            if(!linked.length){dnsTd.textContent='Chưa cấp link DNS'}
-            else for(const device of linked)addDeviceActions(dnsTd,device);
-            tr.append(dnsTd);
-            const actions=document.createElement('td');
-            const edit=document.createElement('button');
-            edit.type='button';edit.className='secondary';edit.textContent='Sửa / Cấp DNS';
-            edit.onclick=()=>{
-              $('accountId').value=account.locket_id;
-              $('expiry').value=asLocalInput(account.expires_date);
-              $('dnsLabel').value='';$('dnsBlocks').value='';
+            const actions = document.createElement('td');
+            const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary'; edit.textContent = 'Edit';
+            edit.onclick = () => {
+              $('accountId').value = row.locket_id;
+              const date = new Date(row.expires_date);
+              $('expiry').value = new Date(date - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
               openAccountDialog(true);
             };
-            const remove=document.createElement('button');
-            remove.type='button';remove.className='secondary danger';remove.textContent='Xóa';
-            remove.onclick=async()=>{
-              if(!confirm('Xóa vĩnh viễn tài khoản '+account.locket_id+' khỏi database cùng toàn bộ thiết bị DNS liên kết? Không thể khôi phục.'))return;
-              remove.disabled=true;
-              try{await api('/admin/accounts/'+encodeURIComponent(account.locket_id),{method:'DELETE'});await load()}
-              catch(error){$('adminMessage').textContent=error.message}
-              finally{remove.disabled=false}
+            const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary'; remove.textContent = 'Delete';
+            remove.onclick = async () => {
+              if (!confirm('Delete account ' + row.locket_id + '?')) return;
+              remove.disabled = true;
+              try { await api('/admin/accounts/' + encodeURIComponent(row.locket_id), { method: 'DELETE' }); await load(); }
+              catch (error) { $('adminMessage').textContent = error.message; }
+              finally { remove.disabled = false; }
             };
-            actions.append(edit,remove);tr.append(actions);tbody.append(tr);
-          }
-          // Preserve management access for legacy DNS tokens without a matching account.
-          if(skip===0){
-            const displayed=new Set(rows.map(a=>a.locket_id));
-            const orphan=devices.filter(d=>!d.locket_id || !displayed.has(d.locket_id));
-            if(orphan.length){
-              const tr=document.createElement('tr');
-              const td=document.createElement('td');td.colSpan=4;td.className='orphan-note';
-              td.textContent='DNS chưa hiển thị trong trang tài khoản ('+orphan.length+' thiết bị)';
-              tr.append(td);
-              const dnsTd=document.createElement('td');
-              for(const d of orphan)addDeviceActions(dnsTd,d);
-              tr.append(dnsTd);
-              const empty=document.createElement('td');tr.append(empty);tbody.append(tr);
+            const check = document.createElement('button'); check.type = 'button'; check.className = 'secondary'; check.textContent = 'Check API';
+            check.onclick = async () => {
+              check.disabled = true;
+              try {
+                const result = await api('/v1/subscribers/' + encodeURIComponent(row.locket_id));
+                $('adminMessage').textContent = 'API result for ' + row.locket_id + ': ' + (result.subscriber.entitlements.Gold ? 'access is active.' : 'no access or expired.');
+              } catch (error) { $('adminMessage').textContent = error.message; }
+              finally { check.disabled = false; }
+            };
+            for (const [button, pathData] of [
+              [edit, 'm15 4 5 5M4 20l5-1L21 7l-5-5L4 14Z'],
+              [check, 'm9 8-4 4 4 4m6-8 4 4-4 4'],
+              [remove, 'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7'],
+            ]) {
+              button.title = button.textContent;
+              button.setAttribute('aria-label', button.textContent + ' · ' + row.locket_id);
+              const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+              icon.setAttribute('viewBox', '0 0 24 24'); icon.setAttribute('class', 'ui-icon'); icon.setAttribute('aria-hidden', 'true');
+              const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+              path.setAttribute('d', pathData); icon.append(path); button.replaceChildren(icon);
             }
+            actions.append(edit, check, remove); tr.append(actions); body.append(tr);
           }
-          if(!rows.length && devices.length===0){
-            const tr=document.createElement('tr');const td=document.createElement('td');
-            td.colSpan=6;td.className='empty-state';td.textContent='Chưa có tài khoản. Chọn Thêm tài khoản / DNS để bắt đầu.';
-            tr.append(td);tbody.append(tr);
-          }
-          $('previous').disabled=skip===0;
-          $('next').disabled=rows.length<limit||skip+limit>10000;
-          $('page').textContent='Trang '+(skip/limit+1)+' · '+devices.length+' thiết bị DNS';
+          if (!rows.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 5; td.textContent = 'No accounts yet.'; tr.append(td); body.append(tr); }
+          $('previous').disabled = skip === 0; $('next').disabled = rows.length < limit || skip + limit > 10000;
+          $('page').textContent = 'Page ' + (skip / limit + 1);
         }
-
         async function enter() {
           if (!session || !Number.isFinite(Date.parse(session.expires_at)) || Date.parse(session.expires_at) <= Date.now()) { clearSession(); return; }
           const admin = await api('/api/admin/me');
           $('identity').textContent = admin.email;
-          $('avatar').textContent = (admin.email || 'AD').slice(0, 2).toUpperCase();
           await load();
           if (!session) return;
           $('loginScreen').hidden = true; $('dashboard').hidden = false;
           clearTimeout(timer);
-          timer = setTimeout(() => { clearSession(); $('loginMessage').textContent = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'; }, Math.max(0, Date.parse(session.expires_at) - Date.now()));
+          timer = setTimeout(() => { clearSession(); $('loginMessage').textContent = 'Your session has expired. Please sign in again.'; }, Math.max(0, Date.parse(session.expires_at) - Date.now()));
         }
         $('loginForm').onsubmit = async event => {
           event.preventDefault();
           if (siteKey && !turnstileToken) {
-            $('loginMessage').textContent = 'Vui lòng hoàn tất xác minh Cloudflare.';
+            $('loginMessage').textContent = 'Please complete Cloudflare verification.';
             return;
           }
           $('signIn').disabled = true; $('loginMessage').textContent = '';
           let password = $('password').value; $('password').value = '';
           try {
             session = await api('/api/admin/login', { method: 'POST', body: JSON.stringify({ email: $('email').value.trim(), password, turnstile_token: turnstileToken }) }, false);
-            try { localStorage.setItem(key, JSON.stringify(session)); } catch { $('loginMessage').textContent = 'Trình duyệt chặn lưu phiên đăng nhập. Phiên chỉ có hiệu lực trong tab này.'; }
+            try { localStorage.setItem(key, JSON.stringify(session)); } catch { $('loginMessage').textContent = 'Your browser blocked session storage. This session is available in this tab only.'; }
             skip = 0; await enter();
           } catch (error) { clearSession(); $('loginMessage').textContent = error.message; }
           finally {
@@ -1012,25 +1039,9 @@
           event.preventDefault(); $('save').disabled = true;
           $('accountMessage').textContent = '';
           try {
-            const expiry=new Date($('expiry').value);
-            if(Number.isNaN(expiry.getTime()))throw Error('Ngày hết hạn không hợp lệ');
-            const id=$('accountId').value.trim();
-            const label=$('dnsLabel').value.trim();
-            if(label){
-              if(expiry<=new Date())throw Error('Cấp link mới cần chọn ngày hết hạn trong tương lai.');
-              const result=await api('/api/admin/dns/devices/linked',{method:'POST',body:JSON.stringify({
-                locket_id:id,label,expires_at:expiry.toISOString(),
-                block_domains:$('dnsBlocks').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)
-              })});
-              revealDnsLink(result);
-              $('adminMessage').textContent='Đã lưu tài khoản và cấp link DNS. Hãy sao chép link vì chỉ hiển thị một lần.';
-            } else {
-              await api('/admin/add-account',{method:'POST',body:JSON.stringify({
-                locket_id:id,expires_date:expiry.toISOString()
-              })});
-              $('adminMessage').textContent='Đã lưu tài khoản quản lý.';
-            }
-            accountDialog.close();await load();
+            await api('/admin/add-account', { method: 'POST', body: JSON.stringify({ locket_id: $('accountId').value, expires_date: new Date($('expiry').value).toISOString() }) });
+            accountDialog.close();
+            $('adminMessage').textContent = 'Account saved.'; await load();
           } catch (error) {
             $(accountDialog.open ? 'accountMessage' : 'adminMessage').textContent = error.message;
           }
@@ -1040,8 +1051,8 @@
         $('next').onclick = async () => { skip += limit; try { await load(); } catch (error) { $('adminMessage').textContent = error.message; } };
         $('logout').onclick = async () => {
           $('logout').disabled = true;
-          try { await api('/api/admin/logout', { method: 'POST' }); clearSession(); $('loginMessage').textContent = 'Bạn đã đăng xuất.'; }
-          catch (error) { if (session) $('adminMessage').textContent = 'Không thể hủy phiên: ' + error.message + '. Vui lòng thử lại.'; }
+          try { await api('/api/admin/logout', { method: 'POST' }); clearSession(); $('loginMessage').textContent = 'You have signed out.'; }
+          catch (error) { if (session) $('adminMessage').textContent = 'Unable to revoke the session: ' + error.message + '. Please try again.'; }
           finally { $('logout').disabled = false; }
         };
         window.addEventListener('storage', event => { if (event.key === key && event.newValue === null) clearSession(); });

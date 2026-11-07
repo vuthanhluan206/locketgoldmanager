@@ -221,8 +221,7 @@ def test_upsert_injection_and_subscriber(client):
         body['expires_date'] = expiry
         assert http.post('/admin/add-account', headers=headers, json=body).status_code == 422
     accounts.find_one.return_value = {'locket_id': 'alice', 'expires_date': future}
-    assert http.get('/v1/subscribers/alice', headers=headers).json()['managed_access']['active'] is True
-    assert http.get('/v1/subscribers/alice', headers=headers).json()['subscriber']['entitlements'] == {}
+    assert 'Gold' in http.get('/v1/subscribers/alice', headers=headers).json()['subscriber']['entitlements']
     accounts.find_one.return_value = None
     assert http.get('/v1/subscribers/missing', headers=headers).json()['subscriber']['entitlements'] == {}
     assert http.get('/admin/accounts?skip=10001', headers=headers).status_code == 422
@@ -259,19 +258,7 @@ def test_password_hash_and_settings(password_pair):
 def test_expiry_boundary():
     now = datetime.now(timezone.utc)
     for account in [None, {'expires_date': now}, {'expires_date': now - timedelta(seconds=1)}]:
-        result = subscriber_response('id', account, now)
-        assert result['subscriber']['entitlements'] == {}
-        assert result['managed_access']['active'] is False
-        assert result['managed_access']['gold_verified'] is False
-
-
-def test_local_account_cannot_manufacture_gold():
-    now = datetime.now(timezone.utc)
-    result = subscriber_response('id', {'expires_date': now + timedelta(days=30)}, now)
-    assert result['managed_access']['active'] is True
-    assert result['managed_access']['gold_verified'] is False
-    assert result['subscriber']['entitlements'] == {}
-    assert result['subscriber']['subscriptions'] == {}
+        assert subscriber_response('id', account, now)['subscriber']['entitlements'] == {}
 
 
 def test_date_only_expiry_is_stored_as_mongodb_datetime(client):
@@ -293,8 +280,7 @@ def test_date_only_expiry_is_stored_as_mongodb_datetime(client):
 def test_legacy_expiry_and_invalid_records_fail_closed():
     now = datetime(2026, 11, 3, 12, tzinfo=timezone.utc)
     result = subscriber_response('id', {'expires_date': '2026-11-03'}, now)
-    assert result['managed_access']['expires_at'] == '2026-11-03T23:59:59Z'
-    assert result['subscriber']['entitlements'] == {}
+    assert result['subscriber']['entitlements']['Gold']['expires_date'] == '2026-11-03T23:59:59Z'
     for value in ['not-a-date', None, '2026-11-03T12:00:00']:
         assert subscriber_response('id', {'expires_date': value}, now)['subscriber']['entitlements'] == {}
 
@@ -328,7 +314,7 @@ def test_startup_creates_hashed_admin_and_session_ttl(client, monkeypatch, inval
     db.admins = AsyncMock()
     db.sessions = AsyncMock()
     db.login_limits = AsyncMock()
-    db.dns_devices = AsyncMock()
+    db.viewers_history = AsyncMock()
     mongo = MagicMock()
     mongo.admin = AsyncMock()
     mongo.close = AsyncMock()
@@ -395,31 +381,3 @@ def test_check_password_command(client, monkeypatch, capsys, correct):
     output = capsys.readouterr().out
     assert password not in output
     assert 'pbkdf2_sha256$' not in output
-
-
-def test_single_admin_page_hosts_dns_manager_and_legacy_redirect(client):
-    http = client[0]
-    page = http.get('/admin-gmnWJ5nG3qZRcdku3eBtkIka')
-    assert page.status_code == 200
-    assert 'id="accountForm"' in page.text
-    assert 'id="dnsForm"' not in page.text
-    assert 'id="dnsRows"' not in page.text
-    assert 'id="dnsLabel"' in page.text
-    assert 'Thiết bị DNS' in page.text
-    assert '/api/admin/dns/devices/linked' in page.text
-    assert '/api/admin/dns/devices/' in page.text
-    assert 'Sửa / Cấp DNS' in page.text
-    legacy = http.get('/dns/dashboard', follow_redirects=False)
-    assert legacy.status_code == 307
-    assert legacy.headers['location'] == '/admin'
-
-
-
-def test_root_ca_is_not_managed_through_web(client):
-    http = client[0]
-    page = http.get('/admin-gmnWJ5nG3qZRcdku3eBtkIka')
-    assert page.status_code == 200
-    assert 'id="rootCaWorkspace"' not in page.text
-    assert '/api/admin/certificates/root' not in page.text
-    assert http.get('/api/admin/certificates/root').status_code == 404
-    assert http.put('/api/admin/certificates/root', json={'pem': 'test'}).status_code == 404

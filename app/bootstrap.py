@@ -9,22 +9,17 @@ from .passwords import hash_password, verify_password
 
 
 async def sync_admin(settings):
-    from motor.motor_asyncio import AsyncIOMotorClient
+    from pymongo import AsyncMongoClient
     from .database import admin_document
 
-    client = AsyncIOMotorClient(
-        settings.mongodb_uri.get_secret_value(),
-        serverSelectionTimeoutMS=5000,
-        timeoutMS=10000,
-    )
+    client = AsyncMongoClient(settings.mongodb_uri.get_secret_value(),
+                              serverSelectionTimeoutMS=5000, timeoutMS=10000)
     try:
         await client[settings.mongodb_database].admins.update_one(
-            {'_id': 'superadmin'},
-            {'$set': admin_document(settings)},
-            upsert=True,
+            {'_id': 'superadmin'}, {'$set': admin_document(settings)}, upsert=True,
         )
     finally:
-        client.close()
+        await client.close()
 
 
 def update_env(values: dict[str, str]):

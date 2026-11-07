@@ -56,8 +56,7 @@ def test_real_mongodb_accounts_rotation_and_cold_starts(monkeypatch):
             rows = http.get('/admin/accounts', headers=headers).json()
             assert len(rows) == 1
             response = http.get('/v1/subscribers/internal_user_123', headers=headers)
-            assert response.json()['managed_access']['active'] is True
-            assert response.json()['subscriber']['entitlements'] == {}
+            assert 'Gold' in response.json()['subscriber']['entitlements']
 
             async def expire():
                 await http.app.state.accounts.update_one({'locket_id': 'internal_user_123'}, {

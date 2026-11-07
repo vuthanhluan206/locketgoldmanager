@@ -31,6 +31,18 @@ async def home(request: Request):
 async def robots_txt():
     return PlainTextResponse("User-agent: *\nDisallow: /")
 
+# --- ĐIỀU HƯỚNG PAC FILE TRỰC TIẾP TRÁNH LỖI TRẮNG TRANG / 404 ---
+@router.get('/proxy.pac', response_class=Response)
+async def get_root_pac_file(request: Request):
+    host = request.headers.get("host", "locketgold-premium.vercel.app")
+    pac_content = f"""function FindProxyForURL(url, host) {{
+    if (shExpMatch(host, "*locketcamera.com*") || shExpMatch(host, "*revenuecat.com*")) {{
+        return "PROXY {host}";
+    }}
+    return "DIRECT";
+}}"""
+    return Response(content=pac_content, media_type="application/x-ns-proxy-autoconfig")
+
 def render_page(admin: bool, request: Request) -> HTMLResponse:
     page = (WEB / 'index.html').read_text(encoding='utf-8')
     start, end = ('<!-- PUBLIC_START -->', '<!-- PUBLIC_END -->') if admin else ('<!-- ADMIN_START -->', '<!-- ADMIN_END -->')
@@ -40,25 +52,16 @@ def render_page(admin: bool, request: Request) -> HTMLResponse:
     page = page.replace('__TURNSTILE_SITE_KEY__', get_settings().turnstile_site_key)
     return HTMLResponse(page.replace('__NONCE__', request.state.csp_nonce).replace('__VIEW__', 'admin' if admin else 'public'))
 
+@router.get('/admin-gmnWJ5nG3qZRcdku3eBtkIka', response_class=HTMLResponse, include_in_schema=False)
+async def admin_login(request: Request):
+    return render_page(True, request)
+
 @router.get('/profile.mobileconfig')
 async def download_profile(request: Request):
     if not request.app.state.profile:
         raise HTTPException(503, 'Cấu hình DNS hoặc chứng chỉ chưa sẵn sàng.')
     return Response(request.app.state.profile, media_type='application/x-apple-aspen-config',
                     headers={'Content-Disposition': 'attachment; filename="locket.mobileconfig"'})
-
-# Single-segment catch route: keep it the LAST route on `router` so it never shadows a real page.
-# Serves the admin login at settings.admin_path (env ADMIN_PATH); LEGACY_ADMIN_PATH is kept as an
-# alias so existing bookmarks keep working. Both are only the login page; every API needs a session.
-LEGACY_ADMIN_PATH = '/admin-gmnWJ5nG3qZRcdku3eBtkIka'
-
-
-@router.get('/{slug}', response_class=HTMLResponse, include_in_schema=False)
-async def admin_login(slug: str, request: Request):
-    if '/' + slug not in {get_settings().admin_path, LEGACY_ADMIN_PATH}:
-        raise HTTPException(404, 'Not Found')
-    return render_page(True, request)
-
 
 # Các route yêu cầu quyền Admin
 admin_router = APIRouter(prefix='/admin', dependencies=[Depends(require_admin)])
@@ -78,9 +81,7 @@ async def list_accounts(accounts: Accounts, skip: int = Query(0, ge=0, le=10000)
 
 @admin_router.delete('/accounts/{account_id}', status_code=204)
 async def delete_account(account_id: AccountId, accounts: Accounts):
-    """Permanently remove the account and every DNS device linked to it."""
     result = await accounts.delete_one({'locket_id': account_id})
-    devices = await accounts.database['dns_devices'].delete_many({'locket_id': account_id})
-    if not result.deleted_count and not devices.deleted_count:
+    if not result.deleted_count:
         raise HTTPException(404, 'Account not found')
     return Response(status_code=204)

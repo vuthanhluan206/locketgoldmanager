@@ -29,7 +29,6 @@ class Settings(BaseSettings):
     turnstile_secret_key: SecretStr = SecretStr('')
     turnstile_hostname: str = ''
     trusted_proxy_cidrs: list[str] = []
-    dns_public_origin: str = Field(default='', max_length=256)
 
     @field_validator('admin_path')
     @classmethod
@@ -47,6 +46,7 @@ class Settings(BaseSettings):
                         raise ValueError('Vercel system URL must be an exact vercel.app hostname')
                     if host.lower() not in self.allowed_hosts:
                         self.allowed_hosts.append(host.lower())
+            # Vercel may select a custom domain here; custom domains remain explicitly configured.
             host = self.vercel_project_production_url.lower()
             if re.fullmatch(r'[a-z0-9-]+(?:\.[a-z0-9-]+)*\.vercel\.app', host) and host not in self.allowed_hosts:
                 self.allowed_hosts.append(host)

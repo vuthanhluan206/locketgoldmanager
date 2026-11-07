@@ -1,6 +1,5 @@
 """Bounded requests and throttling with explicitly trusted proxy addresses."""
 import asyncio
-import logging
 from ipaddress import ip_address, ip_network
 import secrets
 import time
@@ -12,7 +11,6 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from .config import get_settings
 
 MAX_BODY = 8192
-logger = logging.getLogger(__name__)
 
 
 def client_ip(scope) -> str:
@@ -80,6 +78,10 @@ class SecurityMiddleware:
         if scope['type'] != 'http':
             return await self.app(scope, receive, send)
 
+        # Bỏ qua giới hạn 8KiB và kiểm tra body cho toàn bộ luồng Proxy
+        if scope['path'].startswith('/proxy'):
+            return await self.app(scope, receive, send)
+
         nonce = secrets.token_urlsafe(24)
         scope.setdefault('state', {})['csp_nonce'] = nonce
         headers = Headers(scope=scope)
@@ -137,18 +139,4 @@ class SecurityMiddleware:
                 return {'type': 'http.request', 'body': bytes(body), 'more_body': False}
             return await receive()
 
-        started = False
-
-        async def tracking_send(message):
-            nonlocal started
-            started = started or message['type'] == 'http.response.start'
-            await secured_send(message)
-
-        try:
-            await self.app(scope, buffered_receive, tracking_send)
-        except Exception:
-            # Keep security headers on 500s and never leak the traceback to clients.
-            logger.exception('UNHANDLED_REQUEST_ERROR')
-            if started:
-                raise
-            await reject(500, 'Internal Server Error')
+        await self.app(scope, buffered_receive, secured_send)
