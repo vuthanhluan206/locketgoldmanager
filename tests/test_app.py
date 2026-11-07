@@ -402,10 +402,13 @@ def test_single_admin_page_hosts_dns_manager_and_legacy_redirect(client):
     page = http.get('/admin-gmnWJ5nG3qZRcdku3eBtkIka')
     assert page.status_code == 200
     assert 'id="accountForm"' in page.text
-    assert 'id="dnsForm"' in page.text
-    assert 'id="dnsRows"' in page.text
+    assert 'id="dnsForm"' not in page.text
+    assert 'id="dnsRows"' not in page.text
+    assert 'id="dnsLabel"' in page.text
+    assert 'Thiết bị DNS' in page.text
     assert '/api/admin/dns/devices/linked' in page.text
     assert '/api/admin/dns/devices/' in page.text
+    assert 'Sửa / Cấp DNS' in page.text
     legacy = http.get('/dns/dashboard', follow_redirects=False)
     assert legacy.status_code == 307
     assert legacy.headers['location'] == '/admin-gmnWJ5nG3qZRcdku3eBtkIka'
