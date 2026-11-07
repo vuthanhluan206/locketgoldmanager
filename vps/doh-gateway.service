@@ -1,0 +1,23 @@
+[Unit]
+Description=Managed DNS-over-HTTPS gateway
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=doh
+Group=doh
+WorkingDirectory=/opt/locketgoldmanager
+EnvironmentFile=/etc/managed-doh.env
+ExecStart=/opt/locketgoldmanager/.venv/bin/uvicorn vps.doh_gateway:app --host 127.0.0.1 --port 8053 --no-proxy-headers --no-access-log
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/tmp
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
