@@ -40,6 +40,14 @@ const tr=document.createElement('tr');
 for(const val of [d.label,new Date(d.expires_at).toLocaleString(),d.enabled?'Đang bật':'Đã thu hồi']){
 const td=document.createElement('td');td.textContent=val;tr.appendChild(td)}
 const td=document.createElement('td');
+const renew=document.createElement('button');renew.textContent='Gia hạn 30 ngày';renew.disabled=!d.enabled;
+renew.onclick=async()=>{try{
+const start=Math.max(Date.now(),new Date(d.expires_at).getTime());
+await api('/api/admin/dns/devices/'+d.id,{method:'PUT',body:JSON.stringify({
+label:d.label,expires_at:new Date(start+30*86400000).toISOString(),
+block_domains:d.block_domains})});await refresh()
+}catch(e){$('status').textContent=e.message}};
+td.appendChild(renew);
 const b=document.createElement('button');b.textContent='Thu hồi';b.disabled=!d.enabled;
 b.onclick=async()=>{if(!confirm('Thu hồi thiết bị này?'))return;try{await api('/api/admin/dns/devices/'+d.id+'/revoke',{method:'POST'});await refresh()}catch(e){$('status').textContent=e.message}};
 td.appendChild(b);tr.appendChild(td);$('rows').appendChild(tr)
