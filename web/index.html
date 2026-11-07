@@ -1045,6 +1045,21 @@
             };
             actions.append(edit,remove);tr.append(actions);tbody.append(tr);
           }
+          // Preserve management access for legacy DNS tokens without a matching account.
+          if(skip===0){
+            const displayed=new Set(rows.map(a=>a.locket_id));
+            const orphan=devices.filter(d=>!d.locket_id || !displayed.has(d.locket_id));
+            if(orphan.length){
+              const tr=document.createElement('tr');
+              const td=document.createElement('td');td.colSpan=4;
+              td.textContent='DNS chưa hiển thị trong trang tài khoản ('+orphan.length+' thiết bị)';
+              tr.append(td);
+              const dnsTd=document.createElement('td');
+              for(const d of orphan)addDeviceActions(dnsTd,d);
+              tr.append(dnsTd);
+              const empty=document.createElement('td');tr.append(empty);tbody.append(tr);
+            }
+          }
           if(!rows.length){
             const tr=document.createElement('tr');const td=document.createElement('td');
             td.colSpan=6;td.textContent='Chưa có tài khoản. Chọn Thêm tài khoản / DNS để bắt đầu.';
