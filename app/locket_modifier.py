@@ -208,29 +208,8 @@ async def dynamic_reverse_proxy(request: Request, path: str):
 
             data = json.loads(raw_content.decode("utf-8"))
 
-            # --- ÉP CẤU HÌNH THỜI LƯỢNG VIDEO LÊN 60 GIÂY VÀ MỞ KHÓA TÍNH NĂNG ---
-            if isinstance(data, dict):
-                data["max_video_duration_seconds"] = 60
-                data["video_max_seconds"] = 60
-                data["duration_limit"] = 60
-                data["max_video_duration"] = 60
-                data["video_recording_limit"] = 60
-                data["enable_library_video_upload"] = True
-                data["enable_private_posts"] = True
-                data["is_gold"] = True
-                data["has_ios_subscription"] = True
-                
-                data["unlocked_filters"] = True
-                data["has_unlocked_filters"] = True
-                data["is_premium_user"] = True
-                data["filters_unlocked"] = True
-                data["camera_filters_enabled"] = True
-
-                if "features" in data and isinstance(data["features"], dict):
-                    data["features"]["max_video_duration_seconds"] = 60
-                    data["features"]["video_recording_limit"] = 60
-                    data["features"]["unlocked_all_filters"] = True
-                    data["features"]["filters_unlocked"] = True
+            # Do not manufacture premium flags. Only the subscription provider
+            # and application's authorized backend can determine paid entitlements.
 
             # --- 1. XỬ LÝ DANH SÁCH NGƯỜI XEM (Viewers) ---
             if "moments" in clean_path or "posts" in clean_path or "viewer" in clean_path:
@@ -265,86 +244,9 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                         if isinstance(item, dict):
                             item["viewers"] = dynamic_viewers
 
-            # --- 2. XỬ LÝ TRẠNG THÁI VÀ THỜI HẠN GOLD TỪ MONGODB & REVENUECAT ---
-            elif "subscribers" in clean_path or "user" in clean_path:
-                if isinstance(data, dict):
-                    if "subscriber" not in data or not isinstance(data["subscriber"], dict):
-                        data["subscriber"] = {}
-
-                    is_gold_active = True
-                    expiry_date = "2029-12-31T23:59:59Z"
-
-                    if db is not None and user_token:
-                        try:
-                            account_record = db.accounts.find_one({"api_token": user_token})
-                            if account_record:
-                                db_expiry = (
-                                    account_record.get("expires_date")
-                                    or account_record.get("expires_at")
-                                    or account_record.get("gold_expires_at")
-                                )
-                                if db_expiry:
-                                    expiry_date = (
-                                        db_expiry.isoformat().replace("+00:00", "Z")
-                                        if hasattr(db_expiry, "isoformat")
-                                        else str(db_expiry)
-                                    )
-                                is_gold_active = account_record.get("is_active", True)
-                        except Exception:
-                            pass
-
-                    if is_gold_active:
-                        data["subscriber"]["entitlements"] = {
-                            "Gold": {
-                                "expires_date": expiry_date,
-                                "grace_period_expires_date": None,
-                                "product_identifier": "com.locket.gold.yearly",
-                                "purchase_date": "2026-01-01T00:00:00Z"
-                            },
-                            "unlimited_video_length": {
-                                "expires_date": expiry_date,
-                                "grace_period_expires_date": None,
-                                "product_identifier": "com.locket.gold.yearly",
-                                "purchase_date": "2026-01-01T00:00:00Z"
-                            },
-                            "allow_photo_library_videos": {
-                                "expires_date": expiry_date,
-                                "grace_period_expires_date": None,
-                                "product_identifier": "com.locket.gold.yearly",
-                                "purchase_date": "2026-01-01T00:00:00Z"
-                            },
-                            "private_posts": {
-                                "expires_date": expiry_date,
-                                "grace_period_expires_date": None,
-                                "product_identifier": "com.locket.gold.yearly",
-                                "purchase_date": "2026-01-01T00:00:00Z"
-                            },
-                            "unlocked_filters": {
-                                "expires_date": expiry_date,
-                                "grace_period_expires_date": None,
-                                "product_identifier": "com.locket.gold.yearly",
-                                "purchase_date": "2026-01-01T00:00:00Z"
-                            }
-                        }
-                        data["subscriber"]["subscriptions"] = {
-                            "com.locket.gold.yearly": {
-                                "expires_date": expiry_date,
-                                "is_sandbox": False,
-                                "original_purchase_date": "2026-01-01T00:00:00Z",
-                                "purchase_date": "2026-01-01T00:00:00Z",
-                                "ownership_type": "PURCHASED",
-                                "store": "app_store"
-                            }
-                        }
-                        if "non_subscriptions" not in data["subscriber"]:
-                            data["subscriber"]["non_subscriptions"] = {}
-                        data["subscriber"]["non_subscriptions"]["max_video_duration"] = [
-                            {
-                                "id": "max_duration_60s",
-                                "purchase_date": "2026-01-01T00:00:00Z",
-                                "store": "app_store"
-                            }
-                        ]
+            # Subscription responses pass through unchanged. MongoDB records
+            # manage this service's own accounts, not Locket/RevenueCat purchases.
+            # Never fabricate Gold entitlements, purchase receipts or expiry dates.
 
             return JSONResponse(content=data, status_code=upstream_status, headers=response_headers)
 
