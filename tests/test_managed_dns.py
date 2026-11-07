@@ -27,3 +27,47 @@ def test_profile_rejects_untrusted_scheme():
     import pytest
     with pytest.raises(ValueError):
         build_dns_profile("http://dns.example.com/dns-query")
+
+
+def test_unregistered_device_cannot_use_doh(monkeypatch):
+    import base64
+    import time
+    import dns.message
+    from fastapi.testclient import TestClient
+    from vps.doh_gateway import app
+
+    monkeypatch.setenv("MANAGER_API_ORIGIN", "https://manager.example.com")
+    monkeypatch.setenv("DNS_GATEWAY_API_TOKEN", "x" * 64)
+    token = "A" * 43
+    query = dns.message.make_query("example.com", "A")
+    encoded = base64.urlsafe_b64encode(query.to_wire()).rstrip(b"=").decode("ascii")
+    with TestClient(app) as client:
+        client.app.state.cache[token] = (
+            time.monotonic() + 60, {"known": False, "block_domains": []}
+        )
+        response = client.get(f"/dns-query/{token}?dns={encoded}")
+        assert response.status_code == 403
+
+
+def test_known_device_blocks_matching_domain(monkeypatch):
+    import base64
+    import time
+    import dns.message
+    import dns.rcode
+    from fastapi.testclient import TestClient
+    from vps.doh_gateway import app
+
+    monkeypatch.setenv("MANAGER_API_ORIGIN", "https://manager.example.com")
+    monkeypatch.setenv("DNS_GATEWAY_API_TOKEN", "x" * 64)
+    token = "A" * 43
+    query = dns.message.make_query("tracker.example", "A")
+    encoded = base64.urlsafe_b64encode(query.to_wire()).rstrip(b"=").decode("ascii")
+    with TestClient(app) as client:
+        client.app.state.cache[token] = (
+            time.monotonic() + 60,
+            {"known": True, "block_domains": ["tracker.example"]},
+        )
+        response = client.get(f"/dns-query/{token}?dns={encoded}")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/dns-message"
+        assert dns.message.from_wire(response.content).rcode() == dns.rcode.NXDOMAIN
