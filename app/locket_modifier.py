@@ -19,24 +19,17 @@ from .security import token_digest
 
 router = APIRouter(prefix="/proxy", tags=["Locket Proxy"])
 
-UPSTREAM_TARGET = "https://api.locketcamera.com"
-
 HOP_HEADERS = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
                'te', 'trailer', 'transfer-encoding', 'upgrade'}
 MAX_RESPONSE = 50 * 1024 * 1024
 
 
 async def process_image_with_ai(image_bytes: bytes, prompt: str) -> bytes:
-    """
-    Gửi ảnh lên Hugging Face Inference API để xử lý qua mô hình instruct-pix2pix.
-    Giới hạn thời gian chờ dưới 9.5 giây để khớp với giới hạn Serverless của Vercel.
-    """
     api_token = os.getenv("HUGGINGFACE_API_TOKEN", "")
     if not api_token:
         raise ValueError("Thiếu cấu hình HUGGINGFACE_API_TOKEN")
 
     hf_endpoint = "https://api-inference.huggingface.co/models/timbrooks/instruct-pix2pix"
-    
     headers = {
         "Authorization": f"Bearer {api_token}",
         "Content-Type": "application/octet-stream",
@@ -45,13 +38,12 @@ async def process_image_with_ai(image_bytes: bytes, prompt: str) -> bytes:
 
     async with httpx.AsyncClient(timeout=9.5) as client:
         resp = await client.post(hf_endpoint, headers=headers, content=image_bytes)
-        
         if resp.status_code == 200:
             return resp.content
         elif resp.status_code == 503:
-            raise ValueError("Hugging Face Model đang khởi động (Cold Boot), vui lòng thử lại sau vài giây")
+            raise ValueError("Hugging Face đang khởi động, vui lòng thử lại sau.")
         else:
-            raise ValueError(f"Hugging Face API lỗi: {resp.status_code} - {resp.text}")
+            raise ValueError(f"Hugging Face API lỗi: {resp.status_code}")
 
 
 def _clean_headers(headers):
@@ -110,13 +102,11 @@ async def download_proxy_profile(request: Request):
 
 @router.get("/proxy.pac", response_class=Response)
 async def get_proxy_pac(request: Request):
-    """
-    Trả về file cấu hình PAC để định tuyến qua domain của bạn.
-    """
     host = request.headers.get("host", "locketgold.vuthanhluan.bond")
+    # Đã bổ sung revenuecat.com vào PAC để bắt luồng xác thực Gold
     pac_content = f"""
 function FindProxyForURL(url, host) {{
-    if (shExpMatch(host, "*locketcamera.com*")) {{
+    if (shExpMatch(host, "*locketcamera.com*") || shExpMatch(host, "*revenuecat.com*")) {{
         return "PROXY {host}";
     }}
     return "DIRECT";
@@ -127,9 +117,6 @@ function FindProxyForURL(url, host) {{
 
 @router.get("/{filename}", include_in_schema=False)
 async def handle_static_files(filename: str):
-    """
-    Bắt các request file tĩnh ngầm để làm sạch nhật ký log trên Vercel.
-    """
     if any(filename.endswith(ext) for ext in [".png", ".ico", ".txt", ".xml", ".json"]):
         return Response(status_code=204)
     raise HTTPException(status_code=404, detail="Not Found")
@@ -137,7 +124,15 @@ async def handle_static_files(filename: str):
 
 @router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def dynamic_reverse_proxy(request: Request, path: str):
-    url = UPSTREAM_TARGET + "/" + quote(path, safe="/:@!$&'()*+,;=-._~")
+    # ================= 1. XÁC ĐỊNH ĐÚNG MÁY CHỦ ĐÍCH ĐỂ KHÔNG BỊ RỚT GÓI TIN =================
+    original_host = request.headers.get("host", "")
+    if "revenuecat.com" in original_host:
+        upstream_host = "api.revenuecat.com"
+    else:
+        upstream_host = "api.locketcamera.com"
+        
+    url = f"https://{upstream_host}/" + quote(path, safe="/:@!$&'()*+,;=-._~")
+    
     query_params = str(request.url.query)
     if query_params:
         url += f"?{query_params}"
@@ -146,7 +141,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     for key in list(headers):
         if key in {'host', 'cookie', 'forwarded', 'accept-encoding'} or key.startswith(('x-forwarded-', 'cf-')):
             del headers[key]
-    headers['Host'] = 'api.locketcamera.com'
+    headers['Host'] = upstream_host
     headers['Accept-Encoding'] = 'identity'
 
     method = request.method
@@ -167,15 +162,14 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                 raise HTTPException(401, 'Use an upstream access token')
 
     is_upload = method in ["POST", "PUT", "PATCH"] and (
-        "multipart/form-data" in content_type_header
-        or "octet-stream" in content_type_header
-        or "video/" in content_type_header
-        or "image/" in content_type_header
+        "multipart/form-data" in content_type_header.lower()
+        or "octet-stream" in content_type_header.lower()
+        or "video/" in content_type_header.lower()
+        or "image/" in content_type_header.lower()
     )
     body = await request.body()
     timeout_limit = 60.0 if is_upload else 30.0
 
-    # ================= LOGIC XỬ LÝ ẢNH QUA AI (ĐỔI TÓC ĐỎ) =================
     if method in ["POST", "PUT", "PATCH"] and (
         "multipart/form-data" in content_type_header.lower()
         or "octet-stream" in content_type_header.lower()
@@ -185,12 +179,10 @@ async def dynamic_reverse_proxy(request: Request, path: str):
             if body:
                 ai_prompt = "strictly change hair color to vibrant fiery red hair, highly detailed, realistic hair texture"
                 modified_bytes = await process_image_with_ai(body, ai_prompt)
-                
                 if modified_bytes:
                     body = modified_bytes
         except Exception as e:
-            print(f"[AI Proxy Error] Không thể xử lý qua AI, giữ nguyên ảnh gốc: {e}")
-    # ======================================================================
+            print(f"[AI Proxy Error] Không thể xử lý qua AI: {e}")
 
     try:
         upstream_status, upstream_headers, upstream_content = await asyncio.to_thread(
@@ -224,22 +216,21 @@ async def dynamic_reverse_proxy(request: Request, path: str):
             data = json.loads(upstream_content.decode("utf-8"))
         except (ValueError, UnicodeDecodeError):
             return Response(upstream_content, status_code=upstream_status, headers=response_headers)
+        
         if isinstance(data, (dict, list)):
             segments = set(path.split('/'))
             if segments & {'moments', 'posts', 'viewers'}:
                 dynamic_viewers = []
-                if viewers_col is None:
-                    raise HTTPException(503, 'Database unavailable')
-                cursor = viewers_col.find({"token": user_token}).sort("viewed_at", -1).limit(10)
-                records = await cursor.to_list(length=10)
-                for record in records:
-                    dynamic_viewers.append({
-                        "user_id": str(record.get("viewer_id", "unknown_id")),
-                        "username": record.get("username", "friend"),
-                        "display_name": record.get("display_name", "Member"),
-                        "viewed_at": record.get("viewed_at"),
-                    })
-
+                if viewers_col is not None:
+                    cursor = viewers_col.find({"token": user_token}).sort("viewed_at", -1).limit(10)
+                    records = await cursor.to_list(length=10)
+                    for record in records:
+                        dynamic_viewers.append({
+                            "user_id": str(record.get("viewer_id", "unknown_id")),
+                            "username": record.get("username", "friend"),
+                            "display_name": record.get("display_name", "Member"),
+                            "viewed_at": record.get("viewed_at"),
+                        })
                 if dynamic_viewers:
                     if isinstance(data, dict):
                         data["viewers"] = dynamic_viewers
@@ -252,26 +243,30 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                 if isinstance(data, dict):
                     candidate_id = _extract_locket_id(path, data)
                     account_record = None
-                    if accounts_col is None:
-                        raise HTTPException(503, 'Database unavailable')
-                    if candidate_id:
+                    if accounts_col is not None and candidate_id:
                         account_record = await accounts_col.find_one(
                             {"locket_id": candidate_id}, {"_id": 0}
                         )
 
-                    now = datetime.now(timezone.utc)
-                    sub_payload = subscriber_response(candidate_id or "locket_user", account_record, now)
-                    subscriber = data.get('subscriber')
-                    if subscriber is None:
-                        subscriber = data['subscriber'] = sub_payload['subscriber']
-                    if isinstance(subscriber, dict):
-                        for field, key in [('entitlements', 'Gold'), ('subscriptions', 'com.locket.gold.yearly')]:
-                            values = subscriber.get(field)
-                            if not isinstance(values, dict):
-                                values = {}
-                            values.pop(key, None)
-                            values.update(sub_payload['subscriber'][field])
-                            subscriber[field] = values
+                    # ================= 2. CHỈ KÍCH HOẠT GOLD NẾU USER CÓ TRONG DATABASE =================
+                    if account_record:
+                        now = datetime.now(timezone.utc)
+                        sub_payload = subscriber_response(candidate_id or "locket_user", account_record, now)
+                        subscriber = data.get('subscriber')
+                        
+                        if subscriber is None:
+                            subscriber = data['subscriber'] = sub_payload['subscriber']
+                            
+                        if isinstance(subscriber, dict):
+                            for field, key in [('entitlements', 'Gold'), ('subscriptions', 'com.locket.gold.yearly')]:
+                                values = subscriber.get(field)
+                                if not isinstance(values, dict):
+                                    values = {}
+                                values.pop(key, None)
+                                values.update(sub_payload['subscriber'][field])
+                                subscriber[field] = values
+                    # Nếu account_record == None (không có trong DB), hệ thống sẽ bỏ qua đoạn trên 
+                    # và trả về nguyên trạng tài khoản thường từ server Locket.
 
             for key in ('etag', 'content-md5', 'digest', 'content-encoding'):
                 response_headers.pop(key, None)
