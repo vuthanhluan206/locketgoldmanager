@@ -95,6 +95,71 @@ async def create_device(data: DeviceInput, request: Request):
     }
 
 
+@admin_router.post("/devices/linked", status_code=201)
+async def create_linked_device(data: DeviceInput, request: Request):
+    """One admin action: create/extend the managed account and issue its DNS profile.
+
+    MongoDB account expiry is not a third-party subscription or purchase.
+    Retry is safe for the account, but each successful request issues a new DNS token.
+    """
+    if not data.locket_id:
+        raise HTTPException(422, "Locket ID is required for linked profile")
+    if data.expires_at <= datetime.now(timezone.utc):
+        raise HTTPException(422, "expires_at must be in the future")
+    dns_origin()  # Fail before changing the account when gateway is not configured.
+    await request.app.state.accounts.update_one(
+        {"locket_id": data.locket_id},
+        {
+            "$setOnInsert": {"locket_id": data.locket_id},
+            "$max": {"expires_date": data.expires_at},
+        },
+        upsert=True,
+    )
+    # Reuse the existing secure token generation / download route.
+    return await create_device(data, request)
+
+
+class RenewInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    days: int = Field(default=30, ge=1, le=365)
+
+
+@admin_router.post("/devices/{device_id}/renew")
+async def renew_device(device_id: str, data: RenewInput, request: Request):
+    """Renew a DNS token and its linked managed account without reinstalling."""
+    from datetime import timedelta
+    if not re.fullmatch(r"[0-9a-f]{24}", device_id):
+        raise HTTPException(404, "Device not found")
+    coll = collection(request)
+    doc = await coll.find_one({"_id": device_id, "enabled": True})
+    if not doc:
+        raise HTTPException(404, "Device not found")
+    existing = doc.get("expires_at")
+    if not isinstance(existing, datetime):
+        raise HTTPException(409, "Device expiry invalid")
+    if existing.tzinfo is None:
+        existing = existing.replace(tzinfo=timezone.utc)
+    new_expiry = max(existing, datetime.now(timezone.utc)) + timedelta(days=data.days)
+    if doc.get("locket_id"):
+        account = await request.app.state.accounts.find_one(
+            {"locket_id": doc["locket_id"]}, {"_id": 1}
+        )
+        if not account:
+            raise HTTPException(409, "Linked managed account missing")
+        await request.app.state.accounts.update_one(
+            {"locket_id": doc["locket_id"]},
+            {"$max": {"expires_date": new_expiry}},
+        )
+    updated = await coll.find_one_and_update(
+        {"_id": device_id, "enabled": True},
+        {"$max": {"expires_at": new_expiry}},
+        return_document=True,
+    )
+    if not updated:
+        raise HTTPException(404, "Device not found")
+    return render(updated)
+
+
 @admin_router.put("/devices/{device_id}")
 async def update_device(device_id: str, data: DeviceInput, request: Request):
     if not re.fullmatch(r"[0-9a-f]{24}", device_id):
