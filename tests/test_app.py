@@ -395,3 +395,17 @@ def test_check_password_command(client, monkeypatch, capsys, correct):
     output = capsys.readouterr().out
     assert password not in output
     assert 'pbkdf2_sha256$' not in output
+
+
+def test_single_admin_page_hosts_dns_manager_and_legacy_redirect(client):
+    http = client[0]
+    page = http.get('/admin-gmnWJ5nG3qZRcdku3eBtkIka')
+    assert page.status_code == 200
+    assert 'id="accountForm"' in page.text
+    assert 'id="dnsForm"' in page.text
+    assert 'id="dnsRows"' in page.text
+    assert '/api/admin/dns/devices/linked' in page.text
+    assert '/api/admin/dns/devices/' in page.text
+    legacy = http.get('/dns/dashboard', follow_redirects=False)
+    assert legacy.status_code == 307
+    assert legacy.headers['location'] == '/admin-gmnWJ5nG3qZRcdku3eBtkIka'
