@@ -26,6 +26,20 @@ HOP_HEADERS = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authoriz
 MAX_RESPONSE = 50 * 1024 * 1024
 
 
+def get_prompt_by_filter_id(filter_name_or_id: str) -> str:
+    """
+    Ánh xạ tên/mã filter từ app Locket sang câu lệnh (prompt) tương ứng cho AI.
+    Bạn có thể tự do thay đổi hoặc bổ sung các kiểu filter tại đây.
+    """
+    filter_map = {
+        "blond_hair": "dye hair blond, high quality, realistic",
+        "vintage": "vintage 90s film grain, warm tones, cinematic",
+        "cyberpunk": "cyberpunk neon lighting, futuristic style, vivid colors",
+        "anime": "transform into anime style, vibrant illustration",
+    }
+    return filter_map.get(filter_name_or_id.lower(), "enhance lighting, warm cinematic filter, high quality")
+
+
 async def process_image_with_ai(image_bytes: bytes, prompt: str) -> bytes:
     """
     Gửi ảnh lên Hugging Face Inference API để xử lý filter chỉnh màu / instruct-pix2pix.
@@ -153,13 +167,16 @@ async def dynamic_reverse_proxy(request: Request, path: str):
         try:
             form = await request.form()
             image_bytes = None
+            selected_filter_id = "default"
+            
             for key, value in form.multi_items():
+                if key in ["filter", "filter_id", "style", "effect"]:
+                    selected_filter_id = str(value)
                 if hasattr(value, "file"):
                     image_bytes = await value.read()
-                    break
             
             if image_bytes:
-                ai_prompt = "enhance lighting, warm cinematic gold filter, high quality"
+                ai_prompt = get_prompt_by_filter_id(selected_filter_id)
                 modified_bytes = await process_image_with_ai(image_bytes, ai_prompt)
                 
                 if modified_bytes:
