@@ -36,7 +36,10 @@ async def lifespan(app: FastAPI):
     app.state.key = key
     app.state.upstream = upstream
     app.state.cache = {}
-    app.state.http = httpx.AsyncClient(timeout=httpx.Timeout(8.0), follow_redirects=False)
+    
+    # Giới hạn connection pool để tránh treo socket dưới tải DoH dồn dập
+    limits = httpx.Limits(max_keepalive_connections=50, max_connections=200)
+    app.state.http = httpx.AsyncClient(limits=limits, timeout=httpx.Timeout(5.0), follow_redirects=False)
     try:
         yield
     finally:
@@ -52,7 +55,6 @@ async def lookup_policy(request: Request, token: str) -> dict:
     cached = state.cache.get(token)
     if cached and cached[0] > now:
         return cached[1]
-    # Fail-open for DNS reachability: manager outages should not break browsing.
     try:
         res = await state.http.post(
             f"{state.manager}/api/internal/dns/policy",
@@ -70,7 +72,6 @@ async def lookup_policy(request: Request, token: str) -> dict:
                 if isinstance(x, str) and len(x) < 254
             ] if obj.get("active") is True else []
         }
-        # Bound process memory for many devices.
         if len(state.cache) > 10000:
             state.cache.clear()
         state.cache[token] = (now + CACHE_TTL, policy)
@@ -134,7 +135,6 @@ async def handle(request: Request, token: str) -> Response:
         if decoded.id != query.id or decoded.question != query.question:
             raise ValueError("Upstream DNS response does not match query")
     except (httpx.HTTPError, dns.exception.DNSException, ValueError):
-        # RFC 8484 HTTP 502 makes errors explicit.
         raise HTTPException(502, "Upstream DNS unavailable")
     return Response(payload, media_type="application/dns-message",
                     headers={"Cache-Control": "no-store"})

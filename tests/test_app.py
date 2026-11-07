@@ -328,7 +328,7 @@ def test_startup_creates_hashed_admin_and_session_ttl(client, monkeypatch, inval
     db.admins = AsyncMock()
     db.sessions = AsyncMock()
     db.login_limits = AsyncMock()
-    db.viewers_history = AsyncMock()
+    db.dns_devices = AsyncMock()
     mongo = MagicMock()
     mongo.admin = AsyncMock()
     mongo.close = AsyncMock()
@@ -411,7 +411,7 @@ def test_single_admin_page_hosts_dns_manager_and_legacy_redirect(client):
     assert 'Sửa / Cấp DNS' in page.text
     legacy = http.get('/dns/dashboard', follow_redirects=False)
     assert legacy.status_code == 307
-    assert legacy.headers['location'] == '/admin-gmnWJ5nG3qZRcdku3eBtkIka'
+    assert legacy.headers['location'] == '/admin'
 
 
 

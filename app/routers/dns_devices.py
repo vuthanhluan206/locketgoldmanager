@@ -1,7 +1,6 @@
 """Admin-managed device DNS profiles. Never handles third-party purchase receipts."""
 import hashlib
 from pathlib import Path
-import os
 import re
 import secrets
 from datetime import datetime, timezone
@@ -11,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
+from app.config import get_settings
 from app.dns_profile import build_dns_profile
 from app.models import AccountId
 from app.managed_access import device_active
@@ -28,7 +28,8 @@ def digest(value: str) -> str:
 
 
 def dns_origin() -> str:
-    value = os.environ.get("DNS_PUBLIC_ORIGIN", "").rstrip("/")
+    settings = get_settings()
+    value = settings.dns_public_origin.rstrip("/")
     u = urlsplit(value)
     if u.scheme != "https" or not u.hostname or u.username or u.password or u.query or u.fragment or u.path:
         raise HTTPException(503, "Configure DNS_PUBLIC_ORIGIN as https://dns.example.com")
@@ -60,7 +61,9 @@ class DeviceInput(BaseModel):
 
 def render(doc: dict) -> dict:
     return {
-        "id": doc["_id"], "label": doc["label"], "locket_id": doc.get("locket_id"),
+        "id": doc["_id"],
+        "label": doc["label"],
+        "locket_id": doc.get("locket_id"),
         "enabled": bool(doc["enabled"]),
         "expires_at": doc["expires_at"],
         "block_domains": doc.get("block_domains", []),
@@ -79,13 +82,16 @@ async def create_device(data: DeviceInput, request: Request):
     token = secrets.token_urlsafe(32)
     device_id = secrets.token_hex(12)
     doc = {
-        "_id": device_id, "token_hash": digest(token),
-        "label": data.label, "locket_id": data.locket_id, "expires_at": data.expires_at,
-        "enabled": True, "block_domains": data.block_domains,
+        "_id": device_id,
+        "token_hash": digest(token),
+        "label": data.label,
+        "locket_id": data.locket_id,
+        "expires_at": data.expires_at,
+        "enabled": True,
+        "block_domains": data.block_domains,
         "created_at": datetime.now(timezone.utc),
     }
     coll = collection(request)
-    await coll.create_index("token_hash", unique=True)
     await coll.insert_one(doc)
     return {
         **render(doc),
@@ -97,16 +103,11 @@ async def create_device(data: DeviceInput, request: Request):
 
 @admin_router.post("/devices/linked", status_code=201)
 async def create_linked_device(data: DeviceInput, request: Request):
-    """One admin action: create/extend the managed account and issue its DNS profile.
-
-    MongoDB account expiry is not a third-party subscription or purchase.
-    Retry is safe for the account, but each successful request issues a new DNS token.
-    """
     if not data.locket_id:
         raise HTTPException(422, "Locket ID is required for linked profile")
     if data.expires_at <= datetime.now(timezone.utc):
         raise HTTPException(422, "expires_at must be in the future")
-    dns_origin()  # Fail before changing the account when gateway is not configured.
+    dns_origin()
     await request.app.state.accounts.update_one(
         {"locket_id": data.locket_id},
         {
@@ -115,7 +116,6 @@ async def create_linked_device(data: DeviceInput, request: Request):
         },
         upsert=True,
     )
-    # Reuse the existing secure token generation / download route.
     return await create_device(data, request)
 
 
@@ -126,7 +126,6 @@ class RenewInput(BaseModel):
 
 @admin_router.post("/devices/{device_id}/renew")
 async def renew_device(device_id: str, data: RenewInput, request: Request):
-    """Renew a DNS token and its linked managed account without reinstalling."""
     from datetime import timedelta
     if not re.fullmatch(r"[0-9a-f]{24}", device_id):
         raise HTTPException(404, "Device not found")
@@ -167,11 +166,6 @@ class SetExpiryInput(BaseModel):
 
 @admin_router.post("/devices/{device_id}/set-expiry")
 async def set_device_expiry(device_id: str, data: SetExpiryInput, request: Request):
-    """Set an exact DNS expiry, including a past date for controlled testing.
-
-    Linked managed accounts share an expiry, so changing their date can also
-    affect other linked devices. It never changes third-party subscriptions.
-    """
     if not re.fullmatch(r"[0-9a-f]{24}", device_id):
         raise HTTPException(404, "Device not found")
     coll = collection(request)
@@ -226,18 +220,27 @@ async def update_device(device_id: str, data: DeviceInput, request: Request):
 
 @admin_router.get("/devices")
 async def list_devices(request: Request):
-    records = await collection(request).find({}, {"token_hash": 0}).sort("created_at", -1).limit(100).to_list(100)
+    records = await collection(request).find({}, {"token_hash": 0}).sort("created_at", -1).limit(500).to_list(500)
     return [render(x) for x in records]
+
+
+async def _delete_device(device_id: str, request: Request) -> Response:
+    if not re.fullmatch(r"[0-9a-f]{24}", device_id):
+        raise HTTPException(404, "Device not found")
+    result = await collection(request).delete_one({"_id": device_id})
+    if not result.deleted_count:
+        raise HTTPException(404, "Device not found")
+    return Response(status_code=204)
+
+
+@admin_router.delete("/devices/{device_id}", status_code=204)
+async def delete_device(device_id: str, request: Request):
+    return await _delete_device(device_id, request)
 
 
 @admin_router.post("/devices/{device_id}/revoke", status_code=204)
 async def revoke_device(device_id: str, request: Request):
-    if not re.fullmatch(r"[0-9a-f]{24}", device_id):
-        raise HTTPException(404, "Device not found")
-    result = await collection(request).update_one({"_id": device_id}, {"$set": {"enabled": False}})
-    if not result.matched_count:
-        raise HTTPException(404, "Device not found")
-    return Response(status_code=204)
+    return await _delete_device(device_id, request)
 
 
 @router.get("/dns/profiles/{token}.mobileconfig", include_in_schema=False)
@@ -258,5 +261,4 @@ async def download_profile(token: str, request: Request):
 
 @router.get("/dns/dashboard", include_in_schema=False)
 async def dns_dashboard():
-    """Legacy URL goes to the single authenticated admin workspace."""
-    return RedirectResponse("/admin-gmnWJ5nG3qZRcdku3eBtkIka", status_code=307)
+    return RedirectResponse(get_settings().admin_path, status_code=307)

@@ -1,10 +1,68 @@
-# Project source
+# Source code của dự án
 
-Each section contains the file path and its complete text content. Secrets, binary assets, Git metadata, virtual environments and caches are excluded.
+Tệp này được tạo tự động từ các file trong dự án (không gồm file nhị phân như ảnh/icon).
+
+## Danh sách file
+
+- `.dockerignore`
+- `.env.example`
+- `.github/workflows/doh-tests.yml`
+- `.gitignore`
+- `.python-version`
+- `.vercelignore`
+- `CODE-AUDIT.md`
+- `DEPLOY-VERCEL.md`
+- `Dockerfile`
+- `README.md`
+- `SECURITY-AUDIT.md`
+- `app/__init__.py`
+- `app/auth.py`
+- `app/bootstrap.py`
+- `app/config.py`
+- `app/database.py`
+- `app/dns_profile.py`
+- `app/main.py`
+- `app/managed_access.py`
+- `app/middleware.py`
+- `app/models.py`
+- `app/passwords.py`
+- `app/profile.py`
+- `app/routers/__init__.py`
+- `app/routers/dns_devices.py`
+- `app/routers/dns_policy.py`
+- `app/routers/management.py`
+- `app/routers/subscribers.py`
+- `app/security.py`
+- `app/turnstile.py`
+- `compose.yaml`
+- `docs/MANAGED-DNS-VPS.md`
+- `index.py`
+- `pyproject.toml`
+- `requirements-dev.txt`
+- `requirements.txt`
+- `tests/conftest.py`
+- `tests/test_admin_protection.py`
+- `tests/test_app.py`
+- `tests/test_auth_entrypoint.py`
+- `tests/test_deployment.py`
+- `tests/test_dns_linked_dashboard.py`
+- `tests/test_icons.py`
+- `tests/test_managed_dns.py`
+- `tests/test_mongodb_integration.py`
+- `tests/test_profile.py`
+- `vercel.json`
+- `vps/doh-gateway.service`
+- `vps/doh_gateway.py`
+- `vps/managed-doh.env.example`
+- `vps/nginx-doh.conf`
+- `vps/requirements.txt`
+- `web/index.html`
+
+File nhị phân bỏ qua: `web/apple-touch-icon.png`, `web/favicon.ico`
 
 ## .dockerignore
 
-```text
+```
 .git
 .env
 .env.*
@@ -25,7 +83,7 @@ SOURCE.md
 
 ## .env.example
 
-```text
+```
 MONGODB_URI=mongodb://127.0.0.1:27017
 MONGODB_DATABASE=locket_manager
 NEXTDNS_ID=
@@ -52,9 +110,30 @@ TRUSTED_PROXY_CIDRS=[]
 # SUBSCRIBER_API_TOKEN=
 ```
 
+## .github/workflows/doh-tests.yml
+
+```yaml
+name: Managed DNS tests
+on:
+  push:
+    branches: ["feature/vps-doh-device-manager"]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt -r vps/requirements.txt -r requirements-dev.txt
+      - run: python -m compileall -q app vps
+      - run: pytest -q tests/test_managed_dns.py
+```
+
 ## .gitignore
 
-```text
+```
 .env
 .env.*
 !.env.example
@@ -76,13 +155,13 @@ generate_root_ca.py
 
 ## .python-version
 
-```text
+```
 3.12
 ```
 
 ## .vercelignore
 
-```text
+```
 .git
 .env
 .env.*
@@ -100,6 +179,396 @@ source-code.zip
 *.pfx
 *.log
 generate_root_ca.py
+```
+
+## CODE-AUDIT.md
+
+```markdown
+# Audit Locket Management & Proxy — 04/11/2026
+
+Phạm vi: FastAPI, cấu hình, middleware, proxy HTTP, MongoDB, auth/password/session,
+Turnstile, routers quản trị/subscriber, profile, frontend, dependencies và pytest.
+Giả định: một worker sau TLS proxy tin cậy; nhiều instance cần giới hạn lưu lượng tại edge.
+Đây là kiểm tra source và test local, không phải chứng nhận hệ thống production.
+
+## Phát hiện và sửa
+
+| Mức | Trường hợp lỗi cụ thể | Sửa |
+|---|---|---|
+| Cao | urllib tự theo redirect; Authorization/Host có thể đi đến đích khác | Tắt redirect trong transport; trả 502 cho upstream 3xx; upstream Host luôn `api.locketcamera.com` |
+| Cao | Admin session/service token bị gửi nhầm vào proxy có thể lộ cho upstream | Từ chối token service đã cấu hình và session đã lưu trong MongoDB trước khi gọi upstream; bỏ cookie và forwarded headers |
+| Trung bình | Domain Vercel trả 400 khi chỉ domain riêng nằm trong allowlist | Thêm chính xác hostname từ biến hệ thống Vercel; giữ allowlist cho alias và domain riêng; không wildcard |
+| Trung bình | `testserver` luôn được chấp nhận cả trên production | Bỏ tự thêm hostname test; test khai báo rõ hostname riêng |
+| Trung bình | Header `Content-Type` khác kiểu viết hoa làm bỏ qua JSON; bỏ Content-Encoding nhưng vẫn giữ bytes gzip làm hỏng response | Đọc headers không phân biệt hoa thường; yêu cầu identity; nếu upstream vẫn nén thì giữ bytes và encoding, không tiêm JSON |
+| Trung bình | Lỗi MongoDB bị nuốt, làm trạng thái Gold/viewers sai và không thể chẩn đoán | Để handler DB trả 503, không trả trạng thái giả khi lỗi DB; không tiết lộ exception |
+| Trung bình | Timestamp BSON datetime trong viewers khiến JSON serialization thất bại và bị nuốt lỗi | Dùng jsonable_encoder; không tự tạo timestamp quá khứ giả |
+| Trung bình | Ghi đè toàn bộ entitlements/subscriptions làm mất quyền khác | Chỉ cập nhật/xóa `Gold` và product Gold do hệ thống quản lý; giữ các mục khác |
+| Trung bình | Token bị coi là locket_id khi không tìm thấy ID | Bỏ fallback token; ưu tiên original_app_user_id từ phản hồi upstream thành công |
+| Trung bình | `/proxy/install` tự tạo lại profile sau khi startup đã đánh dấu CA lỗi | Dùng chung endpoint profile và cùng cache; lỗi cấu hình trả 503 nhất quán |
+| Trung bình | `/openapi.json` công khai sơ đồ API dù đã tắt docs | Tắt OpenAPI endpoint; không xuất đường dẫn admin cấu hình trong public HTML |
+| Trung bình | Cấu hình pytest dùng cố định `.pytest_tmp` gây WinError 5 trên máy hiện tại | Dùng cơ chế thư mục tạm mặc định của pytest; giữ pythonpath và testpaths |
+
+## Các chức năng được giữ
+
+- PBKDF2-SHA256 600.000 vòng, salt ngẫu nhiên; bearer session chỉ lưu SHA256 trong DB,
+  kiểm tra expiry/auth_version, logout thu hồi phiên.
+- Turnstile kiểm tra server-side success/hostname/action; giới hạn login dùng MongoDB chung.
+- Admin và proxy dùng cùng `app.state.accounts`, trường `locket_id` và `expires_date` UTC.
+  Thêm/gia hạn/xóa từ admin tác động ngay tới lần tra cứu proxy tiếp theo.
+- Viewers dùng `viewers_history`, tra theo token upstream và sắp xếp viewed_at giảm dần;
+  thêm index `(token, viewed_at)` hỗ trợ query. Không tự tạo viewers nếu DB không có dữ liệu.
+- XML plist profile, MIME `application/x-apple-aspen-config`, Content-Disposition attachment,
+  kiểm tra Root CA và cache lúc startup. Hai URL tải dùng chung bytes.
+- CORS không bật: giao diện cùng origin không cần CORS. Không cho wildcard credentials.
+  Client native không bị CORS của trình duyệt hạn chế.
+- Body: proxy 50 MiB/60 giây, route khác 8 KiB/5 giây; kiểm tra cả chunked.
+  Transport chạy trong thread, không chặn event loop; response upstream có giới hạn 50 MiB.
+
+## Giới hạn và việc chưa xác minh
+
+- Vercel Function giới hạn payload 4,5 MB. Mức 50 MiB tại app không thay đổi giới hạn nền tảng.
+  Xem https://vercel.com/docs/functions/limitations. Chưa thay đổi cloud environment hoặc deploy.
+- Upstream được cố định và chỉ sửa JSON sau phản hồi 2xx có bearer upstream. Điều này chưa
+  chứng minh upstream thực sự ràng buộc ID trong URL với token; cần hợp đồng/kiểm thử được
+  chủ dịch vụ cho phép. Test local không chứng minh tương thích app Locket/RevenueCat thật.
+- Profile DNS/CA không tự thực hiện interception TLS, không tự bật full trust hoặc bỏ certificate pinning.
+  Chưa kiểm tra trên iPhone/Safari; profile chưa ký CMS.
+- `viewers_history.token` vẫn giữ schema token gốc để không phá hệ thống ghi dữ liệu hiện tại.
+  Repo chưa có producer ghi viewers; cần triển khai đổi cả producer/consumer nếu chuyển sang token hash.
+  Không ghi token, ID cá nhân hay đường dẫn admin vào log ứng dụng mới.
+- Frontend vẫn lưu bearer token trong localStorage theo thiết kế hiện tại; XSS có thể đọc token.
+  Nonce CSP, textContent và loại inline handlers giúp giảm rủi ro, không loại bỏ hoàn toàn.
+- Tổng limiter vẫn theo process; login/admin có bộ đếm DB chung. TLS, IP proxy thực tế và WAF
+  phải được cấu hình tại deployment. Không tin X-Forwarded-* do client gửi để bỏ kiểm tra HTTPS.
+- Proxy buffer body/response trong RAM; upload đồng thời lớn cần giới hạn concurrency tại reverse proxy.
+  Giới hạn đọc urllib là timeout socket, không phải thời hạn tổng tuyệt đối cho upstream chậm nhỏ giọt.
+- Chưa kiểm tra MongoDB thật, lịch sử Git, dependency CVE, load test hay production credentials.
+
+## Kiểm chứng
+
+Chạy `python -m pytest -q` từ thư mục gốc. Test không gọi API Locket thật.
+Kết quả: **68 passed, 1 skipped**, một cảnh báo deprecation httpx/Starlette.
+Test proxy dùng transport giả cho status/compression/timeout và MongoDB giả cho expiry/viewers;
+một HTTP server local xác minh urllib không đi theo redirect. Upload kiểm tra đúng 50 MiB,
+50 MiB + 1 byte dạng chunked, và admin 8 KiB + 1 byte. Test host cho phép đúng hostname deployment,
+chặn hostname khác và hậu tố giả. Test MongoDB thật chỉ chạy khi đặt TEST_MONGODB_URI.
+```
+
+## DEPLOY-VERCEL.md
+
+````markdown
+# Deploy FastAPI lên Vercel
+
+## Cập nhật: lỗi 400 và upload proxy
+
+Log ngày 04/11/2026 cho thấy domain riêng trả 200 nhưng alias/deployment Vercel trả 400.
+Điều này phù hợp với hostname chưa có trong allowlist; để xác nhận, kiểm tra body `Invalid host header`.
+Nếu body là `HTTPS is required`, kiểm tra scheme do nền tảng cung cấp, không tin header client tùy ý.
+
+Đặt Environment Variables cho đúng Production/Preview rồi redeploy:
+
+```dotenv
+ALLOWED_HOSTS=["locketgold.vuthanhluan.bond","locketgold-premium-luan-eafb.vercel.app"]
+ADMIN_PATH=/your-private-admin-path
+REQUIRE_HTTPS=true
+```
+
+Code tự thêm hostname chính xác từ `VERCEL_URL`, `VERCEL_PROJECT_PRODUCTION_URL`,
+`VERCEL_BRANCH_URL` khi `VERCEL=1`. Đây là biến hệ thống của deployment, không phải HTTP headers.
+Alias tùy chỉnh vẫn phải khai báo trong `ALLOWED_HOSTS`. Không cho phép `*` hoặc `*.vercel.app`.
+`VERCEL_PROJECT_PRODUCTION_URL` có thể là custom domain; trường hợp đó vẫn dùng allowlist tường minh.
+Nguồn biến hệ thống: https://vercel.com/docs/environment-variables/system-environment-variables
+Khi sử dụng Turnstile trên nhiều hostname, cập nhật cả widget Cloudflare và `TURNSTILE_HOSTNAME`.
+Đường dẫn admin cũ trả 404 sau khi đổi `ADMIN_PATH` là hành vi đúng.
+
+FastAPI chấp nhận tối đa **50 MiB** cho `/proxy/…`, **8 KiB** cho các route khác,
+kiểm tra cả body không có Content-Length. Vercel Functions có giới hạn payload **4,5 MB**
+trước khi request đến ứng dụng; code không vượt được giới hạn này. Proxy upload lớn cần
+chạy trên container/VPS với reverse proxy cho phép 50 MiB, hoặc một luồng upload trực tiếp
+được dịch vụ đích hỗ trợ. Không thể tự thay luồng upload của client bên ngoài chỉ bằng cấu hình DNS.
+Nguồn: https://vercel.com/docs/functions/limitations
+
+Chưa thay đổi Environment Variables hoặc deploy Vercel từ phiên audit này.
+
+Repository này có entrypoint `index.py` theo cơ chế FastAPI native của Vercel và chọn Python 3.12 qua `.python-version`. `vercel.json` chỉ định FastAPI và đặt lại Build Command/Output Directory về mặc định, tránh phục vụ riêng HTML tĩnh. Giữ nguyên backend; Vercel hỗ trợ lifespan. Không chạy Dockerfile, `uvicorn --reload` hoặc `docker compose` trong Vercel Build Command.
+
+`pyproject.toml` khai báo tường minh `[tool.vercel] entrypoint = "app.main:app"`, tránh phụ thuộc vào việc tự dò file import lại app hoặc app được khởi tạo qua factory. Vercel cài runtime dependencies từ `[project].dependencies` trong file này; danh sách đồng bộ với `requirements.txt` cho local và Docker, có test kiểm tra không bị lệch.
+
+## 1. Chuẩn bị database và tài khoản
+
+- Tạo MongoDB Atlas hoặc dùng MongoDB có thể kết nối từ Vercel qua TLS. URI `localhost` của máy bạn không hoạt động trên Vercel.
+- Tạo database user quyền `readWrite` chỉ trên database của ứng dụng. Cấu hình Atlas Network Access theo mạng/IP egress của môi trường deploy; không mặc định mở database cho mọi IP. Nếu cần egress cố định/private network, kiểm tra tính năng và gói nền tảng hỗ trợ trước.
+- Trước khi public, đổi mật khẩu đã gửi trong hội thoại bằng lệnh local `python -m app.bootstrap`. Mật khẩu được nhập ẩn; chỉ hash có salt được lưu trong `.env`. Lấy giá trị hash từ `.env` để nhập vào Vercel; không đưa file này lên Git.
+- Production và Preview nên dùng database/tài khoản DB riêng. Code mới chỉ tạo Admin lần đầu, không ghi đè tài khoản khi startup. Các deployment chạy code cũ vẫn có thể ghi đè: ngừng sử dụng/thu hồi quyền truy cập database của các bản cũ, hoặc chuyển production sang database riêng với thông tin truy cập mới. Đổi code mới không vô hiệu hóa tiến trình cũ đang giữ thông tin đăng nhập DB.
+
+## 2. Import repository
+
+1. Trong Vercel chọn **Add New → Project**, import `vuthanhluan206/locketgoldmanager`.
+2. Root Directory là thư mục gốc repository, nơi có `index.py` và `requirements.txt`.
+3. Dùng nhận diện framework FastAPI/native và các lệnh build mặc định. Không đặt Output Directory là `web` hoặc `public`, vì HTML phải đi qua FastAPI để có CSP nonce và loại bỏ view admin khỏi trang khách.
+4. Xác định production domain trong Project Settings → Domains để điền `ALLOWED_HOSTS`. Không đoán domain nếu tên project bị trùng.
+
+## 3. Environment Variables
+
+Nhập các giá trị dưới đây vào Vercel Project Settings → Environment Variables cho đúng môi trường. Giá trị nhập trong UI là giá trị thực, không bọc thêm dấu nháy shell.
+
+| Tên | Giá trị |
+|---|---|
+| `MONGODB_URI` | URI Atlas/TLS của database; không dùng localhost |
+| `MONGODB_DATABASE` | Tên database, ví dụ `locket_manager` |
+| `NEXTDNS_ID` | ID NextDNS của bạn, hiện đang dùng `a8b247` |
+| `SUPERADMIN_EMAIL` | Email admin của bạn |
+| `SUPERADMIN_PASSWORD_HASH` | Toàn bộ hash từ `.env`, dạng `pbkdf2_sha256$600000$...$...` |
+| `ALLOWED_HOSTS` | JSON array chứa domain thực, ví dụ `["your-project.vercel.app","your-domain.example"]` |
+| `REQUIRE_HTTPS` | `true` |
+| `SESSION_TTL_SECONDS` | `3600` |
+| `ROOT_CA_PATH` | Để trống nếu chỉ cấp cấu hình DNS |
+| `ROOT_CA_PEM` | Chứng chỉ Root CA công khai dạng PEM, dùng thay cho `ROOT_CA_PATH` |
+| `SUBSCRIBER_API_TOKEN` | Tùy chọn: token ngẫu nhiên 32–256 ký tự ASCII để server tin cậy gọi API thuê bao. Bỏ biến nếu không dùng; không nhúng vào app di động |
+
+`SUPERADMIN_EMAIL`/`SUPERADMIN_PASSWORD_HASH` chỉ seed lần đầu khi DB chưa có Admin. Để cập nhật tài khoản đã tồn tại, chuẩn bị `.env` local với URI Atlas và tên database production chính xác, email/hash mong muốn, rồi chạy `python -m app.bootstrap --sync-db`. Lệnh thay đổi tài khoản DB đó và vô hiệu hóa phiên cũ nếu hash đổi. Không dùng URI localhost khi muốn cập nhật tài khoản Vercel. Nếu không đổi mật khẩu, không cần chạy lệnh này khi nâng cấp.
+
+Với preview, thêm đúng hostname preview vào `ALLOWED_HOSTS` cho môi trường đó hoặc chỉ triển khai production ban đầu. Không dùng wildcard để bỏ kiểm tra Host. Một deployment URL ngẫu nhiên không nằm trong allowlist sẽ trả 400, dù production domain vẫn hoạt động.
+
+Để thêm Root CA trên Vercel, đặt `ROOT_CA_PATH` trống và dán toàn bộ chứng chỉ công khai vào giá trị `ROOT_CA_PEM`, từ `-----BEGIN CERTIFICATE-----` đến `-----END CERTIFICATE-----`, giữ các dòng hoặc dùng chuỗi `\n`. Không bọc dấu nháy trong giao diện Vercel. Chọn Production, Save và Redeploy, rồi tải/cài lại profile. Chỉ dùng một chứng chỉ Root CA tự ký còn hạn, không dùng intermediate, chuỗi chứng chỉ hoặc private key. `.vercelignore` cố ý loại file chứng chỉ và khóa; đường dẫn `E:\...` không tồn tại trên cloud. Nếu cả hai biến trống thì profile chỉ có DNS. Việc cài chứng chỉ thủ công không tự bật tin cậy SSL/TLS.
+
+Đánh dấu biến bí mật là sensitive nếu Vercel hỗ trợ trong môi trường tương ứng. Mỗi lần đổi biến môi trường phải redeploy. Không đặt cấu hình bí mật trong frontend hoặc `vercel.json`.
+
+## 4. Bảo vệ và kiểm tra
+
+- Nếu trang chủ hiện cả login và API trả Vercel `NOT_FOUND`: kiểm tra Settings → Build and Deployment, Root Directory phải là gốc repo (`./` hoặc để trống), không phải `web`. Framework là FastAPI; tắt override Output Directory và Build Command, không xuất riêng `web`. Sau đó tạo deployment từ commit mới nhất trên `main`. HTML thô có `__NONCE__` nghĩa là request chưa qua FastAPI.
+- Nếu build báo `FASTAPI_ENTRYPOINT_NOT_FOUND`, xác nhận deployment dùng commit có `pyproject.toml` và Root Directory là gốc repository. Không redeploy mã cũ chỉ có cấu hình tự dò.
+- Nếu runtime báo `ModuleNotFoundError: No module named 'fastapi'` sau dòng build `Installing required dependencies from pyproject.toml`, phải deploy commit có `[project].dependencies` đầy đủ. File chỉ khai báo `[tool.vercel]` không đủ để cài dependencies khi Vercel chọn pyproject thay requirements.
+
+- Đăng nhập đã có bộ đếm chung MongoDB ngoài limiter từng instance. Dùng thêm Vercel Firewall/WAF theo khả năng gói để lọc lưu lượng trước khi tới function/database. Xác minh IP proxy để giới hạn theo IP chính xác.
+- Xác minh HTTPS scheme/IP proxy thực tế; không tùy tiện tin `X-Forwarded-For` từ client. Nếu gặp 400, kiểm tra detail trong JSON và log: phân biệt lỗi Host với `HTTPS is required`; không tắt các kiểm tra một cách mặc định.
+- Sau deploy, kiểm tra `/`, `/admin`, đăng nhập, thêm/gia hạn một ID thử, tải profile, đăng xuất và thử gọi lại với token cũ.
+- Kiểm tra MongoDB có `admins`, `sessions`, `accounts`, `login_limits` và index TTL trên `sessions.expires_at`, `login_limits.expires_at`.
+- Không đưa `.env`, `.venv`, token, password hash hoặc log request vào Git. `.vercelignore` và `.gitignore` đã loại các file runtime/bí mật.
+
+Chưa deploy Vercel bằng tài khoản của bạn trong phiên này. Tài liệu chính thức: [FastAPI on Vercel](https://vercel.com/docs/frameworks/backend/fastapi), [Python runtime](https://vercel.com/docs/functions/runtimes/python).
+````
+
+## Dockerfile
+
+```
+FROM python:3.12-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt && useradd --uid 10001 --create-home appuser
+COPY app ./app
+COPY web ./web
+USER appuser
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-access-log"]
+```
+
+## README.md
+
+````markdown
+# Locket Gold Manager
+
+## Bảo vệ admin bằng IP và Cloudflare Turnstile
+
+- Giữ giới hạn hiện có: 120 request/IP/phút; đăng nhập 10 lần/IP/phút và 30 lần/phút toàn hệ thống. API admin có thêm giới hạn 60 request/IP/phút, dùng bộ đếm MongoDB chung giữa các instance. Vượt giới hạn trả HTTP 429 và `Retry-After: 60`.
+- Tạo widget **Managed** trong Cloudflare Dashboard → Turnstile, khai báo hostname thực tế của trang admin. Đặt các biến sau trong `.env` hoặc Environment Variables của Vercel, rồi khởi động/deploy lại:
+
+```dotenv
+TURNSTILE_SITE_KEY=your_public_site_key
+TURNSTILE_SECRET_KEY=your_private_secret_key
+TURNSTILE_HOSTNAME=locketgold.vuthanhluan.bond,locketgold-premium.vercel.app
+```
+
+`TURNSTILE_HOSTNAME` chứa một hoặc nhiều tên miền cách nhau bằng dấu phẩy, không có `https://`, cổng hay đường dẫn. Thêm tất cả tên miền này vào cùng widget Turnstile trong Cloudflare; cả hai dùng chung Site Key và Secret Key. Secret Key chỉ nằm ở backend. Khi bật, mọi đăng nhập phải có token hợp lệ; backend kiểm tra `success`, hostname thuộc danh sách cho phép và action `admin-login` trước khi kiểm tra mật khẩu. Token lỗi/hết hạn trả 403; lỗi kết nối Cloudflare hoặc thiếu cấu hình trả 503. Bỏ trống cả hai key sẽ giữ cách đăng nhập hiện tại; cần điền đủ ba biến để bật bảo vệ.
+
+Mặc định giới hạn theo IP kết nối do server cung cấp, không tin header do khách gửi. Chỉ cấu hình `TRUSTED_PROXY_CIDRS` khi origin được giới hạn truy cập từ proxy tin cậy và proxy đó luôn ghi đè `CF-Connecting-IP`:
+
+```dotenv
+TRUSTED_PROXY_CIDRS=["YOUR_TRUSTED_PROXY_CIDR"]
+```
+
+Dùng dải IP chính thức của Cloudflare nếu origin nhận kết nối trực tiếp từ Cloudflare; giữ danh sách cập nhật. Không dùng `0.0.0.0/0` hoặc `::/0`. Với Uvicorn trực tiếp sau Cloudflare, dùng `--no-proxy-headers` khi chọn cơ chế này để giữ đúng IP peer cho bước kiểm tra proxy. Nếu triển khai Vercel hoặc qua nhiều proxy, phải xác minh cách nền tảng cung cấp IP và chặn truy cập vòng qua proxy trước khi bật tin header. Turnstile dùng được cả khi tên miền không proxy qua Cloudflare.
+
+Giới hạn tổng request ở middleware vẫn theo process; Turnstile bảo vệ đăng nhập và không thay thế giới hạn lưu lượng tại edge. Nếu dùng Cloudflare WAF, áp dụng rule cho đường dẫn trang admin hiện tại và `/api/admin/*`, `/admin/*`; tránh áp challenge lên API subscriber vì ứng dụng không giải được challenge trình duyệt.
+
+Tài liệu: [Siteverify](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/), [CSP cho Turnstile](https://developers.cloudflare.com/turnstile/reference/content-security-policy/).
+
+FastAPI + MongoDB. Một file `web/index.html` chứa trang tải cấu hình và giao diện đăng nhập/quản trị. Server loại bỏ phần admin khỏi phản hồi `/`. `/admin` hiển thị màn hình đăng nhập; tất cả dữ liệu/thao tác admin yêu cầu phiên Bearer được xác minh bằng MongoDB. Không còn token tĩnh hoặc token trong URL.
+
+Đây là hệ thống cấp phép độc lập cho ứng dụng bạn kiểm soát. DNS và CA không tự kích hoạt Gold trong Locket chính thức; JSON subscriber là hợp đồng nội bộ có dạng tương tự RevenueCat, không cam kết tương thích SDK RevenueCat.
+
+## Chạy local (Python 3.12+, Docker Desktop đang chạy)
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+Copy-Item .env.example .env
+python -m app.bootstrap
+```
+
+Không ghi đè `.env` đã có nếu muốn giữ cấu hình. `app.bootstrap` hỏi email và mật khẩu hai lần (ẩn khi nhập), chỉ lưu email và hash có salt vào `.env`. Nhập tài khoản bạn muốn sử dụng; không có email/mật khẩu quản trị mặc định trong source. Bản local trong phiên làm việc này đã được cấu hình bằng tài khoản bạn yêu cầu.
+
+Điền `MONGODB_URI` và `NEXTDNS_ID` của bạn trong `.env`. `NEXTDNS_ID` gồm 6 ký tự hex; bỏ trống thì API tải profile trả 503. Để profile chứa cả DNS và Root CA, cấu hình **một** trong hai biến: `ROOT_CA_PATH` (file chứng chỉ công khai PEM/DER có trên server) hoặc `ROOT_CA_PEM` (nội dung PEM, hỗ trợ xuống dòng thật hoặc chuỗi `\n`). Không cung cấp private key. Cấu hình chỉ do người triển khai đặt, không nhận từ HTTP request. Nếu bỏ trống cả hai biến, profile vẫn chỉ chứa DNS.
+
+Profile xuất XML plist với `PayloadScope=System`, UUID riêng cho profile và từng payload; chứng chỉ được chuẩn hóa thành DER, kiểm tra tự ký, CA và thời hạn. XML này **chưa được ký CMS**; iOS có thể hiển thị “Not Signed”. Không có bảo đảm cài thành công trên mọi thiết bị/chính sách MDM. Sau khi cài thủ công, người dùng vẫn phải bật tin cậy tại **Cài đặt → Cài đặt chung → Giới thiệu → Cài đặt tin cậy chứng chỉ**. DNS không ép chuyển tiếp HTTPS và profile không tự cấp quyền Locket Gold.
+
+```powershell
+docker compose up -d
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --no-access-log
+```
+
+- Trang khách: `http://127.0.0.1:8000/`
+- Đăng nhập: `http://127.0.0.1:8000/admin`
+
+Khởi động sẽ kết nối MongoDB, tạo index và chỉ tạo superadmin từ môi trường khi tài khoản chưa tồn tại. Tài khoản trong MongoDB là nguồn xác thực sau lần tạo đầu; restart không đổi email/mật khẩu. Thiếu cấu hình bắt buộc hoặc DB không kết nối được thì startup thất bại. CA không hợp lệ chỉ vô hiệu hóa tải profile (503); Admin và API thuê bao vẫn hoạt động, log có `PROFILE_CONFIG_INVALID`.
+
+## Tài khoản và phiên
+
+- Mật khẩu: PBKDF2-HMAC-SHA256, 600.000 vòng, salt ngẫu nhiên 16 byte, so sánh constant-time. Tính hash ở thread để không chặn event loop.
+- MongoDB `admins`: email, password hash và phiên bản xác thực; không lưu mật khẩu gốc.
+- Token: sinh ngẫu nhiên 48 byte (64 ký tự URL-safe); chỉ SHA256 của token được lưu trong `sessions`.
+- Phiên mặc định 1 giờ, không tự gia hạn. `SESSION_TTL_SECONDS` cho phép 300–86400 giây. Mỗi request kiểm tra hạn dùng ngay cả khi MongoDB TTL chưa kịp xóa bản ghi.
+- Đăng xuất xóa phiên ở server. Để đổi mật khẩu: chạy `python -m app.bootstrap` để cập nhật `.env`, rồi `python -m app.bootstrap --sync-db` để áp dụng có chủ đích vào MongoDB đang cấu hình. Lệnh này thay email/hash và vô hiệu hóa phiên dùng hash cũ. Đổi biến môi trường rồi restart không ghi đè tài khoản đã có. `--check` chỉ xác minh mật khẩu với cấu hình local, không kiểm tra Vercel hay tài khoản DB.
+- Frontend lưu token vào `localStorage` theo yêu cầu. JavaScript có thể đọc storage, nên XSS vẫn có thể đánh cắp token. Với hệ thống nhạy cảm hơn, nên chuyển sang cookie `HttpOnly; Secure; SameSite` kèm bảo vệ CSRF. CSP không bảo đảm loại bỏ mọi XSS.
+- Không có endpoint đăng ký hoặc tài khoản mặc định công khai. Không lưu token trong URL, DOM hoặc log ứng dụng. Không cấu hình proxy ghi Authorization header hoặc request body đăng nhập.
+
+## API
+
+| Method | Endpoint | Quyền |
+|---|---|---|
+| GET | `/` | Công khai; không có markup/script admin |
+| GET | `/admin` | Màn hình đăng nhập công khai, không có dữ liệu tài khoản |
+| POST | `/api/admin/login` | Email/mật khẩu; rate limited |
+| GET | `/api/admin/me` | Bearer session |
+| POST | `/api/admin/logout` | Bearer session, thu hồi token hiện tại |
+| POST | `/admin/add-account` | Bearer session; thêm/cập nhật theo ID |
+| GET | `/admin/accounts?skip=0&limit=50` | Bearer session; limit ≤100, skip ≤10000 |
+| DELETE | `/admin/accounts/{account_id}` | Bearer session |
+| GET | `/profile.mobileconfig` | Công khai |
+| GET | `/v1/subscribers/{account_id}` | Bearer phiên Admin hoặc token riêng cho server tin cậy |
+
+Đăng nhập:
+
+```json
+{"email":"YOUR_ADMIN_EMAIL","password":"YOUR_ADMIN_PASSWORD"}
+```
+
+Thêm/gia hạn, kèm `Authorization: Bearer ACCESS_TOKEN`:
+
+```json
+{"locket_id":"example_user_123","expires_date":"2026-12-31T23:59:59Z"}
+```
+
+ID là chuỗi 1–128 ký tự ASCII thuộc `[A-Za-z0-9_$:@.\-]`. Không chấp nhận object MongoDB, HTML hay đường dẫn. Thời hạn phải có múi giờ và ở tương lai; lưu/so sánh UTC. MongoDB dùng unique index chống trùng ID. Giao diện hiển thị dữ liệu bằng `textContent`, không dùng `innerHTML`.
+
+API subscriber từ chối tra cứu ẩn danh (401). Server tích hợp có thể dùng `Authorization: Bearer SUBSCRIBER_API_TOKEN` khi đã cấu hình biến tùy chọn này bằng token ngẫu nhiên 32–256 ký tự ASCII, không có khoảng trắng. Không đặt biến rỗng; bỏ biến nếu không dùng. Token này chỉ dành cho server tin cậy và có quyền tra cứu mọi ID, không phải token cho người dùng cuối. Không nhúng token server/Admin vào ứng dụng di động. Phiên Admin cũng có thể dùng để kiểm tra API.
+
+Luồng tích hợp ứng dụng do bạn kiểm soát: ứng dụng đăng nhập hệ thống của bạn → server xác minh danh tính và lấy ID nội bộ từ phiên → server gọi API thuê bao bằng token riêng → trả trạng thái được phép cho chính người dùng đó. Chưa có mã nguồn client/nhà cung cấp danh tính trong repo; không thể tự suy ra ID từ link chia sẻ hoặc bật Gold trong Locket chính thức bằng DNS/CA. Không coi username trong link là ID nội bộ nếu chưa xác minh.
+
+## Giới hạn và headers
+
+- Request body tối đa 8 KiB kể cả chunked; tối đa 5 giây đọc body.
+- 120 request/IP/phút, 10 login/IP/phút và 30 login/phút toàn tiến trình. Trả 429 và `Retry-After`. Bộ nhớ bộ đếm có giới hạn.
+- Middleware giới hạn request theo từng process. Riêng đăng nhập có thêm bộ đếm nguyên tử dùng chung trong MongoDB `login_limits` (10/IP, 30/toàn hệ thống mỗi cửa sổ phút; TTL dọn dữ liệu). Bộ đếm dùng chung áp dụng cho request đúng schema trước khi xác minh mật khẩu; middleware vẫn chặn cả request sai schema. Giới hạn IP phụ thuộc proxy cung cấp IP chính xác; bảo vệ lưu lượng lớn cần WAF/edge, không phải cơ chế chống DDoS hoàn chỉnh.
+- Không tự đọc `X-Forwarded-For`. Uvicorn chỉ được tin các IP proxy thực tế; cấu hình sai làm tất cả khách bị tính cùng IP hoặc cho phép giả IP.
+- CSP nonce riêng mỗi response, không `unsafe-inline`; `nosniff`, `DENY`, `no-referrer`, `no-store`, Permissions-Policy; HSTS chỉ trên HTTPS.
+- Host phải nằm trong `ALLOWED_HOSTS`. Không bật CORS vì frontend cùng origin. CORS không thay thế xác thực API.
+- Lỗi validation không phản chiếu dữ liệu nhập. Lỗi DB trả 503, lỗi ngoài dự kiến trả JSON 500 chung. Không gửi stack trace tới trình duyệt.
+
+## Profile và Safari
+
+Nút tải là link HTTP trực tiếp với MIME `application/x-apple-aspen-config` và `Content-Disposition: attachment`, không cần Blob, popup hoặc JavaScript. Không dùng font/CDN/Tailwind runtime bên ngoài. CSS hỗ trợ safe area, `100svh` có fallback, input 16px và nút tối thiểu 48px.
+
+CA được kiểm tra kích thước, BasicConstraints CA, thời hạn và không chứa private key. Profile được tạo một lần khi startup. Profile chưa ký; iOS có thể hiển thị chưa xác minh và luôn cần người dùng xác nhận cài đặt. Không tự bật full trust cho CA. Phải kiểm tra trên iPhone/iPad thực tế trước khi phân phối.
+
+## Deploy cloud
+
+Deploy trên Vercel: xem [DEPLOY-VERCEL.md](DEPLOY-VERCEL.md). Đã có native entrypoint `index.py`, `.python-version` và `.vercelignore`; không dùng Docker/localhost MongoDB cho Vercel.
+
+Dockerfile chạy user không phải root, một worker. `.dockerignore` loại `.env`, khóa và chứng chỉ khỏi image. Dùng secret manager của nền tảng để cấp cấu hình; mount chứng chỉ CA ở chế độ chỉ đọc nếu cần.
+
+```sh
+docker build -t locket-manager .
+docker run --env-file .env -p 127.0.0.1:8000:8000 locket-manager
+```
+
+Trong container, `127.0.0.1` là container hiện tại: đặt `MONGODB_URI` tới MongoDB Atlas hoặc hostname MongoDB trong mạng private. `compose.yaml` chỉ phục vụ database local, không phải cấu hình production. Dùng DB auth/TLS, tài khoản DB quyền tối thiểu, backup và không public cổng database.
+
+Cấu hình môi trường production:
+
+```dotenv
+ALLOWED_HOSTS=["your-domain.example"]
+REQUIRE_HTTPS=true
+SESSION_TTL_SECONDS=3600
+```
+
+Reverse proxy chấm dứt TLS, chỉ forward đến backend qua mạng private và gửi protocol/client IP chính xác. Cấu hình `FORWARDED_ALLOW_IPS` bằng IP proxy thực tế; không dùng `*` trên backend có thể truy cập trực tiếp. Bật `REQUIRE_HTTPS` chỉ sau khi xác nhận FastAPI nhận đúng scheme HTTPS. Không chạy `--reload` trên production. Thêm rate limit chung, giới hạn body/timeout và lọc log ở edge trước khi scale.
+
+## Kiểm thử và mã nguồn để copy
+
+```powershell
+pip install -r requirements-dev.txt
+python -m pytest -q
+```
+
+Kiểm thử đơn vị dùng MongoDB giả. Kiểm thử tích hợp tùy chọn dùng MongoDB thật, tạo database riêng tên `locket_test_<uuid>`, rồi xóa đúng database test trong phần dọn dẹp; không dùng collections sản xuất. Kiểm tra ghi/đọc/gia hạn/hết hạn/xóa tài khoản, đổi mật khẩu thu hồi phiên, đăng xuất và restart bằng cấu hình cũ không ghi đè Admin.
+
+```powershell
+$env:TEST_MONGODB_URI='mongodb://127.0.0.1:27017'
+python -m pytest -q
+```
+
+Để trống/bỏ `TEST_MONGODB_URI` thì kiểm thử tích hợp được bỏ qua. Kết quả local không chứng minh kết nối Atlas, cấu hình Vercel hay cài profile trên iPhone.
+
+`SOURCE.md` chứa nguyên văn các file để copy; `source-code.zip` chứa mã nguồn không kèm `.env`, `.venv` hoặc dữ liệu runtime.
+
+Tham khảo: [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html), [OWASP HTML5 Storage](https://cheatsheetseries.owasp.org/cheatsheets/HTML5_Security_Cheat_Sheet.html), [Starlette Middleware](https://starlette.dev/middleware/), [Apple DNSSettings](https://developer.apple.com/documentation/devicemanagement/dnssettings).
+````
+
+## SECURITY-AUDIT.md
+
+```markdown
+# Kết quả rà soát và vá bảo mật
+
+Phạm vi: source FastAPI, vòng đời MongoDB, auth, các API quản trị/subscriber/profile, HTML/JS và cấu hình đóng gói. Giả định triển khai một worker sau HTTPS reverse proxy. Đây là rà soát source và kiểm thử local, không phải chứng nhận không còn lỗ hổng.
+
+| Mức | Phát hiện trước sửa | Tác động cụ thể | Bản vá |
+|---|---|---|---|
+| Cao | Token thật trong `app/config.py` và `.env.example` | Người đọc repo có toàn quyền admin | Bỏ token tĩnh, làm sạch file mẫu; phiên chỉ được cấp sau login tài khoản MongoDB |
+| Cao | Login qua `?admin=TOKEN` | Token có thể vào log/history trước khi JS xóa | Vô hiệu URL token, login POST bằng email/mật khẩu; không lưu mật khẩu gốc |
+| Cao | Không có expiry/revocation cho token tĩnh | Token rò rỉ có hiệu lực vô thời hạn | Token ngẫu nhiên 48 byte, lưu hash ở DB, expiry, TTL, logout và auth version |
+| Trung bình | Không rate limit/body limit | Spam login hoặc payload lớn tiêu tốn CPU/RAM | 8 KiB, timeout body, giới hạn IP và tổng login; bộ đếm có giới hạn bộ nhớ |
+| Trung bình | CSP `unsafe-inline` | Nếu phát sinh HTML injection, script inline có thể chạy | Nonce từng response; bỏ inline event attributes, không CDN |
+| Trung bình | Chưa kiểm tra Host hoặc enforce HTTPS | Host giả được chấp nhận; production có thể vô tình phục vụ HTTP | Allowlist host; REQUIRE_HTTPS; HSTS chỉ trên HTTPS |
+| Trung bình | CA đọc/parse mỗi download, PayloadIdentifier chứa khoảng trắng | CA sai gây lỗi lúc khách tải; định danh profile không sạch | Kiểm tra CA lúc startup, giới hạn file, sửa identifier, cache profile |
+
+Các điểm đã đúng và được giữ: dependency bảo vệ toàn router admin, ID dạng chuỗi được validation trước khi tạo filter MongoDB, không nhận raw query, ngày có timezone, unique index, dùng `textContent`. Không tìm thấy đường dẫn HTTP cho phép đọc file tùy ý; chỉ dùng tên template cố định và CA path từ cấu hình server.
+
+## Thay đổi hợp đồng
+
+- `/admin` là trang login công khai, không trả dữ liệu MongoDB.
+- `/api/admin/login` là API công khai có rate limit. `/api/admin/me`, `/api/admin/logout` và mọi endpoint dữ liệu `/admin/*` yêu cầu session hợp lệ trong MongoDB.
+- Token URL và token tĩnh cũ không còn được chấp nhận.
+- Bootstrap hash lấy từ môi trường, đồng bộ tài khoản cố định vào MongoDB khi startup. Đổi hash rồi restart làm token phiên cũ không còn hợp lệ.
+- Trang khách chỉ có một thẻ và link tải trực tiếp, không gửi script/markup admin. Cả hai view nằm trong một file HTML.
+
+## Giới hạn còn lại trước production
+
+1. `localStorage` là yêu cầu người dùng: XSS có thể đọc token. Cookie HttpOnly + CSRF phù hợp hơn khi ưu tiên an toàn phiên tối đa.
+2. Limiter từng process không chống brute-force phân tán trên nhiều replica hoặc DDoS. Cần shared limiter/edge, IP proxy đúng, TLS và mạng DB private.
+3. Subscriber API đang công khai theo hợp đồng ban đầu, có thể bị dò ID. Cần xác thực người gọi nếu trạng thái thuê bao được coi là riêng tư.
+4. Mật khẩu đã gửi trong hội thoại cần được thay trước triển khai internet. Chạy bootstrap với mật khẩu mới; không đưa hash `.env` lên Git.
+5. Đã kiểm tra startup, login tài khoản được yêu cầu, session auth, danh sách, tải profile và logout với MongoDB local thật. Chưa kiểm tra certificate trust chain, cài profile trên Safari/iPhone và cấu hình HTTPS proxy thực tế.
+6. Chưa quét CVE của dependency hoặc kiểm tra toàn bộ lịch sử Git. Nếu từng commit bí mật, phải thu hồi bí mật; xóa khỏi phiên bản hiện tại không xóa lịch sử.
+
+## Xác minh đã thực hiện
+
+- 16 tests tự động đã đạt, bao gồm các trường hợp tham số hóa cho toàn bộ route admin; database giả cho kiểm thử HTTP và startup.
+- Kiểm tra cú pháp JavaScript của file HTML đã đạt bằng Node.js.
+- Smoke test MongoDB thật đã đạt: startup/index/bootstrap, email/mật khẩu yêu cầu, Bearer auth, danh sách tài khoản, profile và đăng xuất; token sau logout trả 401. Không in token hoặc dữ liệu khách hàng.
+- Chưa kiểm tra UI bằng trình duyệt hoặc thiết bị iOS thật; Docker image chưa build trong phiên này.
 ```
 
 ## app/__init__.py
@@ -386,6 +855,7 @@ from cryptography.exceptions import InvalidSignature, UnsupportedAlgorithm
 from cryptography import x509
 from fastapi import FastAPI, Request
 from pymongo import AsyncMongoClient
+from pymongo.errors import PyMongoError
 from .config import get_settings
 from .profile import build_profile
 
@@ -411,24 +881,33 @@ async def lifespan(app: FastAPI):
         serverSelectionTimeoutMS=5000, connectTimeoutMS=5000,
         socketTimeoutMS=5000, timeoutMS=5000, maxPoolSize=20,
     )
+    db = client[settings.mongodb_database]
+    # Set collection handles even when Atlas is temporarily unavailable.
+    # Database-backed routes will return 503 via the PyMongoError handler,
+    # while the public HTML pages can still render.
+    app.state.accounts = db.accounts
+    app.state.admins = db.admins
+    app.state.sessions = db.sessions
+    app.state.login_limits = db.login_limits
+
     try:
         await client.admin.command('ping')
-        db = client[settings.mongodb_database]
-        app.state.accounts = db.accounts
-        app.state.admins = db.admins
-        app.state.sessions = db.sessions
-        app.state.login_limits = db.login_limits
-        app.state.viewers_history = db.viewers_history
-
         await app.state.accounts.create_index('locket_id', unique=True)
         await db.admins.create_index('email', unique=True)
         await db.sessions.create_index('expires_at', expireAfterSeconds=0)
         await db.login_limits.create_index('expires_at', expireAfterSeconds=0)
-        await db.viewers_history.create_index([('token', 1), ('viewed_at', -1)])
+        await db.dns_devices.create_index('token_hash', unique=True)
+        await db.dns_devices.create_index('locket_id')
+        await db.dns_devices.create_index([('created_at', -1)])
 
         await db.admins.update_one({'_id': 'superadmin'}, {
             '$setOnInsert': admin_document(settings),
         }, upsert=True)
+    except PyMongoError as exc:
+        # Do not make static pages unavailable due to an Atlas network outage.
+        # Do not log the MongoDB URI or credentials.
+        logger.error('DATABASE_STARTUP_UNAVAILABLE: %s', type(exc).__name__)
+    try:
         yield
     finally:
         await client.close()
@@ -438,221 +917,43 @@ def get_accounts(request: Request):
     return request.app.state.accounts
 ```
 
-## app/locket_modifier.py
+## app/dns_profile.py
 
 ```python
-import asyncio
-import json
-import secrets
-import urllib.error
-import urllib.request
-from datetime import datetime, timezone
-from urllib.parse import quote
-from starlette.datastructures import Headers
-from fastapi.encoders import jsonable_encoder
-from fastapi import APIRouter, HTTPException, Request, Response
-from fastapi.responses import JSONResponse
-
-from .config import get_settings
-from .models import subscriber_response
-from .routers.management import download_profile
-from .security import token_digest
-
-router = APIRouter(prefix="/proxy", tags=["Locket Proxy"])
-
-UPSTREAM_TARGET = "https://api.locketcamera.com"
+"""Produce an iOS encrypted-DNS configuration profile without installing a root CA."""
+import plistlib
+import uuid
+from urllib.parse import urlsplit
 
 
-HOP_HEADERS = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
-               'te', 'trailer', 'transfer-encoding', 'upgrade'}
-MAX_RESPONSE = 50 * 1024 * 1024
-
-
-def _clean_headers(headers):
-    named = {key.strip().lower() for key in headers.get('connection', '').split(',')}
-    return {key.lower(): value for key, value in headers.items()
-            if key.lower() not in HOP_HEADERS | named | {'content-length'}}
-
-
-class NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        # Never forward credentials to another destination.
-        return None
-
-
-def _forward_upstream(url: str, body: bytes | None, headers: dict[str, str], method: str, timeout: float):
-    req = urllib.request.Request(url, data=body if body else None, headers=headers, method=method)
-    opener = urllib.request.build_opener(NoRedirect())
-    try:
-        response = opener.open(req, timeout=timeout)
-    except urllib.error.HTTPError as exc:
-        response = exc
-    with response:
-        content = response.read(MAX_RESPONSE + 1)
-        if len(content) > MAX_RESPONSE:
-            raise ValueError('Upstream response exceeds limit')
-        return response.code, dict(response.headers.items()), content
-
-
-def _extract_locket_id(path: str, data: dict) -> str:
-    sub = data.get('subscriber')
-    if isinstance(sub, dict) and isinstance(sub.get('original_app_user_id'), str) and sub['original_app_user_id']:
-        return sub['original_app_user_id']
-    parts = [p for p in path.split("/") if p]
-    if "subscribers" in parts:
-        idx = parts.index("subscribers")
-        if idx + 1 < len(parts):
-            return parts[idx + 1]
-    if isinstance(data, dict):
-        sub = data.get("subscriber")
-        if isinstance(sub, dict) and sub.get("original_app_user_id"):
-            return str(sub["original_app_user_id"])
-        for key in ("locket_id", "uid", "user_id", "id"):
-            if isinstance(data.get(key), str) and data[key]:
-                return data[key]
-        user_obj = data.get("user") or data.get("data")
-        if isinstance(user_obj, dict):
-            for key in ("uid", "user_id", "id", "locket_id"):
-                if isinstance(user_obj.get(key), str) and user_obj[key]:
-                    return user_obj[key]
-    return ''
-
-
-@router.get("/install", response_class=Response)
-async def download_proxy_profile(request: Request):
-    return await download_profile(request)
-
-
-@router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
-async def dynamic_reverse_proxy(request: Request, path: str):
-    url = UPSTREAM_TARGET + "/" + quote(path, safe="/:@!$&'()*+,;=-._~")
-    query_params = str(request.url.query)
-    if query_params:
-        url += f"?{query_params}"
-
-    headers = _clean_headers(dict(request.headers))
-    for key in list(headers):
-        if key in {'host', 'cookie', 'forwarded', 'accept-encoding'} or key.startswith(('x-forwarded-', 'cf-')):
-            del headers[key]
-    headers['Host'] = 'api.locketcamera.com'
-    headers['Accept-Encoding'] = 'identity'
-
-    method = request.method
-    content_type_header = headers.get("content-type", "")
-    auth_header = headers.get("authorization", "")
-    scheme, _, token = auth_header.partition(' ')
-    user_token = token.strip() if scheme.lower() == 'bearer' else ''
-    if user_token:
-        configured = get_settings().subscriber_api_token
-        if configured is not None and secrets.compare_digest(
-            user_token.encode('utf-8'), configured.get_secret_value().encode('ascii'),
-        ):
-            raise HTTPException(401, 'Use an upstream access token')
-        sessions = getattr(request.app.state, 'sessions', None)
-        if sessions is not None and len(user_token) == 64 and user_token.isascii():
-            if await sessions.find_one({'_id': token_digest(user_token)}):
-                raise HTTPException(401, 'Use an upstream access token')
-
-    is_upload = method in ["POST", "PUT", "PATCH"] and (
-        "multipart/form-data" in content_type_header
-        or "octet-stream" in content_type_header
-        or "video/" in content_type_header
-        or "image/" in content_type_header
-    )
-    body = await request.body()
-    timeout_limit = 60.0 if is_upload else 30.0
-
-    try:
-        upstream_status, upstream_headers, upstream_content = await asyncio.to_thread(
-            _forward_upstream, url, body, headers, method, timeout_limit
-        )
-    except (OSError, ValueError):
-        return JSONResponse(status_code=502, content={'detail': 'Upstream unavailable'})
-
-    upstream_headers = Headers({key.lower(): value for key, value in upstream_headers.items()})
-    response_headers = _clean_headers(upstream_headers)
-    response_headers.pop('set-cookie', None)
-    if 300 <= upstream_status < 400:
-        return JSONResponse({'detail': 'Upstream redirect blocked'}, status_code=502)
-
-    if is_upload:
-        return Response(
-            content=upstream_content,
-            status_code=upstream_status,
-            headers=response_headers,
-            media_type=upstream_headers.get("content-type"),
-        )
-
-    content_type = upstream_headers.get("content-type", "")
-    accounts_col = getattr(request.app.state, "accounts", None)
-    viewers_col = getattr(request.app.state, "viewers_history", None)
-
-    if (200 <= upstream_status < 300 and user_token and
-            'application/json' in content_type.lower() and upstream_content and
-            upstream_headers.get('content-encoding', 'identity').lower() == 'identity'):
-        try:
-            data = json.loads(upstream_content.decode("utf-8"))
-        except (ValueError, UnicodeDecodeError):
-            return Response(upstream_content, status_code=upstream_status, headers=response_headers)
-        if isinstance(data, (dict, list)):
-            segments = set(path.split('/'))
-            if segments & {'moments', 'posts', 'viewers'}:
-                dynamic_viewers = []
-                if viewers_col is None:
-                    raise HTTPException(503, 'Database unavailable')
-                cursor = viewers_col.find({"token": user_token}).sort("viewed_at", -1).limit(10)
-                records = await cursor.to_list(length=10)
-                for record in records:
-                    dynamic_viewers.append({
-                        "user_id": str(record.get("viewer_id", "unknown_id")),
-                        "username": record.get("username", "friend"),
-                        "display_name": record.get("display_name", "Member"),
-                        "viewed_at": record.get("viewed_at"),
-                    })
-
-                if dynamic_viewers:
-                    if isinstance(data, dict):
-                        data["viewers"] = dynamic_viewers
-                    elif isinstance(data, list):
-                        for item in data:
-                            if isinstance(item, dict):
-                                item["viewers"] = dynamic_viewers
-
-            elif segments & {'subscribers', 'user', 'users'}:
-                if isinstance(data, dict):
-                    candidate_id = _extract_locket_id(path, data)
-                    account_record = None
-                    if accounts_col is None:
-                        raise HTTPException(503, 'Database unavailable')
-                    if candidate_id:
-                        account_record = await accounts_col.find_one(
-                            {"locket_id": candidate_id}, {"_id": 0}
-                        )
-
-                    now = datetime.now(timezone.utc)
-                    sub_payload = subscriber_response(candidate_id or "locket_user", account_record, now)
-                    subscriber = data.get('subscriber')
-                    if subscriber is None:
-                        subscriber = data['subscriber'] = sub_payload['subscriber']
-                    if isinstance(subscriber, dict):
-                        for field, key in [('entitlements', 'Gold'), ('subscriptions', 'com.locket.gold.yearly')]:
-                            values = subscriber.get(field)
-                            if not isinstance(values, dict):
-                                values = {}
-                            values.pop(key, None)
-                            values.update(sub_payload['subscriber'][field])
-                            subscriber[field] = values
-
-            for key in ('etag', 'content-md5', 'digest', 'content-encoding'):
-                response_headers.pop(key, None)
-            return JSONResponse(content=jsonable_encoder(data), status_code=upstream_status, headers=response_headers)
-
-    return Response(
-        content=upstream_content,
-        status_code=upstream_status,
-        headers=response_headers,
-        media_type=upstream_headers.get("content-type"),
-    )
+def build_dns_profile(server_url: str, display_name: str = "Managed DNS") -> bytes:
+    parsed = urlsplit(server_url)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.fragment:
+        raise ValueError("ServerURL must be a valid HTTPS URL")
+    dns_payload = {
+        "PayloadType": "com.apple.dnsSettings.managed",
+        "PayloadVersion": 1,
+        "PayloadIdentifier": "com.example.manageddns.settings",
+        "PayloadUUID": str(uuid.uuid4()).upper(),
+        "PayloadDisplayName": display_name,
+        "DNSSettings": {
+            "DNSProtocol": "HTTPS",
+            "ServerURL": server_url,
+        },
+    }
+    config = {
+        "PayloadType": "Configuration",
+        "PayloadVersion": 1,
+        "PayloadIdentifier": "com.example.manageddns",
+        "PayloadUUID": str(uuid.uuid4()).upper(),
+        "PayloadDisplayName": display_name,
+        "PayloadDescription": "Encrypted DNS configuration managed by your account.",
+        "PayloadOrganization": "DNS Manager",
+        "PayloadRemovalDisallowed": False,
+        "PayloadScope": "System",
+        "PayloadContent": [dns_payload],
+    }
+    return plistlib.dumps(config, fmt=plistlib.FMT_XML)
 ```
 
 ## app/main.py
@@ -665,20 +966,21 @@ from pymongo.errors import PyMongoError
 
 from app.auth import router as auth_router
 from app.database import lifespan
-from app.middleware import SecurityMiddleware, security_headers
+from app.middleware import SecurityMiddleware
 from app.routers import management, subscribers
-from app.locket_modifier import router as proxy_router
+from app.routers import dns_devices, dns_policy
 
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="Locket Management & Proxy System",
+        title="Managed DNS and Account Management",
         version="1.0.0",
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
         lifespan=lifespan,
     )
+    # The admin UI is same-origin; no cross-origin (CORS) access is granted.
     app.add_middleware(SecurityMiddleware)
 
     @app.exception_handler(RequestValidationError)
@@ -689,23 +991,48 @@ def create_app() -> FastAPI:
     async def database_error(request: Request, exc: PyMongoError):
         return JSONResponse({'detail': 'Database unavailable'}, status_code=503)
 
-    @app.exception_handler(Exception)
-    async def unhandled_error(request: Request, exc: Exception):
-        return JSONResponse(
-            {'detail': 'Internal server error'}, status_code=500,
-            headers=security_headers(request.state.csp_nonce, request.url.scheme == 'https'),
-        )
-
-    # Đăng ký đầy đủ router quản lý (trang chủ, admin, profile), auth, subscriber và proxy
     app.include_router(management.router)
+    app.include_router(subscribers.router)
     app.include_router(auth_router)
     app.include_router(management.admin_router)
-    app.include_router(subscribers.router)
-    app.include_router(proxy_router)
+    app.include_router(dns_devices.admin_router)
+    app.include_router(dns_devices.router)
+    app.include_router(dns_policy.router)
+    # Legacy HTTPS response rewriter is intentionally disabled in DNS deployment.
+    # It is not a DNS gateway and must not be used for purchase validation.
     return app
 
 
 app = create_app()
+```
+
+## app/managed_access.py
+
+```python
+"""Expiry checks for locally managed access; never creates third-party Gold entitlements."""
+from datetime import datetime, timezone
+
+from app.models import normalize_expiry
+
+
+def unexpired(value, now: datetime | None = None) -> bool:
+    """Invalid/missing timestamps fail closed."""
+    now = now or datetime.now(timezone.utc)
+    try:
+        return normalize_expiry(value) > now
+    except (KeyError, ValueError, TypeError, OverflowError):
+        return False
+
+
+async def device_active(device: dict | None, accounts, now: datetime | None = None) -> bool:
+    """For linked devices, both the device expiry and managed account must be valid."""
+    if not device or device.get("enabled") is not True or not unexpired(device.get("expires_at"), now):
+        return False
+    account_id = device.get("locket_id")
+    if not account_id:
+        return True  # Preserve existing unlinked DNS-only device behavior.
+    account = await accounts.find_one({"locket_id": account_id}, {"expires_date": 1, "is_active": 1})
+    return bool(account and account.get("is_active") is not False and unexpired(account.get("expires_date"), now))
 ```
 
 ## app/middleware.py
@@ -713,6 +1040,7 @@ app = create_app()
 ```python
 """Bounded requests and throttling with explicitly trusted proxy addresses."""
 import asyncio
+import logging
 from ipaddress import ip_address, ip_network
 import secrets
 import time
@@ -724,7 +1052,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from .config import get_settings
 
 MAX_BODY = 8192
-MAX_PROXY_BODY = 50 * 1024 * 1024
+logger = logging.getLogger(__name__)
 
 
 def client_ip(scope) -> str:
@@ -748,7 +1076,7 @@ def security_headers(nonce: str, https: bool) -> dict[str, str]:
         'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
         'Content-Security-Policy': (
             f"default-src 'none'; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; "
-            "img-src 'self'; connect-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; "
+            "img-src 'self' data:; connect-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; "
             "form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
         ),
     }
@@ -791,12 +1119,11 @@ class SecurityMiddleware:
     async def __call__(self, scope, receive, send):
         if scope['type'] != 'http':
             return await self.app(scope, receive, send)
+
         nonce = secrets.token_urlsafe(24)
         scope.setdefault('state', {})['csp_nonce'] = nonce
         headers = Headers(scope=scope)
-        https = scope['scheme'] == 'https'
-        path = scope.get('path', '')
-        is_proxy = path == '/proxy' or path.startswith('/proxy/')
+        https = scope['scheme'] == 'https' or headers.get('x-forwarded-proto') == 'https'
 
         async def secured_send(message):
             if message['type'] == 'http.response.start':
@@ -815,32 +1142,27 @@ class SecurityMiddleware:
         ip = client_ip(scope)
         if not self.limiter.allow((ip, 'all'), 120):
             return await reject(429, 'Too many requests', True)
-        if path.rstrip('/') == '/api/admin/login':
+        if scope['path'].rstrip('/') == '/api/admin/login':
             if (not self.limiter.allow((ip, 'login'), 10)
                     or not self.limiter.allow(('global', 'login'), 30)):
                 return await reject(429, 'Too many login attempts', True)
-
-        body_limit = MAX_PROXY_BODY if is_proxy else MAX_BODY
-        timeout_seconds = 60 if is_proxy else 5
-        limit_msg = 'Request body exceeds 50 MiB' if is_proxy else 'Request body exceeds 8 KiB'
-
         length = headers.get('content-length')
         if length is not None:
             if not length.isascii() or not length.isdecimal():
                 return await reject(400, 'Invalid Content-Length')
-            if len(length) > 10 or int(length) > body_limit:
-                return await reject(413, limit_msg)
+            if len(length) > 10 or int(length) > MAX_BODY:
+                return await reject(413, 'Request body exceeds 8 KiB')
 
         body = bytearray()
         try:
-            async with asyncio.timeout(timeout_seconds):
+            async with asyncio.timeout(5):
                 while True:
                     message = await receive()
                     if message['type'] == 'http.disconnect':
                         return
                     body.extend(message.get('body', b''))
-                    if len(body) > body_limit:
-                        return await reject(413, limit_msg)
+                    if len(body) > MAX_BODY:
+                        return await reject(413, 'Request body exceeds 8 KiB')
                     if not message.get('more_body', False):
                         break
         except TimeoutError:
@@ -855,7 +1177,21 @@ class SecurityMiddleware:
                 return {'type': 'http.request', 'body': bytes(body), 'more_body': False}
             return await receive()
 
-        await self.app(scope, buffered_receive, secured_send)
+        started = False
+
+        async def tracking_send(message):
+            nonlocal started
+            started = started or message['type'] == 'http.response.start'
+            await secured_send(message)
+
+        try:
+            await self.app(scope, buffered_receive, tracking_send)
+        except Exception:
+            # Keep security headers on 500s and never leak the traceback to clients.
+            logger.exception('UNHANDLED_REQUEST_ERROR')
+            if started:
+                raise
+            await reject(500, 'Internal Server Error')
 ```
 
 ## app/models.py
@@ -902,49 +1238,37 @@ class AccountOutput(BaseModel):
 
 
 def subscriber_response(account_id: str, account: dict | None, now: datetime | None = None) -> dict:
+    """Report this service's managed access without forging Locket Gold purchases.
+
+    A locally configured expiry is NOT evidence of a paid third-party subscription.
+    Keep the legacy subscriber response fields empty for compatibility and expose
+    independent management status under 'managed_access'.
+    """
     now = now if now is not None else datetime.now(timezone.utc)
     try:
         expiry = normalize_expiry(account['expires_date']) if account else None
     except (ValueError, TypeError, KeyError):
         expiry = None
 
-    active = expiry is not None and expiry > now
-    entitlement_expires = expiry.isoformat().replace('+00:00', 'Z') if active else None
-    
-    # Sửa lại đúng Product ID của Locket
-    product_id = "com.locket.gold.yearly"
+    active = bool(expiry is not None and expiry > now)
     now_str = now.isoformat().replace('+00:00', 'Z')
-
-    entitlement = {
-        'expires_date': entitlement_expires,
-        'grace_period_expires_date': None,
-        'product_identifier': product_id,
-        'purchase_date': now_str
-    } if active else None
-
-    subscriptions = {
-        product_id: {
-            'expires_date': entitlement_expires,
-            'is_sandbox': False,
-            'original_purchase_date': now_str,
-            'purchase_date': now_str,
-            'ownership_type': 'PURCHASED',
-            'store': 'app_store'
-        }
-    } if active else {}
-
+    expiry_str = expiry.isoformat().replace('+00:00', 'Z') if expiry else None
     return {
         'request_date': now_str,
         'request_date_ms': int(now.timestamp() * 1000),
         'subscriber': {
             'original_app_user_id': account_id,
+            'entitlements': {},
+            'subscriptions': {},
             'non_subscriptions': {},
-            'first_seen': now_str,
-            'entitlements': {'Gold': entitlement} if active else {},
-            'subscriptions': subscriptions,
-            'management_url': None,
-            'original_purchase_date': now_str
-        }
+        },
+        'managed_access': {
+            'active': active,
+            'expires_at': expiry_str,
+            'source': 'local_management',
+            'gold_verified': False,
+            'note': 'Managed access is not a verified Locket Gold subscription.',
+        },
     }
 ```
 
@@ -1054,7 +1378,10 @@ def build_profile(settings: Settings) -> bytes:
         contents.append(ca)
     profile = payload('Configuration', 'Locket Gold DNS')
     profile.update(PayloadContent=contents, PayloadRemovalDisallowed=False, PayloadScope='System',
-                   PayloadDescription='Cấu hình NextDNS. Không tự cấp quyền trong ứng dụng Locket.')
+                   PayloadOrganization='vuthanhluan.bond',
+                   PayloadDescription='Cấu hình DNS được cung cấp bởi nhà phát triển vuthanhluan.bond. '
+                   'Dành cho trải nghiệm chia sẻ ảnh, quay và đăng video, xem lại khoảnh khắc trên Locket. '
+                   'Các tính năng phụ thuộc ứng dụng và quyền tài khoản đang sử dụng.')
     return plistlib.dumps(profile, fmt=plistlib.FMT_XML)
 ```
 
@@ -1062,6 +1389,338 @@ def build_profile(settings: Settings) -> bytes:
 
 ```python
 # Package khởi tạo cho routers
+```
+
+## app/routers/dns_devices.py
+
+```python
+"""Admin-managed device DNS profiles. Never handles third-party purchase receipts."""
+import hashlib
+from pathlib import Path
+import os
+import re
+import secrets
+from datetime import datetime, timezone
+from urllib.parse import urlsplit
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse, RedirectResponse
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
+
+from app.config import get_settings
+from app.dns_profile import build_dns_profile
+from app.models import AccountId
+from app.managed_access import device_active
+from app.security import require_admin
+
+router = APIRouter(tags=["Managed DNS"])
+admin_router = APIRouter(prefix="/api/admin/dns", dependencies=[Depends(require_admin)], tags=["Managed DNS"])
+
+TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{32,128}$")
+DOMAIN_RE = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))*$")
+
+
+def digest(value: str) -> str:
+    return hashlib.sha256(value.encode("ascii")).hexdigest()
+
+
+def dns_origin() -> str:
+    value = os.environ.get("DNS_PUBLIC_ORIGIN", "").rstrip("/")
+    u = urlsplit(value)
+    if u.scheme != "https" or not u.hostname or u.username or u.password or u.query or u.fragment or u.path:
+        raise HTTPException(503, "Configure DNS_PUBLIC_ORIGIN as https://dns.example.com")
+    return value
+
+
+def collection(request: Request):
+    return request.app.state.accounts.database["dns_devices"]
+
+
+class DeviceInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    label: str = Field(min_length=1, max_length=80)
+    locket_id: AccountId | None = None
+    expires_at: AwareDatetime
+    block_domains: list[str] = Field(default_factory=list, max_length=100)
+
+    @field_validator("block_domains")
+    @classmethod
+    def clean_domains(cls, values: list[str]) -> list[str]:
+        normalized = []
+        for value in values:
+            name = value.strip().lower().rstrip(".")
+            if len(name) > 253 or not DOMAIN_RE.fullmatch(name):
+                raise ValueError("Invalid DNS domain")
+            normalized.append(name)
+        return sorted(set(normalized))
+
+
+def render(doc: dict) -> dict:
+    return {
+        "id": doc["_id"], "label": doc["label"], "locket_id": doc.get("locket_id"),
+        "enabled": bool(doc["enabled"]),
+        "expires_at": doc["expires_at"],
+        "block_domains": doc.get("block_domains", []),
+    }
+
+
+@admin_router.post("/devices", status_code=201)
+async def create_device(data: DeviceInput, request: Request):
+    if data.expires_at <= datetime.now(timezone.utc):
+        raise HTTPException(422, "expires_at must be in the future")
+    origin = dns_origin()
+    if data.locket_id:
+        account = await request.app.state.accounts.find_one({"locket_id": data.locket_id}, {"_id": 1})
+        if account is None:
+            raise HTTPException(422, "Linked Locket ID not found in managed accounts")
+    token = secrets.token_urlsafe(32)
+    device_id = secrets.token_hex(12)
+    doc = {
+        "_id": device_id, "token_hash": digest(token),
+        "label": data.label, "locket_id": data.locket_id, "expires_at": data.expires_at,
+        "enabled": True, "block_domains": data.block_domains,
+        "created_at": datetime.now(timezone.utc),
+    }
+    coll = collection(request)
+    await coll.insert_one(doc)
+    return {
+        **render(doc),
+        "profile_download_url": f"/dns/profiles/{token}.mobileconfig",
+        "dns_endpoint": f"{origin}/dns-query/{token}",
+        "notice": "The download URL contains a secret. Share only with this device.",
+    }
+
+
+@admin_router.post("/devices/linked", status_code=201)
+async def create_linked_device(data: DeviceInput, request: Request):
+    """One admin action: create/extend the managed account and issue its DNS profile.
+
+    MongoDB account expiry is not a third-party subscription or purchase.
+    Retry is safe for the account, but each successful request issues a new DNS token.
+    """
+    if not data.locket_id:
+        raise HTTPException(422, "Locket ID is required for linked profile")
+    if data.expires_at <= datetime.now(timezone.utc):
+        raise HTTPException(422, "expires_at must be in the future")
+    dns_origin()  # Fail before changing the account when gateway is not configured.
+    await request.app.state.accounts.update_one(
+        {"locket_id": data.locket_id},
+        {
+            "$setOnInsert": {"locket_id": data.locket_id},
+            "$max": {"expires_date": data.expires_at},
+        },
+        upsert=True,
+    )
+    # Reuse the existing secure token generation / download route.
+    return await create_device(data, request)
+
+
+class RenewInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    days: int = Field(default=30, ge=1, le=365)
+
+
+@admin_router.post("/devices/{device_id}/renew")
+async def renew_device(device_id: str, data: RenewInput, request: Request):
+    """Renew a DNS token and its linked managed account without reinstalling."""
+    from datetime import timedelta
+    if not re.fullmatch(r"[0-9a-f]{24}", device_id):
+        raise HTTPException(404, "Device not found")
+    coll = collection(request)
+    doc = await coll.find_one({"_id": device_id, "enabled": True})
+    if not doc:
+        raise HTTPException(404, "Device not found")
+    existing = doc.get("expires_at")
+    if not isinstance(existing, datetime):
+        raise HTTPException(409, "Device expiry invalid")
+    if existing.tzinfo is None:
+        existing = existing.replace(tzinfo=timezone.utc)
+    new_expiry = max(existing, datetime.now(timezone.utc)) + timedelta(days=data.days)
+    if doc.get("locket_id"):
+        account = await request.app.state.accounts.find_one(
+            {"locket_id": doc["locket_id"]}, {"_id": 1}
+        )
+        if not account:
+            raise HTTPException(409, "Linked managed account missing")
+        await request.app.state.accounts.update_one(
+            {"locket_id": doc["locket_id"]},
+            {"$max": {"expires_date": new_expiry}},
+        )
+    updated = await coll.find_one_and_update(
+        {"_id": device_id, "enabled": True},
+        {"$max": {"expires_at": new_expiry}},
+        return_document=True,
+    )
+    if not updated:
+        raise HTTPException(404, "Device not found")
+    return render(updated)
+
+
+class SetExpiryInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expires_at: AwareDatetime
+
+
+@admin_router.post("/devices/{device_id}/set-expiry")
+async def set_device_expiry(device_id: str, data: SetExpiryInput, request: Request):
+    """Set an exact DNS expiry, including a past date for controlled testing.
+
+    Linked managed accounts share an expiry, so changing their date can also
+    affect other linked devices. It never changes third-party subscriptions.
+    """
+    if not re.fullmatch(r"[0-9a-f]{24}", device_id):
+        raise HTTPException(404, "Device not found")
+    coll = collection(request)
+    doc = await coll.find_one({"_id": device_id, "enabled": True})
+    if not doc:
+        raise HTTPException(404, "Device not found")
+    if doc.get("locket_id"):
+        account = await request.app.state.accounts.find_one(
+            {"locket_id": doc["locket_id"]}, {"_id": 1}
+        )
+        if not account:
+            raise HTTPException(409, "Linked managed account missing")
+        await request.app.state.accounts.update_one(
+            {"locket_id": doc["locket_id"]},
+            {"$set": {"expires_date": data.expires_at}},
+        )
+    updated = await coll.find_one_and_update(
+        {"_id": device_id, "enabled": True},
+        {"$set": {"expires_at": data.expires_at}},
+        return_document=True,
+    )
+    if not updated:
+        raise HTTPException(404, "Device not found")
+    return render(updated)
+
+
+@admin_router.put("/devices/{device_id}")
+async def update_device(device_id: str, data: DeviceInput, request: Request):
+    if not re.fullmatch(r"[0-9a-f]{24}", device_id):
+        raise HTTPException(404, "Device not found")
+    if data.expires_at <= datetime.now(timezone.utc):
+        raise HTTPException(422, "expires_at must be in the future")
+    if data.locket_id:
+        account = await request.app.state.accounts.find_one({"locket_id": data.locket_id}, {"_id": 1})
+        if account is None:
+            raise HTTPException(422, "Linked Locket ID not found in managed accounts")
+    coll = collection(request)
+    doc = await coll.find_one_and_update(
+        {"_id": device_id, "enabled": True},
+        {"$set": {
+            "label": data.label,
+            "locket_id": data.locket_id,
+            "expires_at": data.expires_at,
+            "block_domains": data.block_domains,
+        }},
+        return_document=True,
+    )
+    if doc is None:
+        raise HTTPException(404, "Device not found")
+    return render(doc)
+
+
+@admin_router.get("/devices")
+async def list_devices(request: Request):
+    records = await collection(request).find({}, {"token_hash": 0}).sort("created_at", -1).limit(500).to_list(500)
+    return [render(x) for x in records]
+
+
+async def _delete_device(device_id: str, request: Request) -> Response:
+    if not re.fullmatch(r"[0-9a-f]{24}", device_id):
+        raise HTTPException(404, "Device not found")
+    result = await collection(request).delete_one({"_id": device_id})
+    if not result.deleted_count:
+        raise HTTPException(404, "Device not found")
+    return Response(status_code=204)
+
+
+@admin_router.delete("/devices/{device_id}", status_code=204)
+async def delete_device(device_id: str, request: Request):
+    """Permanently remove a DNS device and its token from the database."""
+    return await _delete_device(device_id, request)
+
+
+@admin_router.post("/devices/{device_id}/revoke", status_code=204)
+async def revoke_device(device_id: str, request: Request):
+    """Kept for older clients: revoking now deletes the record outright."""
+    return await _delete_device(device_id, request)
+
+
+@router.get("/dns/profiles/{token}.mobileconfig", include_in_schema=False)
+async def download_profile(token: str, request: Request):
+    if not TOKEN_RE.fullmatch(token):
+        raise HTTPException(404, "Profile not found")
+    doc = await collection(request).find_one({"token_hash": digest(token), "enabled": True})
+    if not await device_active(doc, request.app.state.accounts):
+        raise HTTPException(404, "Profile not found")
+    content = build_dns_profile(f"{dns_origin()}/dns-query/{token}", "Managed Encrypted DNS")
+    return Response(content, media_type="application/x-apple-aspen-config", headers={
+        "Content-Disposition": 'attachment; filename="managed-dns.mobileconfig"',
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "no-referrer",
+    })
+
+
+@router.get("/dns/dashboard", include_in_schema=False)
+async def dns_dashboard():
+    """Legacy URL goes to the single authenticated admin workspace."""
+    return RedirectResponse(get_settings().admin_path, status_code=307)
+```
+
+## app/routers/dns_policy.py
+
+```python
+"""Private policy endpoint for the user's own encrypted DNS gateway."""
+import hashlib
+import os
+import secrets
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, Field
+from fastapi import Depends
+from app.managed_access import device_active
+
+router = APIRouter(tags=["Managed DNS Internal"])
+bearer = HTTPBearer(auto_error=False)
+
+
+class PolicyLookup(BaseModel):
+    token: str = Field(min_length=32, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+
+
+@router.post("/api/internal/dns/policy", include_in_schema=False)
+async def policy(
+    data: PolicyLookup,
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+):
+    secret = os.environ.get("DNS_GATEWAY_API_TOKEN", "")
+    if len(secret) < 32:
+        raise HTTPException(503, "Gateway authentication not configured")
+    if credentials is None or not secrets.compare_digest(
+        credentials.credentials.encode("utf-8"), secret.encode("utf-8")
+    ):
+        raise HTTPException(401, "Unauthorized", headers={"WWW-Authenticate": "Bearer"})
+    coll = request.app.state.accounts.database["dns_devices"]
+    token_hash = hashlib.sha256(data.token.encode("ascii")).hexdigest()
+    doc = await coll.find_one({"token_hash": token_hash}, {
+        "enabled": 1, "expires_at": 1, "block_domains": 1, "locket_id": 1
+    })
+    active = await device_active(doc, request.app.state.accounts)
+    expiry = doc.get("expires_at") if doc else None
+    if isinstance(expiry, datetime) and expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=timezone.utc)
+    # Expired/unknown devices use ordinary DNS rather than causing a network outage.
+    return {
+        "known": bool(doc),
+        "active": active,
+        "expires_at": expiry.isoformat() if expiry else None,
+        "block_domains": doc.get("block_domains", []) if active else [],
+    }
 ```
 
 ## app/routers/management.py
@@ -1081,17 +1740,14 @@ router = APIRouter()
 WEB = Path(__file__).resolve().parent.parent.parent / 'web'
 Accounts = Annotated[object, Depends(get_accounts)]
 
-
 @router.get('/favicon.ico', include_in_schema=False)
 async def favicon():
     return FileResponse(WEB / 'favicon.ico', media_type='image/vnd.microsoft.icon')
-
 
 @router.get('/apple-touch-icon.png', include_in_schema=False)
 @router.get('/apple-touch-icon-precomposed.png', include_in_schema=False)
 async def apple_touch_icon():
     return FileResponse(WEB / 'apple-touch-icon.png', media_type='image/png')
-
 
 @router.get('/', response_class=HTMLResponse, include_in_schema=False)
 async def home(request: Request):
@@ -1099,11 +1755,9 @@ async def home(request: Request):
         raise HTTPException(400, 'URL tokens are disabled. Open /admin to sign in.')
     return render_page(False, request)
 
-
 @router.get('/robots.txt', include_in_schema=False)
 async def robots_txt():
     return PlainTextResponse("User-agent: *\nDisallow: /")
-
 
 def render_page(admin: bool, request: Request) -> HTMLResponse:
     page = (WEB / 'index.html').read_text(encoding='utf-8')
@@ -1114,38 +1768,28 @@ def render_page(admin: bool, request: Request) -> HTMLResponse:
     page = page.replace('__TURNSTILE_SITE_KEY__', get_settings().turnstile_site_key)
     return HTMLResponse(page.replace('__NONCE__', request.state.csp_nonce).replace('__VIEW__', 'admin' if admin else 'public'))
 
-
-@router.get('/admin', response_class=HTMLResponse, include_in_schema=False)
-async def admin_login_default(request: Request):
-    settings = get_settings()
-    if getattr(settings, 'admin_path', '/admin') != '/admin':
-        raise HTTPException(404, 'Not Found')
-    return render_page(True, request)
-
-
 @router.get('/profile.mobileconfig')
 async def download_profile(request: Request):
-    profile_bytes = getattr(request.app.state, 'profile', None)
-    if not profile_bytes:
+    if not request.app.state.profile:
         raise HTTPException(503, 'Cấu hình DNS hoặc chứng chỉ chưa sẵn sàng.')
-    return Response(
-        profile_bytes,
-        media_type='application/x-apple-aspen-config',
-        headers={'Content-Disposition': 'attachment; filename="locket.mobileconfig"'},
-    )
+    return Response(request.app.state.profile, media_type='application/x-apple-aspen-config',
+                    headers={'Content-Disposition': 'attachment; filename="locket.mobileconfig"'})
+
+# Single-segment catch route: keep it the LAST route on `router` so it never shadows a real page.
+# Serves the admin login at settings.admin_path (env ADMIN_PATH); LEGACY_ADMIN_PATH is kept as an
+# alias so existing bookmarks keep working. Both are only the login page; every API needs a session.
+LEGACY_ADMIN_PATH = '/admin-gmnWJ5nG3qZRcdku3eBtkIka'
 
 
-@router.get('/{admin_slug}', response_class=HTMLResponse, include_in_schema=False)
-async def admin_login_custom(admin_slug: str, request: Request):
-    settings = get_settings()
-    configured_path = getattr(settings, 'admin_path', '/admin')
-    if f'/{admin_slug}' != configured_path:
+@router.get('/{slug}', response_class=HTMLResponse, include_in_schema=False)
+async def admin_login(slug: str, request: Request):
+    if '/' + slug not in {get_settings().admin_path, LEGACY_ADMIN_PATH}:
         raise HTTPException(404, 'Not Found')
     return render_page(True, request)
 
 
+# Các route yêu cầu quyền Admin
 admin_router = APIRouter(prefix='/admin', dependencies=[Depends(require_admin)])
-
 
 @admin_router.post('/add-account', response_model=AccountOutput)
 async def upsert_account(data: AccountInput, accounts: Accounts):
@@ -1156,16 +1800,16 @@ async def upsert_account(data: AccountInput, accounts: Accounts):
         await accounts.update_one({'locket_id': data.locket_id}, {'$set': document})
     return document
 
-
 @admin_router.get('/accounts', response_model=list[AccountOutput])
 async def list_accounts(accounts: Accounts, skip: int = Query(0, ge=0, le=10000), limit: int = Query(50, ge=1, le=100)):
     return await accounts.find({}, {'_id': 0}).sort('locket_id', 1).skip(skip).limit(limit).to_list(length=limit)
 
-
 @admin_router.delete('/accounts/{account_id}', status_code=204)
 async def delete_account(account_id: AccountId, accounts: Accounts):
+    """Permanently remove the account and every DNS device linked to it."""
     result = await accounts.delete_one({'locket_id': account_id})
-    if not result.deleted_count:
+    devices = await accounts.database['dns_devices'].delete_many({'locket_id': account_id})
+    if not result.deleted_count and not devices.deleted_count:
         raise HTTPException(404, 'Account not found')
     return Response(status_code=204)
 ```
@@ -1317,79 +1961,6 @@ async def verify_turnstile(token: str):
         raise HTTPException(403, 'Xác minh Cloudflare không hợp lệ hoặc đã hết hạn.')
 ```
 
-## CODE-AUDIT.md
-
-```markdown
-# Audit Locket Management & Proxy — 04/11/2026
-
-Phạm vi: FastAPI, cấu hình, middleware, proxy HTTP, MongoDB, auth/password/session,
-Turnstile, routers quản trị/subscriber, profile, frontend, dependencies và pytest.
-Giả định: một worker sau TLS proxy tin cậy; nhiều instance cần giới hạn lưu lượng tại edge.
-Đây là kiểm tra source và test local, không phải chứng nhận hệ thống production.
-
-## Phát hiện và sửa
-
-| Mức | Trường hợp lỗi cụ thể | Sửa |
-|---|---|---|
-| Cao | urllib tự theo redirect; Authorization/Host có thể đi đến đích khác | Tắt redirect trong transport; trả 502 cho upstream 3xx; upstream Host luôn `api.locketcamera.com` |
-| Cao | Admin session/service token bị gửi nhầm vào proxy có thể lộ cho upstream | Từ chối token service đã cấu hình và session đã lưu trong MongoDB trước khi gọi upstream; bỏ cookie và forwarded headers |
-| Trung bình | Domain Vercel trả 400 khi chỉ domain riêng nằm trong allowlist | Thêm chính xác hostname từ biến hệ thống Vercel; giữ allowlist cho alias và domain riêng; không wildcard |
-| Trung bình | `testserver` luôn được chấp nhận cả trên production | Bỏ tự thêm hostname test; test khai báo rõ hostname riêng |
-| Trung bình | Header `Content-Type` khác kiểu viết hoa làm bỏ qua JSON; bỏ Content-Encoding nhưng vẫn giữ bytes gzip làm hỏng response | Đọc headers không phân biệt hoa thường; yêu cầu identity; nếu upstream vẫn nén thì giữ bytes và encoding, không tiêm JSON |
-| Trung bình | Lỗi MongoDB bị nuốt, làm trạng thái Gold/viewers sai và không thể chẩn đoán | Để handler DB trả 503, không trả trạng thái giả khi lỗi DB; không tiết lộ exception |
-| Trung bình | Timestamp BSON datetime trong viewers khiến JSON serialization thất bại và bị nuốt lỗi | Dùng jsonable_encoder; không tự tạo timestamp quá khứ giả |
-| Trung bình | Ghi đè toàn bộ entitlements/subscriptions làm mất quyền khác | Chỉ cập nhật/xóa `Gold` và product Gold do hệ thống quản lý; giữ các mục khác |
-| Trung bình | Token bị coi là locket_id khi không tìm thấy ID | Bỏ fallback token; ưu tiên original_app_user_id từ phản hồi upstream thành công |
-| Trung bình | `/proxy/install` tự tạo lại profile sau khi startup đã đánh dấu CA lỗi | Dùng chung endpoint profile và cùng cache; lỗi cấu hình trả 503 nhất quán |
-| Trung bình | `/openapi.json` công khai sơ đồ API dù đã tắt docs | Tắt OpenAPI endpoint; không xuất đường dẫn admin cấu hình trong public HTML |
-| Trung bình | Cấu hình pytest dùng cố định `.pytest_tmp` gây WinError 5 trên máy hiện tại | Dùng cơ chế thư mục tạm mặc định của pytest; giữ pythonpath và testpaths |
-
-## Các chức năng được giữ
-
-- PBKDF2-SHA256 600.000 vòng, salt ngẫu nhiên; bearer session chỉ lưu SHA256 trong DB,
-  kiểm tra expiry/auth_version, logout thu hồi phiên.
-- Turnstile kiểm tra server-side success/hostname/action; giới hạn login dùng MongoDB chung.
-- Admin và proxy dùng cùng `app.state.accounts`, trường `locket_id` và `expires_date` UTC.
-  Thêm/gia hạn/xóa từ admin tác động ngay tới lần tra cứu proxy tiếp theo.
-- Viewers dùng `viewers_history`, tra theo token upstream và sắp xếp viewed_at giảm dần;
-  thêm index `(token, viewed_at)` hỗ trợ query. Không tự tạo viewers nếu DB không có dữ liệu.
-- XML plist profile, MIME `application/x-apple-aspen-config`, Content-Disposition attachment,
-  kiểm tra Root CA và cache lúc startup. Hai URL tải dùng chung bytes.
-- CORS không bật: giao diện cùng origin không cần CORS. Không cho wildcard credentials.
-  Client native không bị CORS của trình duyệt hạn chế.
-- Body: proxy 50 MiB/60 giây, route khác 8 KiB/5 giây; kiểm tra cả chunked.
-  Transport chạy trong thread, không chặn event loop; response upstream có giới hạn 50 MiB.
-
-## Giới hạn và việc chưa xác minh
-
-- Vercel Function giới hạn payload 4,5 MB. Mức 50 MiB tại app không thay đổi giới hạn nền tảng.
-  Xem https://vercel.com/docs/functions/limitations. Chưa thay đổi cloud environment hoặc deploy.
-- Upstream được cố định và chỉ sửa JSON sau phản hồi 2xx có bearer upstream. Điều này chưa
-  chứng minh upstream thực sự ràng buộc ID trong URL với token; cần hợp đồng/kiểm thử được
-  chủ dịch vụ cho phép. Test local không chứng minh tương thích app Locket/RevenueCat thật.
-- Profile DNS/CA không tự thực hiện interception TLS, không tự bật full trust hoặc bỏ certificate pinning.
-  Chưa kiểm tra trên iPhone/Safari; profile chưa ký CMS.
-- `viewers_history.token` vẫn giữ schema token gốc để không phá hệ thống ghi dữ liệu hiện tại.
-  Repo chưa có producer ghi viewers; cần triển khai đổi cả producer/consumer nếu chuyển sang token hash.
-  Không ghi token, ID cá nhân hay đường dẫn admin vào log ứng dụng mới.
-- Frontend vẫn lưu bearer token trong localStorage theo thiết kế hiện tại; XSS có thể đọc token.
-  Nonce CSP, textContent và loại inline handlers giúp giảm rủi ro, không loại bỏ hoàn toàn.
-- Tổng limiter vẫn theo process; login/admin có bộ đếm DB chung. TLS, IP proxy thực tế và WAF
-  phải được cấu hình tại deployment. Không tin X-Forwarded-* do client gửi để bỏ kiểm tra HTTPS.
-- Proxy buffer body/response trong RAM; upload đồng thời lớn cần giới hạn concurrency tại reverse proxy.
-  Giới hạn đọc urllib là timeout socket, không phải thời hạn tổng tuyệt đối cho upstream chậm nhỏ giọt.
-- Chưa kiểm tra MongoDB thật, lịch sử Git, dependency CVE, load test hay production credentials.
-
-## Kiểm chứng
-
-Chạy `python -m pytest -q` từ thư mục gốc. Test không gọi API Locket thật.
-Kết quả: **68 passed, 1 skipped**, một cảnh báo deprecation httpx/Starlette.
-Test proxy dùng transport giả cho status/compression/timeout và MongoDB giả cho expiry/viewers;
-một HTTP server local xác minh urllib không đi theo redirect. Upload kiểm tra đúng 50 MiB,
-50 MiB + 1 byte dạng chunked, và admin 8 KiB + 1 byte. Test host cho phép đúng hostname deployment,
-chặn hostname khác và hậu tố giả. Test MongoDB thật chỉ chạy khi đặt TEST_MONGODB_URI.
-```
-
 ## compose.yaml
 
 ```yaml
@@ -1405,115 +1976,158 @@ volumes:
   mongo_data:
 ```
 
-## DEPLOY-VERCEL.md
+## docs/MANAGED-DNS-VPS.md
 
 ````markdown
-# Deploy FastAPI lên Vercel
+# Managed DNS-over-HTTPS (DoH) deployment
 
-## Cập nhật: lỗi 400 và upload proxy
+This branch is an independent encrypted DNS management service. It **does not** modify
+HTTPS traffic, intercept TLS, install a root CA, or unlock third-party paid features.
 
-Log ngày 04/11/2026 cho thấy domain riêng trả 200 nhưng alias/deployment Vercel trả 400.
-Điều này phù hợp với hostname chưa có trong allowlist; để xác nhận, kiểm tra body `Invalid host header`.
-Nếu body là `HTTPS is required`, kiểm tra scheme do nền tảng cung cấp, không tin header client tùy ý.
+## Architecture
 
-Đặt Environment Variables cho đúng Production/Preview rồi redeploy:
+- **Management server (FastAPI, deployable on Vercel):** admin authentication, MongoDB
+  devices, expiry, blocklists, one-time profile links, and authenticated policy API.
+- **Ubuntu VPS (FastAPI DoH gateway):** RFC 8484 GET and POST at
+  `https://dns.example.com/dns-query/<device-token>`. Uses DNS wire format,
+  applies per-device blocking, and forwards allowed queries to a trusted DoH upstream.
+- **iPhone:** opens `*.mobileconfig` in Safari, then installs the DNS settings
+  profile in Settings > General > VPN & Device Management. No VPN app or Root CA
+  is required. Network or device policy may override manual DNS settings.
+
+The iOS profile uses `com.apple.dnsSettings.managed` with DNSProtocol HTTPS.
+Individual download and DNS endpoint URLs contain a bearer-like device secret.
+Do not publish them, embed them in screenshots, or include them in access logs.
+
+## 1. Management backend environment (Vercel)
+
+Continue using the existing mandatory environment variables:
+`MONGODB_URI`, `MONGODB_DATABASE`, `SUPERADMIN_EMAIL`,
+`SUPERADMIN_PASSWORD_HASH`, and `ALLOWED_HOSTS`. Add:
 
 ```dotenv
-ALLOWED_HOSTS=["locketgold.vuthanhluan.bond","locketgold-premium-luan-eafb.vercel.app"]
-ADMIN_PATH=/your-private-admin-path
-REQUIRE_HTTPS=true
+DNS_PUBLIC_ORIGIN=https://dns.example.com
+DNS_GATEWAY_API_TOKEN=REPLACE_WITH_SAME_RANDOM_SECRET_USED_ON_VPS
 ```
 
-Code tự thêm hostname chính xác từ `VERCEL_URL`, `VERCEL_PROJECT_PRODUCTION_URL`,
-`VERCEL_BRANCH_URL` khi `VERCEL=1`. Đây là biến hệ thống của deployment, không phải HTTP headers.
-Alias tùy chỉnh vẫn phải khai báo trong `ALLOWED_HOSTS`. Không cho phép `*` hoặc `*.vercel.app`.
-`VERCEL_PROJECT_PRODUCTION_URL` có thể là custom domain; trường hợp đó vẫn dùng allowlist tường minh.
-Nguồn biến hệ thống: https://vercel.com/docs/environment-variables/system-environment-variables
-Khi sử dụng Turnstile trên nhiều hostname, cập nhật cả widget Cloudflare và `TURNSTILE_HOSTNAME`.
-Đường dẫn admin cũ trả 404 sau khi đổi `ADMIN_PATH` là hành vi đúng.
+Generate the 64-character secret locally using
+`python3 -c "import secrets; print(secrets.token_hex(32))"`.
+Configure MongoDB Atlas network access appropriately for Vercel egress.
+Set the platform environment variables privately. Do **not** commit your .env.
 
-FastAPI chấp nhận tối đa **50 MiB** cho `/proxy/…`, **8 KiB** cho các route khác,
-kiểm tra cả body không có Content-Length. Vercel Functions có giới hạn payload **4,5 MB**
-trước khi request đến ứng dụng; code không vượt được giới hạn này. Proxy upload lớn cần
-chạy trên container/VPS với reverse proxy cho phép 50 MiB, hoặc một luồng upload trực tiếp
-được dịch vụ đích hỗ trợ. Không thể tự thay luồng upload của client bên ngoài chỉ bằng cấu hình DNS.
-Nguồn: https://vercel.com/docs/functions/limitations
+Deploy this branch to Vercel as a preview first, and set its hostname in
+`ALLOWED_HOSTS`. If the DNS gateway points to the production backend while
+only preview has these API routes, policy lookup will fail.
 
-Chưa thay đổi Environment Variables hoặc deploy Vercel từ phiên audit này.
+New routes:
 
-Repository này có entrypoint `index.py` theo cơ chế FastAPI native của Vercel và chọn Python 3.12 qua `.python-version`. `vercel.json` chỉ định FastAPI và đặt lại Build Command/Output Directory về mặc định, tránh phục vụ riêng HTML tĩnh. Giữ nguyên backend; Vercel hỗ trợ lifespan. Không chạy Dockerfile, `uvicorn --reload` hoặc `docker compose` trong Vercel Build Command.
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/dns/dashboard` | DNS admin UI (requires an existing logged-in admin session to use APIs) |
+| POST | `/api/admin/dns/devices` | Create device; returns secret profile URL only once |
+| GET | `/api/admin/dns/devices` | List devices, no secrets |
+| PUT | `/api/admin/dns/devices/{id}` | Change expiry, label, blocklist |
+| POST | `/api/admin/dns/devices/{id}/revoke` | Revoke device |
+| GET | `/dns/profiles/{secret}.mobileconfig` | Download profile (secret URL) |
+| POST | `/api/internal/dns/policy` | VPS-only lookup, server bearer authentication |
 
-`pyproject.toml` khai báo tường minh `[tool.vercel] entrypoint = "app.main:app"`, tránh phụ thuộc vào việc tự dò file import lại app hoặc app được khởi tạo qua factory. Vercel cài runtime dependencies từ `[project].dependencies` trong file này; danh sách đồng bộ với `requirements.txt` cho local và Docker, có test kiểm tra không bị lệch.
+Log into the existing admin page first, then open `/dns/dashboard`.
+Store the returned profile URL securely. This application deliberately does
+not store recoverable device tokens; to restore a lost profile link, revoke the
+device and create a new profile.
 
-## 1. Chuẩn bị database và tài khoản
+## 2. VPS setup (Ubuntu 24.04)
 
-- Tạo MongoDB Atlas hoặc dùng MongoDB có thể kết nối từ Vercel qua TLS. URI `localhost` của máy bạn không hoạt động trên Vercel.
-- Tạo database user quyền `readWrite` chỉ trên database của ứng dụng. Cấu hình Atlas Network Access theo mạng/IP egress của môi trường deploy; không mặc định mở database cho mọi IP. Nếu cần egress cố định/private network, kiểm tra tính năng và gói nền tảng hỗ trợ trước.
-- Trước khi public, đổi mật khẩu đã gửi trong hội thoại bằng lệnh local `python -m app.bootstrap`. Mật khẩu được nhập ẩn; chỉ hash có salt được lưu trong `.env`. Lấy giá trị hash từ `.env` để nhập vào Vercel; không đưa file này lên Git.
-- Production và Preview nên dùng database/tài khoản DB riêng. Code mới chỉ tạo Admin lần đầu, không ghi đè tài khoản khi startup. Các deployment chạy code cũ vẫn có thể ghi đè: ngừng sử dụng/thu hồi quyền truy cập database của các bản cũ, hoặc chuyển production sang database riêng với thông tin truy cập mới. Đổi code mới không vô hiệu hóa tiến trình cũ đang giữ thông tin đăng nhập DB.
+```bash
+sudo apt update
+sudo apt install -y git python3-venv nginx certbot python3-certbot-nginx
+sudo adduser --system --group --no-create-home doh
+sudo mkdir -p /opt
+cd /opt
+sudo git clone https://github.com/vuthanhluan206/locketgoldmanager.git
+cd locketgoldmanager
+sudo git checkout feature/vps-doh-device-manager
+sudo python3 -m venv .venv
+sudo .venv/bin/pip install -r vps/requirements.txt
+sudo cp vps/managed-doh.env.example /etc/managed-doh.env
+sudo nano /etc/managed-doh.env
+sudo chown root:root /etc/managed-doh.env
+sudo chmod 600 /etc/managed-doh.env
+sudo cp vps/doh-gateway.service /etc/systemd/system/managed-doh.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now managed-doh
+sudo systemctl status managed-doh
+```
 
-## 2. Import repository
+Set `MANAGER_API_ORIGIN=https://your-management-domain` and the **same**
+`DNS_GATEWAY_API_TOKEN` as Vercel. Keep DoH upstream separate from this server.
+The VPS queries the policy API using HTTPS and caches results for ~30s to
+avoid sending each DNS question to MongoDB.
 
-1. Trong Vercel chọn **Add New → Project**, import `vuthanhluan206/locketgoldmanager`.
-2. Root Directory là thư mục gốc repository, nơi có `index.py` và `requirements.txt`.
-3. Dùng nhận diện framework FastAPI/native và các lệnh build mặc định. Không đặt Output Directory là `web` hoặc `public`, vì HTML phải đi qua FastAPI để có CSP nonce và loại bỏ view admin khỏi trang khách.
-4. Xác định production domain trong Project Settings → Domains để điền `ALLOWED_HOSTS`. Không đoán domain nếu tên project bị trùng.
+**Important:** If the existing repository is already cloned at /opt, do not
+blindly clone again. Instead create a separate working copy or fetch and
+check out the feature branch. Never overwrite a production .env.
 
-## 3. Environment Variables
+## 3. DNS hostname and TLS
 
-Nhập các giá trị dưới đây vào Vercel Project Settings → Environment Variables cho đúng môi trường. Giá trị nhập trong UI là giá trị thực, không bọc thêm dấu nháy shell.
+Create an A record `dns.example.com` pointing to the public VPS IPv4.
+Replace the hostname in `vps/nginx-doh.conf`, then:
 
-| Tên | Giá trị |
-|---|---|
-| `MONGODB_URI` | URI Atlas/TLS của database; không dùng localhost |
-| `MONGODB_DATABASE` | Tên database, ví dụ `locket_manager` |
-| `NEXTDNS_ID` | ID NextDNS của bạn, hiện đang dùng `a8b247` |
-| `SUPERADMIN_EMAIL` | Email admin của bạn |
-| `SUPERADMIN_PASSWORD_HASH` | Toàn bộ hash từ `.env`, dạng `pbkdf2_sha256$600000$...$...` |
-| `ALLOWED_HOSTS` | JSON array chứa domain thực, ví dụ `["your-project.vercel.app","your-domain.example"]` |
-| `REQUIRE_HTTPS` | `true` |
-| `SESSION_TTL_SECONDS` | `3600` |
-| `ROOT_CA_PATH` | Để trống nếu chỉ cấp cấu hình DNS |
-| `ROOT_CA_PEM` | Chứng chỉ Root CA công khai dạng PEM, dùng thay cho `ROOT_CA_PATH` |
-| `SUBSCRIBER_API_TOKEN` | Tùy chọn: token ngẫu nhiên 32–256 ký tự ASCII để server tin cậy gọi API thuê bao. Bỏ biến nếu không dùng; không nhúng vào app di động |
+```bash
+sudo cp vps/nginx-doh.conf /etc/nginx/sites-available/managed-doh
+sudo ln -s /etc/nginx/sites-available/managed-doh /etc/nginx/sites-enabled/managed-doh
+sudo nginx -t
+sudo systemctl reload nginx
+sudo certbot --nginx -d dns.example.com
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+```
 
-`SUPERADMIN_EMAIL`/`SUPERADMIN_PASSWORD_HASH` chỉ seed lần đầu khi DB chưa có Admin. Để cập nhật tài khoản đã tồn tại, chuẩn bị `.env` local với URI Atlas và tên database production chính xác, email/hash mong muốn, rồi chạy `python -m app.bootstrap --sync-db`. Lệnh thay đổi tài khoản DB đó và vô hiệu hóa phiên cũ nếu hash đổi. Không dùng URI localhost khi muốn cập nhật tài khoản Vercel. Nếu không đổi mật khẩu, không cần chạy lệnh này khi nâng cấp.
+Check Certbot's generated TLS server config. For DoH paths, **disable Nginx
+access logging** because the device secret is in the URL. Ensure HTTPS requests
+are served, HTTP redirects to HTTPS, and only ports 80/443 are public.
+The DoH process listens only on `127.0.0.1:8053`.
 
-Với preview, thêm đúng hostname preview vào `ALLOWED_HOSTS` cho môi trường đó hoặc chỉ triển khai production ban đầu. Không dùng wildcard để bỏ kiểm tra Host. Một deployment URL ngẫu nhiên không nằm trong allowlist sẽ trả 400, dù production domain vẫn hoạt động.
+To inspect without printing secrets:
 
-Để thêm Root CA trên Vercel, đặt `ROOT_CA_PATH` trống và dán toàn bộ chứng chỉ công khai vào giá trị `ROOT_CA_PEM`, từ `-----BEGIN CERTIFICATE-----` đến `-----END CERTIFICATE-----`, giữ các dòng hoặc dùng chuỗi `\n`. Không bọc dấu nháy trong giao diện Vercel. Chọn Production, Save và Redeploy, rồi tải/cài lại profile. Chỉ dùng một chứng chỉ Root CA tự ký còn hạn, không dùng intermediate, chuỗi chứng chỉ hoặc private key. `.vercelignore` cố ý loại file chứng chỉ và khóa; đường dẫn `E:\...` không tồn tại trên cloud. Nếu cả hai biến trống thì profile chỉ có DNS. Việc cài chứng chỉ thủ công không tự bật tin cậy SSL/TLS.
+```bash
+sudo journalctl -u managed-doh -n 80 --no-pager
+curl -fsS http://127.0.0.1:8053/healthz
+```
 
-Đánh dấu biến bí mật là sensitive nếu Vercel hỗ trợ trong môi trường tương ứng. Mỗi lần đổi biến môi trường phải redeploy. Không đặt cấu hình bí mật trong frontend hoặc `vercel.json`.
+## 4. iPhone
 
-## 4. Bảo vệ và kiểm tra
+1. Log into the DNS dashboard on the management domain.
+2. Create a device and copy the one-time private download link.
+3. Open the link in Safari on that iPhone.
+4. Go to Settings > General > VPN & Device Management, install downloaded profile.
+5. Verify DNS policy with a domain you control. Test both Wi-Fi and cellular.
 
-- Nếu trang chủ hiện cả login và API trả Vercel `NOT_FOUND`: kiểm tra Settings → Build and Deployment, Root Directory phải là gốc repo (`./` hoặc để trống), không phải `web`. Framework là FastAPI; tắt override Output Directory và Build Command, không xuất riêng `web`. Sau đó tạo deployment từ commit mới nhất trên `main`. HTML thô có `__NONCE__` nghĩa là request chưa qua FastAPI.
-- Nếu build báo `FASTAPI_ENTRYPOINT_NOT_FOUND`, xác nhận deployment dùng commit có `pyproject.toml` và Root Directory là gốc repository. Không redeploy mã cũ chỉ có cấu hình tự dò.
-- Nếu runtime báo `ModuleNotFoundError: No module named 'fastapi'` sau dòng build `Installing required dependencies from pyproject.toml`, phải deploy commit có `[project].dependencies` đầy đủ. File chỉ khai báo `[tool.vercel]` không đủ để cài dependencies khi Vercel chọn pyproject thay requirements.
+There is no Root CA trust switch for this setup: a public TLS certificate
+already establishes trust in your DNS server.
 
-- Đăng nhập đã có bộ đếm chung MongoDB ngoài limiter từng instance. Dùng thêm Vercel Firewall/WAF theo khả năng gói để lọc lưu lượng trước khi tới function/database. Xác minh IP proxy để giới hạn theo IP chính xác.
-- Xác minh HTTPS scheme/IP proxy thực tế; không tùy tiện tin `X-Forwarded-For` từ client. Nếu gặp 400, kiểm tra detail trong JSON và log: phân biệt lỗi Host với `HTTPS is required`; không tắt các kiểm tra một cách mặc định.
-- Sau deploy, kiểm tra `/`, `/admin`, đăng nhập, thêm/gia hạn một ID thử, tải profile, đăng xuất và thử gọi lại với token cũ.
-- Kiểm tra MongoDB có `admins`, `sessions`, `accounts`, `login_limits` và index TTL trên `sessions.expires_at`, `login_limits.expires_at`.
-- Không đưa `.env`, `.venv`, token, password hash hoặc log request vào Git. `.vercelignore` và `.gitignore` đã loại các file runtime/bí mật.
+## 5. Failure and expiry behavior
 
-Chưa deploy Vercel bằng tài khoản của bạn trong phiên này. Tài liệu chính thức: [FastAPI on Vercel](https://vercel.com/docs/frameworks/backend/fastapi), [Python runtime](https://vercel.com/docs/functions/runtimes/python).
+- A known revoked/expired device continues to receive **ordinary upstream DNS**
+  with no customized blocking; expiry removes **managed DNS policy** but
+  does not forcibly disconnect Internet. If the manager is unavailable with no cached policy, the gateway returns HTTP 503
+  rather than becoming an open public resolver. Unknown device tokens return 403.
+- Policy refresh is at most ~30 seconds under ordinary traffic; this is
+  near-real-time, not a push stream.
+- Download links expire for profile retrieval when the device expires.
+- Changing the blocklist/expiry does not require reinstalling a profile.
+- The service does not redirect Locket/RevenueCat HTTPS requests and cannot
+  modify authenticated application subscriptions.
+
+## Production hardening
+
+The gateway is a reference implementation. Before running at scale:
+restrict API origins and outbound traffic, monitor abuse, prefer domain
+allowlists in upstream policy, set edge rate limits (requests/s and bytes/s),
+enforce Nginx body limits, configure backups, consider token rotation, and
+run integration tests against the actual device firmware and network.
+Keep application logs free of DNS token paths and query content.
 ````
-
-## Dockerfile
-
-```dockerfile
-FROM python:3.12-slim
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt && useradd --uid 10001 --create-home appuser
-COPY app ./app
-COPY web ./web
-USER appuser
-EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-access-log"]
-```
 
 ## index.py
 
@@ -1546,172 +2160,6 @@ testpaths = ["tests"]
 addopts = "-p no:cacheprovider"
 ```
 
-## README.md
-
-````markdown
-# Locket Gold Manager
-
-## Bảo vệ admin bằng IP và Cloudflare Turnstile
-
-- Giữ giới hạn hiện có: 120 request/IP/phút; đăng nhập 10 lần/IP/phút và 30 lần/phút toàn hệ thống. API admin có thêm giới hạn 60 request/IP/phút, dùng bộ đếm MongoDB chung giữa các instance. Vượt giới hạn trả HTTP 429 và `Retry-After: 60`.
-- Tạo widget **Managed** trong Cloudflare Dashboard → Turnstile, khai báo hostname thực tế của trang admin. Đặt các biến sau trong `.env` hoặc Environment Variables của Vercel, rồi khởi động/deploy lại:
-
-```dotenv
-TURNSTILE_SITE_KEY=your_public_site_key
-TURNSTILE_SECRET_KEY=your_private_secret_key
-TURNSTILE_HOSTNAME=locketgold.vuthanhluan.bond,locketgold-premium.vercel.app
-```
-
-`TURNSTILE_HOSTNAME` chứa một hoặc nhiều tên miền cách nhau bằng dấu phẩy, không có `https://`, cổng hay đường dẫn. Thêm tất cả tên miền này vào cùng widget Turnstile trong Cloudflare; cả hai dùng chung Site Key và Secret Key. Secret Key chỉ nằm ở backend. Khi bật, mọi đăng nhập phải có token hợp lệ; backend kiểm tra `success`, hostname thuộc danh sách cho phép và action `admin-login` trước khi kiểm tra mật khẩu. Token lỗi/hết hạn trả 403; lỗi kết nối Cloudflare hoặc thiếu cấu hình trả 503. Bỏ trống cả hai key sẽ giữ cách đăng nhập hiện tại; cần điền đủ ba biến để bật bảo vệ.
-
-Mặc định giới hạn theo IP kết nối do server cung cấp, không tin header do khách gửi. Chỉ cấu hình `TRUSTED_PROXY_CIDRS` khi origin được giới hạn truy cập từ proxy tin cậy và proxy đó luôn ghi đè `CF-Connecting-IP`:
-
-```dotenv
-TRUSTED_PROXY_CIDRS=["YOUR_TRUSTED_PROXY_CIDR"]
-```
-
-Dùng dải IP chính thức của Cloudflare nếu origin nhận kết nối trực tiếp từ Cloudflare; giữ danh sách cập nhật. Không dùng `0.0.0.0/0` hoặc `::/0`. Với Uvicorn trực tiếp sau Cloudflare, dùng `--no-proxy-headers` khi chọn cơ chế này để giữ đúng IP peer cho bước kiểm tra proxy. Nếu triển khai Vercel hoặc qua nhiều proxy, phải xác minh cách nền tảng cung cấp IP và chặn truy cập vòng qua proxy trước khi bật tin header. Turnstile dùng được cả khi tên miền không proxy qua Cloudflare.
-
-Giới hạn tổng request ở middleware vẫn theo process; Turnstile bảo vệ đăng nhập và không thay thế giới hạn lưu lượng tại edge. Nếu dùng Cloudflare WAF, áp dụng rule cho đường dẫn trang admin hiện tại và `/api/admin/*`, `/admin/*`; tránh áp challenge lên API subscriber vì ứng dụng không giải được challenge trình duyệt.
-
-Tài liệu: [Siteverify](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/), [CSP cho Turnstile](https://developers.cloudflare.com/turnstile/reference/content-security-policy/).
-
-FastAPI + MongoDB. Một file `web/index.html` chứa trang tải cấu hình và giao diện đăng nhập/quản trị. Server loại bỏ phần admin khỏi phản hồi `/`. `/admin` hiển thị màn hình đăng nhập; tất cả dữ liệu/thao tác admin yêu cầu phiên Bearer được xác minh bằng MongoDB. Không còn token tĩnh hoặc token trong URL.
-
-Đây là hệ thống cấp phép độc lập cho ứng dụng bạn kiểm soát. DNS và CA không tự kích hoạt Gold trong Locket chính thức; JSON subscriber là hợp đồng nội bộ có dạng tương tự RevenueCat, không cam kết tương thích SDK RevenueCat.
-
-## Chạy local (Python 3.12+, Docker Desktop đang chạy)
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-Copy-Item .env.example .env
-python -m app.bootstrap
-```
-
-Không ghi đè `.env` đã có nếu muốn giữ cấu hình. `app.bootstrap` hỏi email và mật khẩu hai lần (ẩn khi nhập), chỉ lưu email và hash có salt vào `.env`. Nhập tài khoản bạn muốn sử dụng; không có email/mật khẩu quản trị mặc định trong source. Bản local trong phiên làm việc này đã được cấu hình bằng tài khoản bạn yêu cầu.
-
-Điền `MONGODB_URI` và `NEXTDNS_ID` của bạn trong `.env`. `NEXTDNS_ID` gồm 6 ký tự hex; bỏ trống thì API tải profile trả 503. Để profile chứa cả DNS và Root CA, cấu hình **một** trong hai biến: `ROOT_CA_PATH` (file chứng chỉ công khai PEM/DER có trên server) hoặc `ROOT_CA_PEM` (nội dung PEM, hỗ trợ xuống dòng thật hoặc chuỗi `\n`). Không cung cấp private key. Cấu hình chỉ do người triển khai đặt, không nhận từ HTTP request. Nếu bỏ trống cả hai biến, profile vẫn chỉ chứa DNS.
-
-Profile xuất XML plist với `PayloadScope=System`, UUID riêng cho profile và từng payload; chứng chỉ được chuẩn hóa thành DER, kiểm tra tự ký, CA và thời hạn. XML này **chưa được ký CMS**; iOS có thể hiển thị “Not Signed”. Không có bảo đảm cài thành công trên mọi thiết bị/chính sách MDM. Sau khi cài thủ công, người dùng vẫn phải bật tin cậy tại **Cài đặt → Cài đặt chung → Giới thiệu → Cài đặt tin cậy chứng chỉ**. DNS không ép chuyển tiếp HTTPS và profile không tự cấp quyền Locket Gold.
-
-```powershell
-docker compose up -d
-uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --no-access-log
-```
-
-- Trang khách: `http://127.0.0.1:8000/`
-- Đăng nhập: `http://127.0.0.1:8000/admin`
-
-Khởi động sẽ kết nối MongoDB, tạo index và chỉ tạo superadmin từ môi trường khi tài khoản chưa tồn tại. Tài khoản trong MongoDB là nguồn xác thực sau lần tạo đầu; restart không đổi email/mật khẩu. Thiếu cấu hình bắt buộc hoặc DB không kết nối được thì startup thất bại. CA không hợp lệ chỉ vô hiệu hóa tải profile (503); Admin và API thuê bao vẫn hoạt động, log có `PROFILE_CONFIG_INVALID`.
-
-## Tài khoản và phiên
-
-- Mật khẩu: PBKDF2-HMAC-SHA256, 600.000 vòng, salt ngẫu nhiên 16 byte, so sánh constant-time. Tính hash ở thread để không chặn event loop.
-- MongoDB `admins`: email, password hash và phiên bản xác thực; không lưu mật khẩu gốc.
-- Token: sinh ngẫu nhiên 48 byte (64 ký tự URL-safe); chỉ SHA256 của token được lưu trong `sessions`.
-- Phiên mặc định 1 giờ, không tự gia hạn. `SESSION_TTL_SECONDS` cho phép 300–86400 giây. Mỗi request kiểm tra hạn dùng ngay cả khi MongoDB TTL chưa kịp xóa bản ghi.
-- Đăng xuất xóa phiên ở server. Để đổi mật khẩu: chạy `python -m app.bootstrap` để cập nhật `.env`, rồi `python -m app.bootstrap --sync-db` để áp dụng có chủ đích vào MongoDB đang cấu hình. Lệnh này thay email/hash và vô hiệu hóa phiên dùng hash cũ. Đổi biến môi trường rồi restart không ghi đè tài khoản đã có. `--check` chỉ xác minh mật khẩu với cấu hình local, không kiểm tra Vercel hay tài khoản DB.
-- Frontend lưu token vào `localStorage` theo yêu cầu. JavaScript có thể đọc storage, nên XSS vẫn có thể đánh cắp token. Với hệ thống nhạy cảm hơn, nên chuyển sang cookie `HttpOnly; Secure; SameSite` kèm bảo vệ CSRF. CSP không bảo đảm loại bỏ mọi XSS.
-- Không có endpoint đăng ký hoặc tài khoản mặc định công khai. Không lưu token trong URL, DOM hoặc log ứng dụng. Không cấu hình proxy ghi Authorization header hoặc request body đăng nhập.
-
-## API
-
-| Method | Endpoint | Quyền |
-|---|---|---|
-| GET | `/` | Công khai; không có markup/script admin |
-| GET | `/admin` | Màn hình đăng nhập công khai, không có dữ liệu tài khoản |
-| POST | `/api/admin/login` | Email/mật khẩu; rate limited |
-| GET | `/api/admin/me` | Bearer session |
-| POST | `/api/admin/logout` | Bearer session, thu hồi token hiện tại |
-| POST | `/admin/add-account` | Bearer session; thêm/cập nhật theo ID |
-| GET | `/admin/accounts?skip=0&limit=50` | Bearer session; limit ≤100, skip ≤10000 |
-| DELETE | `/admin/accounts/{account_id}` | Bearer session |
-| GET | `/profile.mobileconfig` | Công khai |
-| GET | `/v1/subscribers/{account_id}` | Bearer phiên Admin hoặc token riêng cho server tin cậy |
-
-Đăng nhập:
-
-```json
-{"email":"YOUR_ADMIN_EMAIL","password":"YOUR_ADMIN_PASSWORD"}
-```
-
-Thêm/gia hạn, kèm `Authorization: Bearer ACCESS_TOKEN`:
-
-```json
-{"locket_id":"example_user_123","expires_date":"2026-12-31T23:59:59Z"}
-```
-
-ID là chuỗi 1–128 ký tự ASCII thuộc `[A-Za-z0-9_$:@.\-]`. Không chấp nhận object MongoDB, HTML hay đường dẫn. Thời hạn phải có múi giờ và ở tương lai; lưu/so sánh UTC. MongoDB dùng unique index chống trùng ID. Giao diện hiển thị dữ liệu bằng `textContent`, không dùng `innerHTML`.
-
-API subscriber từ chối tra cứu ẩn danh (401). Server tích hợp có thể dùng `Authorization: Bearer SUBSCRIBER_API_TOKEN` khi đã cấu hình biến tùy chọn này bằng token ngẫu nhiên 32–256 ký tự ASCII, không có khoảng trắng. Không đặt biến rỗng; bỏ biến nếu không dùng. Token này chỉ dành cho server tin cậy và có quyền tra cứu mọi ID, không phải token cho người dùng cuối. Không nhúng token server/Admin vào ứng dụng di động. Phiên Admin cũng có thể dùng để kiểm tra API.
-
-Luồng tích hợp ứng dụng do bạn kiểm soát: ứng dụng đăng nhập hệ thống của bạn → server xác minh danh tính và lấy ID nội bộ từ phiên → server gọi API thuê bao bằng token riêng → trả trạng thái được phép cho chính người dùng đó. Chưa có mã nguồn client/nhà cung cấp danh tính trong repo; không thể tự suy ra ID từ link chia sẻ hoặc bật Gold trong Locket chính thức bằng DNS/CA. Không coi username trong link là ID nội bộ nếu chưa xác minh.
-
-## Giới hạn và headers
-
-- Request body tối đa 8 KiB kể cả chunked; tối đa 5 giây đọc body.
-- 120 request/IP/phút, 10 login/IP/phút và 30 login/phút toàn tiến trình. Trả 429 và `Retry-After`. Bộ nhớ bộ đếm có giới hạn.
-- Middleware giới hạn request theo từng process. Riêng đăng nhập có thêm bộ đếm nguyên tử dùng chung trong MongoDB `login_limits` (10/IP, 30/toàn hệ thống mỗi cửa sổ phút; TTL dọn dữ liệu). Bộ đếm dùng chung áp dụng cho request đúng schema trước khi xác minh mật khẩu; middleware vẫn chặn cả request sai schema. Giới hạn IP phụ thuộc proxy cung cấp IP chính xác; bảo vệ lưu lượng lớn cần WAF/edge, không phải cơ chế chống DDoS hoàn chỉnh.
-- Không tự đọc `X-Forwarded-For`. Uvicorn chỉ được tin các IP proxy thực tế; cấu hình sai làm tất cả khách bị tính cùng IP hoặc cho phép giả IP.
-- CSP nonce riêng mỗi response, không `unsafe-inline`; `nosniff`, `DENY`, `no-referrer`, `no-store`, Permissions-Policy; HSTS chỉ trên HTTPS.
-- Host phải nằm trong `ALLOWED_HOSTS`. Không bật CORS vì frontend cùng origin. CORS không thay thế xác thực API.
-- Lỗi validation không phản chiếu dữ liệu nhập. Lỗi DB trả 503, lỗi ngoài dự kiến trả JSON 500 chung. Không gửi stack trace tới trình duyệt.
-
-## Profile và Safari
-
-Nút tải là link HTTP trực tiếp với MIME `application/x-apple-aspen-config` và `Content-Disposition: attachment`, không cần Blob, popup hoặc JavaScript. Không dùng font/CDN/Tailwind runtime bên ngoài. CSS hỗ trợ safe area, `100svh` có fallback, input 16px và nút tối thiểu 48px.
-
-CA được kiểm tra kích thước, BasicConstraints CA, thời hạn và không chứa private key. Profile được tạo một lần khi startup. Profile chưa ký; iOS có thể hiển thị chưa xác minh và luôn cần người dùng xác nhận cài đặt. Không tự bật full trust cho CA. Phải kiểm tra trên iPhone/iPad thực tế trước khi phân phối.
-
-## Deploy cloud
-
-Deploy trên Vercel: xem [DEPLOY-VERCEL.md](DEPLOY-VERCEL.md). Đã có native entrypoint `index.py`, `.python-version` và `.vercelignore`; không dùng Docker/localhost MongoDB cho Vercel.
-
-Dockerfile chạy user không phải root, một worker. `.dockerignore` loại `.env`, khóa và chứng chỉ khỏi image. Dùng secret manager của nền tảng để cấp cấu hình; mount chứng chỉ CA ở chế độ chỉ đọc nếu cần.
-
-```sh
-docker build -t locket-manager .
-docker run --env-file .env -p 127.0.0.1:8000:8000 locket-manager
-```
-
-Trong container, `127.0.0.1` là container hiện tại: đặt `MONGODB_URI` tới MongoDB Atlas hoặc hostname MongoDB trong mạng private. `compose.yaml` chỉ phục vụ database local, không phải cấu hình production. Dùng DB auth/TLS, tài khoản DB quyền tối thiểu, backup và không public cổng database.
-
-Cấu hình môi trường production:
-
-```dotenv
-ALLOWED_HOSTS=["your-domain.example"]
-REQUIRE_HTTPS=true
-SESSION_TTL_SECONDS=3600
-```
-
-Reverse proxy chấm dứt TLS, chỉ forward đến backend qua mạng private và gửi protocol/client IP chính xác. Cấu hình `FORWARDED_ALLOW_IPS` bằng IP proxy thực tế; không dùng `*` trên backend có thể truy cập trực tiếp. Bật `REQUIRE_HTTPS` chỉ sau khi xác nhận FastAPI nhận đúng scheme HTTPS. Không chạy `--reload` trên production. Thêm rate limit chung, giới hạn body/timeout và lọc log ở edge trước khi scale.
-
-## Kiểm thử và mã nguồn để copy
-
-```powershell
-pip install -r requirements-dev.txt
-python -m pytest -q
-```
-
-Kiểm thử đơn vị dùng MongoDB giả. Kiểm thử tích hợp tùy chọn dùng MongoDB thật, tạo database riêng tên `locket_test_<uuid>`, rồi xóa đúng database test trong phần dọn dẹp; không dùng collections sản xuất. Kiểm tra ghi/đọc/gia hạn/hết hạn/xóa tài khoản, đổi mật khẩu thu hồi phiên, đăng xuất và restart bằng cấu hình cũ không ghi đè Admin.
-
-```powershell
-$env:TEST_MONGODB_URI='mongodb://127.0.0.1:27017'
-python -m pytest -q
-```
-
-Để trống/bỏ `TEST_MONGODB_URI` thì kiểm thử tích hợp được bỏ qua. Kết quả local không chứng minh kết nối Atlas, cấu hình Vercel hay cài profile trên iPhone.
-
-`SOURCE.md` chứa nguyên văn các file để copy; `source-code.zip` chứa mã nguồn không kèm `.env`, `.venv` hoặc dữ liệu runtime.
-
-Tham khảo: [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html), [OWASP HTML5 Storage](https://cheatsheetseries.owasp.org/cheatsheets/HTML5_Security_Cheat_Sheet.html), [Starlette Middleware](https://starlette.dev/middleware/), [Apple DNSSettings](https://developer.apple.com/documentation/devicemanagement/dnssettings).
-
-
-
-````
-
 ## requirements-dev.txt
 
 ```text
@@ -1729,50 +2177,6 @@ uvicorn[standard]>=0.30,<1
 pymongo>=4.13,<5
 pydantic-settings>=2.5,<3
 cryptography>=43
-```
-
-## SECURITY-AUDIT.md
-
-```markdown
-# Kết quả rà soát và vá bảo mật
-
-Phạm vi: source FastAPI, vòng đời MongoDB, auth, các API quản trị/subscriber/profile, HTML/JS và cấu hình đóng gói. Giả định triển khai một worker sau HTTPS reverse proxy. Đây là rà soát source và kiểm thử local, không phải chứng nhận không còn lỗ hổng.
-
-| Mức | Phát hiện trước sửa | Tác động cụ thể | Bản vá |
-|---|---|---|---|
-| Cao | Token thật trong `app/config.py` và `.env.example` | Người đọc repo có toàn quyền admin | Bỏ token tĩnh, làm sạch file mẫu; phiên chỉ được cấp sau login tài khoản MongoDB |
-| Cao | Login qua `?admin=TOKEN` | Token có thể vào log/history trước khi JS xóa | Vô hiệu URL token, login POST bằng email/mật khẩu; không lưu mật khẩu gốc |
-| Cao | Không có expiry/revocation cho token tĩnh | Token rò rỉ có hiệu lực vô thời hạn | Token ngẫu nhiên 48 byte, lưu hash ở DB, expiry, TTL, logout và auth version |
-| Trung bình | Không rate limit/body limit | Spam login hoặc payload lớn tiêu tốn CPU/RAM | 8 KiB, timeout body, giới hạn IP và tổng login; bộ đếm có giới hạn bộ nhớ |
-| Trung bình | CSP `unsafe-inline` | Nếu phát sinh HTML injection, script inline có thể chạy | Nonce từng response; bỏ inline event attributes, không CDN |
-| Trung bình | Chưa kiểm tra Host hoặc enforce HTTPS | Host giả được chấp nhận; production có thể vô tình phục vụ HTTP | Allowlist host; REQUIRE_HTTPS; HSTS chỉ trên HTTPS |
-| Trung bình | CA đọc/parse mỗi download, PayloadIdentifier chứa khoảng trắng | CA sai gây lỗi lúc khách tải; định danh profile không sạch | Kiểm tra CA lúc startup, giới hạn file, sửa identifier, cache profile |
-
-Các điểm đã đúng và được giữ: dependency bảo vệ toàn router admin, ID dạng chuỗi được validation trước khi tạo filter MongoDB, không nhận raw query, ngày có timezone, unique index, dùng `textContent`. Không tìm thấy đường dẫn HTTP cho phép đọc file tùy ý; chỉ dùng tên template cố định và CA path từ cấu hình server.
-
-## Thay đổi hợp đồng
-
-- `/admin` là trang login công khai, không trả dữ liệu MongoDB.
-- `/api/admin/login` là API công khai có rate limit. `/api/admin/me`, `/api/admin/logout` và mọi endpoint dữ liệu `/admin/*` yêu cầu session hợp lệ trong MongoDB.
-- Token URL và token tĩnh cũ không còn được chấp nhận.
-- Bootstrap hash lấy từ môi trường, đồng bộ tài khoản cố định vào MongoDB khi startup. Đổi hash rồi restart làm token phiên cũ không còn hợp lệ.
-- Trang khách chỉ có một thẻ và link tải trực tiếp, không gửi script/markup admin. Cả hai view nằm trong một file HTML.
-
-## Giới hạn còn lại trước production
-
-1. `localStorage` là yêu cầu người dùng: XSS có thể đọc token. Cookie HttpOnly + CSRF phù hợp hơn khi ưu tiên an toàn phiên tối đa.
-2. Limiter từng process không chống brute-force phân tán trên nhiều replica hoặc DDoS. Cần shared limiter/edge, IP proxy đúng, TLS và mạng DB private.
-3. Subscriber API đang công khai theo hợp đồng ban đầu, có thể bị dò ID. Cần xác thực người gọi nếu trạng thái thuê bao được coi là riêng tư.
-4. Mật khẩu đã gửi trong hội thoại cần được thay trước triển khai internet. Chạy bootstrap với mật khẩu mới; không đưa hash `.env` lên Git.
-5. Đã kiểm tra startup, login tài khoản được yêu cầu, session auth, danh sách, tải profile và logout với MongoDB local thật. Chưa kiểm tra certificate trust chain, cài profile trên Safari/iPhone và cấu hình HTTPS proxy thực tế.
-6. Chưa quét CVE của dependency hoặc kiểm tra toàn bộ lịch sử Git. Nếu từng commit bí mật, phải thu hồi bí mật; xóa khỏi phiên bản hiện tại không xóa lịch sử.
-
-## Xác minh đã thực hiện
-
-- 16 tests tự động đã đạt, bao gồm các trường hợp tham số hóa cho toàn bộ route admin; database giả cho kiểm thử HTTP và startup.
-- Kiểm tra cú pháp JavaScript của file HTML đã đạt bằng Node.js.
-- Smoke test MongoDB thật đã đạt: startup/index/bootstrap, email/mật khẩu yêu cầu, Bearer auth, danh sách tài khoản, profile và đăng xuất; token sau logout trả 401. Không in token hoặc dữ liệu khách hàng.
-- Chưa kiểm tra UI bằng trình duyệt hoặc thiết bị iOS thật; Docker image chưa build trong phiên này.
 ```
 
 ## tests/conftest.py
@@ -2182,7 +2586,8 @@ def test_upsert_injection_and_subscriber(client):
         body['expires_date'] = expiry
         assert http.post('/admin/add-account', headers=headers, json=body).status_code == 422
     accounts.find_one.return_value = {'locket_id': 'alice', 'expires_date': future}
-    assert 'Gold' in http.get('/v1/subscribers/alice', headers=headers).json()['subscriber']['entitlements']
+    assert http.get('/v1/subscribers/alice', headers=headers).json()['managed_access']['active'] is True
+    assert http.get('/v1/subscribers/alice', headers=headers).json()['subscriber']['entitlements'] == {}
     accounts.find_one.return_value = None
     assert http.get('/v1/subscribers/missing', headers=headers).json()['subscriber']['entitlements'] == {}
     assert http.get('/admin/accounts?skip=10001', headers=headers).status_code == 422
@@ -2219,7 +2624,19 @@ def test_password_hash_and_settings(password_pair):
 def test_expiry_boundary():
     now = datetime.now(timezone.utc)
     for account in [None, {'expires_date': now}, {'expires_date': now - timedelta(seconds=1)}]:
-        assert subscriber_response('id', account, now)['subscriber']['entitlements'] == {}
+        result = subscriber_response('id', account, now)
+        assert result['subscriber']['entitlements'] == {}
+        assert result['managed_access']['active'] is False
+        assert result['managed_access']['gold_verified'] is False
+
+
+def test_local_account_cannot_manufacture_gold():
+    now = datetime.now(timezone.utc)
+    result = subscriber_response('id', {'expires_date': now + timedelta(days=30)}, now)
+    assert result['managed_access']['active'] is True
+    assert result['managed_access']['gold_verified'] is False
+    assert result['subscriber']['entitlements'] == {}
+    assert result['subscriber']['subscriptions'] == {}
 
 
 def test_date_only_expiry_is_stored_as_mongodb_datetime(client):
@@ -2241,7 +2658,8 @@ def test_date_only_expiry_is_stored_as_mongodb_datetime(client):
 def test_legacy_expiry_and_invalid_records_fail_closed():
     now = datetime(2026, 11, 3, 12, tzinfo=timezone.utc)
     result = subscriber_response('id', {'expires_date': '2026-11-03'}, now)
-    assert result['subscriber']['entitlements']['Gold']['expires_date'] == '2026-11-03T23:59:59Z'
+    assert result['managed_access']['expires_at'] == '2026-11-03T23:59:59Z'
+    assert result['subscriber']['entitlements'] == {}
     for value in ['not-a-date', None, '2026-11-03T12:00:00']:
         assert subscriber_response('id', {'expires_date': value}, now)['subscriber']['entitlements'] == {}
 
@@ -2275,7 +2693,7 @@ def test_startup_creates_hashed_admin_and_session_ttl(client, monkeypatch, inval
     db.admins = AsyncMock()
     db.sessions = AsyncMock()
     db.login_limits = AsyncMock()
-    db.viewers_history = AsyncMock()
+    db.dns_devices = AsyncMock()
     mongo = MagicMock()
     mongo.admin = AsyncMock()
     mongo.close = AsyncMock()
@@ -2342,6 +2760,34 @@ def test_check_password_command(client, monkeypatch, capsys, correct):
     output = capsys.readouterr().out
     assert password not in output
     assert 'pbkdf2_sha256$' not in output
+
+
+def test_single_admin_page_hosts_dns_manager_and_legacy_redirect(client):
+    http = client[0]
+    page = http.get('/admin-gmnWJ5nG3qZRcdku3eBtkIka')
+    assert page.status_code == 200
+    assert 'id="accountForm"' in page.text
+    assert 'id="dnsForm"' not in page.text
+    assert 'id="dnsRows"' not in page.text
+    assert 'id="dnsLabel"' in page.text
+    assert 'Thiết bị DNS' in page.text
+    assert '/api/admin/dns/devices/linked' in page.text
+    assert '/api/admin/dns/devices/' in page.text
+    assert 'Sửa / Cấp DNS' in page.text
+    legacy = http.get('/dns/dashboard', follow_redirects=False)
+    assert legacy.status_code == 307
+    assert legacy.headers['location'] == '/admin'
+
+
+
+def test_root_ca_is_not_managed_through_web(client):
+    http = client[0]
+    page = http.get('/admin-gmnWJ5nG3qZRcdku3eBtkIka')
+    assert page.status_code == 200
+    assert 'id="rootCaWorkspace"' not in page.text
+    assert '/api/admin/certificates/root' not in page.text
+    assert http.get('/api/admin/certificates/root').status_code == 404
+    assert http.put('/api/admin/certificates/root', json={'pem': 'test'}).status_code == 404
 ```
 
 ## tests/test_auth_entrypoint.py
@@ -2395,6 +2841,245 @@ def test_entrypoint_checks_turnstile_before_login(monkeypatch):
             http.close()
     finally:
         get_settings.cache_clear()
+```
+
+## tests/test_deployment.py
+
+```python
+import plistlib
+from unittest.mock import AsyncMock
+
+import pytest
+from fastapi.testclient import TestClient
+from pydantic import ValidationError
+
+from app.config import Settings, get_settings
+from app.main import create_app
+from app.profile import build_profile
+
+
+@pytest.fixture
+def proxy(monkeypatch):
+    for name, value in {
+        'SUPERADMIN_EMAIL': 'admin@example.test',
+        'SUPERADMIN_PASSWORD_HASH': 'pbkdf2_sha256$600000$' + '00' * 16 + '$' + '00' * 32,
+        'MONGODB_URI': 'mongodb://localhost', 'ALLOWED_HOSTS': '["testserver"]',
+        'REQUIRE_HTTPS': 'false', 'NEXTDNS_ID': 'abc123', 'ROOT_CA_PATH': '', 'ROOT_CA_PEM': '',
+        'ADMIN_PATH': '/secret-test', 'TURNSTILE_SITE_KEY': '', 'TURNSTILE_SECRET_KEY': '',
+    }.items():
+        monkeypatch.setenv(name, value)
+    get_settings.cache_clear()
+    app = create_app()
+    app.state.accounts = AsyncMock()
+    app.state.accounts.find_one.return_value = None
+    app.state.sessions = AsyncMock()
+    app.state.sessions.find_one.return_value = None
+    app.state.profile = build_profile(get_settings())
+    http = TestClient(app, raise_server_exceptions=False)
+    yield http, app
+    http.close()
+    get_settings.cache_clear()
+
+
+def test_vercel_hosts_are_exact_and_explicit(proxy):
+    settings = get_settings().model_dump()
+    settings.update(vercel='1', vercel_url='preview-123-team.vercel.app',
+                    vercel_project_production_url='project-team.vercel.app')
+    configured = Settings(_env_file=None, **settings)
+    assert 'preview-123-team.vercel.app' in configured.allowed_hosts
+    assert 'project-team.vercel.app' in configured.allowed_hosts
+    assert '*.vercel.app' not in configured.allowed_hosts
+    custom = Settings(_env_file=None, **{**settings, 'vercel_project_production_url': 'custom.example'})
+    assert 'custom.example' not in custom.allowed_hosts
+    assert 'testserver' not in Settings(_env_file=None, **{**settings, 'allowed_hosts': ['localhost']}).allowed_hosts
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, **{**settings, 'vercel_url': 'attacker.example'})
+
+
+def test_vercel_host_middleware_allows_only_configured_deployment(proxy, monkeypatch):
+    from fastapi import FastAPI
+    from app.middleware import SecurityMiddleware
+
+    monkeypatch.setenv('VERCEL', '1')
+    monkeypatch.setenv('VERCEL_URL', 'preview-123-team.vercel.app')
+    get_settings.cache_clear()
+    app = FastAPI()
+    app.add_middleware(SecurityMiddleware)
+
+    @app.get('/')
+    async def home():
+        return {'ok': True}
+
+    with TestClient(app, base_url='https://preview-123-team.vercel.app') as http:
+        assert http.get('/').status_code == 200
+        assert http.get('/', headers={'Host': 'unrelated.vercel.app'}).status_code == 400
+        assert http.get('/', headers={'Host': 'preview-123-team.vercel.app.attacker.example'}).status_code == 400
+
+
+def test_hosts_custom_admin_and_no_schema_leak(proxy):
+    http, _ = proxy
+    assert http.get('/', headers={'Host': 'attacker.example'}).status_code == 400
+    assert http.get('/secret-test').status_code == 200
+    assert http.get('/admin').status_code == 404
+    assert http.get('/openapi.json').status_code == 404
+    assert '/secret-test' not in http.get('/').text
+    assert 'access-control-allow-origin' not in http.get('/', headers={'Origin': 'https://attacker.example'}).headers
+
+
+def test_body_limit_and_removed_proxy_routes(proxy):
+    http, _ = proxy
+    assert http.post('/api/admin/login', content=b'x' * 8193).status_code == 413
+    # The legacy reverse proxy is gone: nothing is forwarded or rewritten.
+    for path in ['/proxy/user', '/proxy/install', '/proxy.pac', '/ping']:
+        assert http.get(path).status_code == 404
+    assert http.get('/v1/subscribers/alice').status_code == 401
+
+
+def test_deleting_account_removes_account_and_linked_dns_devices(proxy):
+    from unittest.mock import MagicMock
+    from app.security import token_digest
+    http, app = proxy
+    token = 'a' * 64
+    app.state.login_limits = AsyncMock()
+    app.state.login_limits.find_one_and_update.return_value = {'count': 1}
+    app.state.sessions.find_one.return_value = {
+        '_id': token_digest(token), 'admin_id': 'superadmin', 'auth_version': 'v1'}
+    app.state.admins = AsyncMock()
+    app.state.admins.find_one.return_value = {'email': 'admin@example.test', 'auth_version': 'v1'}
+    devices = AsyncMock()
+    app.state.accounts = MagicMock()
+    app.state.accounts.delete_one = AsyncMock(return_value=MagicMock(deleted_count=1))
+    app.state.accounts.database.__getitem__.return_value = devices
+    devices.delete_many.return_value = MagicMock(deleted_count=2)
+    headers = {'Authorization': 'Bearer ' + token}
+    assert http.delete('/admin/accounts/alice', headers=headers).status_code == 204
+    app.state.accounts.delete_one.assert_awaited_once_with({'locket_id': 'alice'})
+    devices.delete_many.assert_awaited_once_with({'locket_id': 'alice'})
+    # Nothing to delete anywhere -> 404.
+    app.state.accounts.delete_one.return_value = MagicMock(deleted_count=0)
+    devices.delete_many.return_value = MagicMock(deleted_count=0)
+    assert http.delete('/admin/accounts/ghost', headers=headers).status_code == 404
+    # A DNS device is deleted outright, not merely disabled.
+    devices.delete_one.return_value = MagicMock(deleted_count=1)
+    assert http.delete('/api/admin/dns/devices/' + 'a' * 24, headers=headers).status_code == 204
+    devices.delete_one.assert_awaited_once_with({'_id': 'a' * 24})
+    devices.update_one.assert_not_awaited()
+    assert http.post('/api/admin/dns/devices/' + 'b' * 24 + '/revoke', headers=headers).status_code == 204
+    assert devices.delete_one.await_count == 2
+
+
+def test_profile_fails_closed(proxy):
+    http, app = proxy
+    for path in ['/profile.mobileconfig']:
+        response = http.get(path)
+        assert response.headers['content-type'] == 'application/x-apple-aspen-config'
+        assert plistlib.loads(response.content)['PayloadType'] == 'Configuration'
+    app.state.profile = None
+    assert http.get('/profile.mobileconfig').status_code == 503
+```
+
+## tests/test_dns_linked_dashboard.py
+
+```python
+"""Regression checks for the one-step linked DNS dashboard workflow."""
+import asyncio
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
+
+from app.routers.dns_devices import DeviceInput, RenewInput, SetExpiryInput, create_linked_device, renew_device, set_device_expiry
+
+
+def test_one_step_linked_create_updates_managed_account_and_issues_profile():
+    now = datetime.now(timezone.utc)
+    expiry = now + timedelta(days=12)
+    accounts = AsyncMock()
+    accounts.find_one.return_value = {"_id": "account"}
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(accounts=accounts)))
+    data = DeviceInput(label="iPhone", locket_id="sample_user", expires_at=expiry)
+    with patch("app.routers.dns_devices.dns_origin", return_value="https://dns.example.com"), patch(
+        "app.routers.dns_devices.create_device", new_callable=AsyncMock
+    ) as create:
+        create.return_value = {"profile_download_url": "/dns/profiles/example.mobileconfig"}
+        result = asyncio.run(create_linked_device(data, request))
+    assert result["profile_download_url"].startswith("/dns/profiles/")
+    accounts.update_one.assert_awaited_once_with(
+        {"locket_id": "sample_user"},
+        {"$setOnInsert": {"locket_id": "sample_user"}, "$max": {"expires_date": expiry}},
+        upsert=True,
+    )
+    create.assert_awaited_once_with(data, request)
+
+
+def test_renew_updates_linked_account_and_device_without_token_rotation():
+    now = datetime.now(timezone.utc)
+    existing = now + timedelta(days=4)
+    coll = AsyncMock()
+    coll.find_one.return_value = {
+        "_id": "a" * 24, "label": "iPhone", "enabled": True,
+        "locket_id": "sample_user", "expires_at": existing, "block_domains": []
+    }
+    coll.find_one_and_update.return_value = {
+        **coll.find_one.return_value, "expires_at": existing + timedelta(days=30)
+    }
+    accounts = AsyncMock()
+    accounts.find_one.return_value = {"_id": "account"}
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(accounts=accounts)))
+    with patch("app.routers.dns_devices.collection", return_value=coll):
+        result = asyncio.run(renew_device("a" * 24, RenewInput(days=30), request))
+    assert result["locket_id"] == "sample_user"
+    assert result["expires_at"] == existing + timedelta(days=30)
+    accounts.update_one.assert_awaited_once_with(
+        {"locket_id": "sample_user"}, {"$max": {"expires_date": existing + timedelta(days=30)}}
+    )
+    assert "$max" in coll.find_one_and_update.await_args.args[1]
+
+
+def test_set_past_expiry_updates_linked_account_and_device():
+    now = datetime.now(timezone.utc)
+    past = now - timedelta(days=1)
+    coll = AsyncMock()
+    coll.find_one.return_value = {
+        "_id": "b" * 24, "label": "Test iPhone", "enabled": True,
+        "locket_id": "sample_user", "expires_at": now + timedelta(days=10),
+        "block_domains": []
+    }
+    coll.find_one_and_update.return_value = {
+        **coll.find_one.return_value, "expires_at": past
+    }
+    accounts = AsyncMock()
+    accounts.find_one.return_value = {"_id": "account"}
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(accounts=accounts)))
+    with patch("app.routers.dns_devices.collection", return_value=coll):
+        result = asyncio.run(set_device_expiry(
+            "b" * 24, SetExpiryInput(expires_at=past), request
+        ))
+    assert result["expires_at"] == past
+    accounts.update_one.assert_awaited_once_with(
+        {"locket_id": "sample_user"}, {"$set": {"expires_date": past}}
+    )
+    assert coll.find_one_and_update.await_args.args[1] == {"$set": {"expires_at": past}}
+
+
+def test_set_past_expiry_preserves_unlinked_account():
+    now = datetime.now(timezone.utc)
+    past = now - timedelta(days=1)
+    coll = AsyncMock()
+    coll.find_one.return_value = {
+        "_id": "c" * 24, "label": "Unlinked", "enabled": True,
+        "expires_at": now + timedelta(days=10), "block_domains": []
+    }
+    coll.find_one_and_update.return_value = {
+        **coll.find_one.return_value, "expires_at": past
+    }
+    accounts = AsyncMock()
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(accounts=accounts)))
+    with patch("app.routers.dns_devices.collection", return_value=coll):
+        result = asyncio.run(set_device_expiry(
+            "c" * 24, SetExpiryInput(expires_at=past), request
+        ))
+    assert result["expires_at"] == past
+    accounts.update_one.assert_not_awaited()
 ```
 
 ## tests/test_icons.py
@@ -2453,6 +3138,128 @@ def test_icon_links_and_private_paths(icon_client):
     assert 'href="/apple-touch-icon.png"' in response.text
     for path in ['/web/index.html', '/web/favicon.ico', '/.env']:
         assert icon_client.get(path).status_code == 404
+```
+
+## tests/test_managed_dns.py
+
+```python
+"""Simple regression tests for iOS DoH profile generation and DNS matching."""
+import plistlib
+from datetime import datetime, timedelta, timezone
+
+from app.dns_profile import build_dns_profile
+from vps.doh_gateway import denied_domain
+
+
+def test_profile_is_encrypted_dns_without_root_ca_or_vpn():
+    raw = build_dns_profile("https://dns.example.com/dns-query/abcdefghijklmnopqrstuvwxyzABCDEF12345678")
+    profile = plistlib.loads(raw)
+    assert profile["PayloadType"] == "Configuration"
+    assert len(profile["PayloadContent"]) == 1
+    payload = profile["PayloadContent"][0]
+    assert payload["PayloadType"] == "com.apple.dnsSettings.managed"
+    assert payload["DNSSettings"]["DNSProtocol"] == "HTTPS"
+    assert payload["DNSSettings"]["ServerURL"].startswith("https://")
+
+
+def test_domain_matching_is_exact_or_subdomain_only():
+    assert denied_domain("ads.example.com.", ["example.com"])
+    assert denied_domain("EXAMPLE.COM", ["example.com"])
+    assert not denied_domain("notexample.com.", ["example.com"])
+
+
+def test_profile_rejects_untrusted_scheme():
+    import pytest
+    with pytest.raises(ValueError):
+        build_dns_profile("http://dns.example.com/dns-query")
+
+
+def test_unregistered_device_cannot_use_doh(monkeypatch):
+    import base64
+    import time
+    import dns.message
+    from fastapi.testclient import TestClient
+    from vps.doh_gateway import app
+
+    monkeypatch.setenv("MANAGER_API_ORIGIN", "https://manager.example.com")
+    monkeypatch.setenv("DNS_GATEWAY_API_TOKEN", "x" * 64)
+    token = "A" * 43
+    query = dns.message.make_query("example.com", "A")
+    encoded = base64.urlsafe_b64encode(query.to_wire()).rstrip(b"=").decode("ascii")
+    with TestClient(app) as client:
+        client.app.state.cache[token] = (
+            time.monotonic() + 60, {"known": False, "block_domains": []}
+        )
+        response = client.get(f"/dns-query/{token}?dns={encoded}")
+        assert response.status_code == 403
+
+
+def test_known_device_blocks_matching_domain(monkeypatch):
+    import base64
+    import time
+    import dns.message
+    import dns.rcode
+    from fastapi.testclient import TestClient
+    from vps.doh_gateway import app
+
+    monkeypatch.setenv("MANAGER_API_ORIGIN", "https://manager.example.com")
+    monkeypatch.setenv("DNS_GATEWAY_API_TOKEN", "x" * 64)
+    token = "A" * 43
+    query = dns.message.make_query("tracker.example", "A")
+    encoded = base64.urlsafe_b64encode(query.to_wire()).rstrip(b"=").decode("ascii")
+    with TestClient(app) as client:
+        client.app.state.cache[token] = (
+            time.monotonic() + 60,
+            {"known": True, "block_domains": ["tracker.example"]},
+        )
+        response = client.get(f"/dns-query/{token}?dns={encoded}")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/dns-message"
+        assert dns.message.from_wire(response.content).rcode() == dns.rcode.NXDOMAIN
+
+
+def test_linked_device_access_requires_both_expiries():
+    import asyncio
+    from unittest.mock import AsyncMock
+    from app.managed_access import device_active
+    now = datetime.now(timezone.utc)
+    accounts = AsyncMock()
+    accounts.find_one.return_value = {
+        "expires_date": now + timedelta(days=10), "is_active": True
+    }
+    device = {
+        "locket_id": "sample_account",
+        "enabled": True,
+        "expires_at": now + timedelta(days=2),
+    }
+    assert asyncio.run(device_active(device, accounts, now)) is True
+    accounts.find_one.assert_awaited_with(
+        {"locket_id": "sample_account"}, {"expires_date": 1, "is_active": 1}
+    )
+    accounts.find_one.return_value["expires_date"] = now - timedelta(seconds=1)
+    assert asyncio.run(device_active(device, accounts, now)) is False
+    accounts.find_one.return_value = None
+    assert asyncio.run(device_active(device, accounts, now)) is False
+
+
+def test_unlinked_device_behavior_and_expiry_fail_closed():
+    import asyncio
+    from unittest.mock import AsyncMock
+    from app.managed_access import device_active
+    now = datetime.now(timezone.utc)
+    accounts = AsyncMock()
+    device = {
+        "enabled": True, "expires_at": now + timedelta(days=1)
+    }
+    assert asyncio.run(device_active(device, accounts, now)) is True
+    accounts.find_one.assert_not_awaited()
+    device["enabled"] = False
+    assert asyncio.run(device_active(device, accounts, now)) is False
+    device["enabled"] = True
+    device["expires_at"] = now - timedelta(seconds=1)
+    assert asyncio.run(device_active(device, accounts, now)) is False
+    device["expires_at"] = "not-a-date"
+    assert asyncio.run(device_active(device, accounts, now)) is False
 ```
 
 ## tests/test_mongodb_integration.py
@@ -2516,7 +3323,8 @@ def test_real_mongodb_accounts_rotation_and_cold_starts(monkeypatch):
             rows = http.get('/admin/accounts', headers=headers).json()
             assert len(rows) == 1
             response = http.get('/v1/subscribers/internal_user_123', headers=headers)
-            assert 'Gold' in response.json()['subscriber']['entitlements']
+            assert response.json()['managed_access']['active'] is True
+            assert response.json()['subscriber']['entitlements'] == {}
 
             async def expire():
                 await http.app.state.accounts.update_one({'locket_id': 'internal_user_123'}, {
@@ -2634,211 +3442,235 @@ def test_profile_rejects_invalid_root_ca(settings, problem):
         build_profile(settings)
 ```
 
-## tests/test_proxy.py
-
-```python
-import gzip
-import plistlib
-from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock
-
-import pytest
-from fastapi.testclient import TestClient
-from pydantic import ValidationError
-from pymongo.errors import PyMongoError
-
-from app.config import Settings, get_settings
-from app.main import create_app
-from app.middleware import MAX_PROXY_BODY
-from app.profile import build_profile
-
-
-@pytest.fixture
-def proxy(monkeypatch):
-    for name, value in {
-        'SUPERADMIN_EMAIL': 'admin@example.test',
-        'SUPERADMIN_PASSWORD_HASH': 'pbkdf2_sha256$600000$' + '00' * 16 + '$' + '00' * 32,
-        'MONGODB_URI': 'mongodb://localhost', 'ALLOWED_HOSTS': '["testserver"]',
-        'REQUIRE_HTTPS': 'false', 'NEXTDNS_ID': 'abc123', 'ROOT_CA_PATH': '', 'ROOT_CA_PEM': '',
-        'ADMIN_PATH': '/secret-test', 'TURNSTILE_SITE_KEY': '', 'TURNSTILE_SECRET_KEY': '',
-    }.items():
-        monkeypatch.setenv(name, value)
-    get_settings.cache_clear()
-    app = create_app()
-    app.state.accounts = AsyncMock()
-    app.state.accounts.find_one.return_value = None
-    app.state.sessions = AsyncMock()
-    app.state.sessions.find_one.return_value = None
-    app.state.viewers_history = MagicMock()
-    cursor = app.state.viewers_history.find.return_value
-    cursor.sort.return_value = cursor
-    cursor.limit.return_value = cursor
-    cursor.to_list = AsyncMock(return_value=[])
-    app.state.profile = build_profile(get_settings())
-    transport = MagicMock(return_value=(200, {'Content-Type': 'application/json'}, b'{"subscriber":{"entitlements":{"Other":{}}}}'))
-    monkeypatch.setattr('app.locket_modifier._forward_upstream', transport)
-    http = TestClient(app, raise_server_exceptions=False)
-    yield http, app, transport, cursor
-    http.close()
-    get_settings.cache_clear()
-
-
-def test_vercel_hosts_are_exact_and_explicit(proxy):
-    settings = get_settings().model_dump()
-    settings.update(vercel='1', vercel_url='preview-123-team.vercel.app',
-                    vercel_project_production_url='project-team.vercel.app')
-    configured = Settings(_env_file=None, **settings)
-    assert 'preview-123-team.vercel.app' in configured.allowed_hosts
-    assert 'project-team.vercel.app' in configured.allowed_hosts
-    assert '*.vercel.app' not in configured.allowed_hosts
-    custom = Settings(_env_file=None, **{**settings, 'vercel_project_production_url': 'custom.example'})
-    assert 'custom.example' not in custom.allowed_hosts
-    assert 'testserver' not in Settings(_env_file=None, **{**settings, 'allowed_hosts': ['localhost']}).allowed_hosts
-    with pytest.raises(ValidationError):
-        Settings(_env_file=None, **{**settings, 'vercel_url': 'attacker.example'})
-
-
-def test_vercel_host_middleware_allows_only_configured_deployment(proxy, monkeypatch):
-    from fastapi import FastAPI
-    from app.middleware import SecurityMiddleware
-
-    monkeypatch.setenv('VERCEL', '1')
-    monkeypatch.setenv('VERCEL_URL', 'preview-123-team.vercel.app')
-    get_settings.cache_clear()
-    app = FastAPI()
-    app.add_middleware(SecurityMiddleware)
-
-    @app.get('/')
-    async def home():
-        return {'ok': True}
-
-    with TestClient(app, base_url='https://preview-123-team.vercel.app') as http:
-        assert http.get('/').status_code == 200
-        assert http.get('/', headers={'Host': 'unrelated.vercel.app'}).status_code == 400
-        assert http.get('/', headers={'Host': 'preview-123-team.vercel.app.attacker.example'}).status_code == 400
-
-
-def test_hosts_custom_admin_and_no_schema_leak(proxy):
-    http, *_ = proxy
-    assert http.get('/', headers={'Host': 'attacker.example'}).status_code == 400
-    assert http.get('/secret-test').status_code == 200
-    assert http.get('/admin').status_code == 404
-    assert http.get('/openapi.json').status_code == 404
-    assert '/secret-test' not in http.get('/').text
-    assert 'access-control-allow-origin' not in http.get('/', headers={'Origin': 'https://attacker.example'}).headers
-
-
-def test_upload_boundary_and_admin_limit(proxy):
-    http, _, transport, _ = proxy
-    payload = b'x' * MAX_PROXY_BODY
-    assert http.post('/proxy/upload', content=payload, headers={'Content-Type': 'video/mp4'}).status_code == 200
-    assert len(transport.call_args.args[1]) == MAX_PROXY_BODY
-    transport.reset_mock()
-    assert http.post('/proxy/upload', content=b'', headers={'Content-Length': str(MAX_PROXY_BODY + 1)}).status_code == 413
-    assert http.post('/api/admin/login', content=b'x' * 8193).status_code == 413
-    assert http.post('/proxy/upload', content=iter([payload, b'x'])).status_code == 413
-    transport.assert_not_called()
-
-
-def test_proxy_uses_admin_account_expiry_and_preserves_other_entitlements(proxy):
-    http, app, transport, _ = proxy
-    expiry = datetime.now(timezone.utc) + timedelta(days=10)
-    app.state.accounts.find_one.return_value = {'locket_id': 'alice', 'expires_date': expiry}
-    response = http.get('/proxy/v1/subscribers/alice', headers={'Authorization': 'Bearer upstream-token',
-                        'Cookie': 'admin=secret', 'X-Forwarded-Host': 'attacker.example'})
-    subscriber = response.json()['subscriber']
-    assert subscriber['entitlements']['Gold']['expires_date'] == expiry.isoformat().replace('+00:00', 'Z')
-    assert 'Other' in subscriber['entitlements']
-    app.state.accounts.find_one.assert_awaited_once_with({'locket_id': 'alice'}, {'_id': 0})
-    headers = transport.call_args.args[2]
-    assert headers['Host'] == 'api.locketcamera.com'
-    assert 'cookie' not in headers and 'x-forwarded-host' not in headers
-    app.state.accounts.find_one.return_value['expires_date'] = expiry - timedelta(days=20)
-    assert 'Gold' not in http.get('/proxy/v1/subscribers/alice', headers={'Authorization': 'Bearer upstream-token'}).json()['subscriber']['entitlements']
-
-
-def test_viewers_datetime_and_database_failure(proxy):
-    http, app, transport, cursor = proxy
-    transport.return_value = (200, {'Content-Type': 'application/json'}, b'{"moments":[]}')
-    cursor.to_list.return_value = [{'viewer_id': 'friend', 'viewed_at': datetime.now(timezone.utc)}]
-    response = http.get('/proxy/moments', headers={'Authorization': 'Bearer upstream-token'})
-    assert response.json()['viewers'][0]['user_id'] == 'friend'
-    app.state.viewers_history.find.assert_called_with({'token': 'upstream-token'})
-    cursor.to_list.side_effect = PyMongoError('private-db-data')
-    response = http.get('/proxy/moments', headers={'Authorization': 'Bearer upstream-token'})
-    assert response.status_code == 503 and 'private-db-data' not in response.text
-
-
-def test_passthrough_compression_errors_and_redirects(proxy):
-    http, app, transport, _ = proxy
-    raw = b'{"error":"upstream"}'
-    transport.return_value = (401, {'Content-Type': 'application/json', 'Content-Encoding': 'gzip'}, gzip.compress(raw))
-    response = http.get('/proxy/user', headers={'Authorization': 'Bearer upstream-token'})
-    assert response.status_code == 401 and response.content == raw
-    app.state.accounts.find_one.assert_not_awaited()
-    transport.return_value = (302, {'Location': 'https://attacker.example'}, b'')
-    assert http.get('/proxy/user').status_code == 502
-    transport.side_effect = TimeoutError('private-error')
-    response = http.get('/proxy/user')
-    assert response.status_code == 502 and 'private-error' not in response.text
-
-
-def test_profiles_identical_and_fail_closed(proxy):
-    http, app, _, _ = proxy
-    for path in ['/profile.mobileconfig', '/proxy/install']:
-        response = http.get(path)
-        assert response.headers['content-type'] == 'application/x-apple-aspen-config'
-        assert plistlib.loads(response.content)['PayloadType'] == 'Configuration'
-    app.state.profile = None
-    assert http.get('/proxy/install').status_code == 503
-
-
-def test_local_credentials_never_reach_upstream(proxy):
-    http, app, transport, _ = proxy
-    app.state.sessions.find_one.return_value = {'_id': 'admin-session'}
-    assert http.get('/proxy/user', headers={'Authorization': 'Bearer ' + 'a' * 64}).status_code == 401
-    transport.assert_not_called()
-
-
-def test_real_transport_does_not_follow_redirect():
-    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-    from threading import Thread
-    from app.locket_modifier import _forward_upstream
-
-    seen = []
-
-    class Handler(BaseHTTPRequestHandler):
-        def do_GET(self):
-            seen.append(self.path)
-            self.send_response(302)
-            self.send_header('Location', '/must-not-follow')
-            self.end_headers()
-
-        def log_message(self, *args):
-            pass
-
-    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
-    thread = Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        status, _, _ = _forward_upstream(f'http://127.0.0.1:{server.server_port}/start', None,
-                                       {'Authorization': 'Bearer test'}, 'GET', 2)
-        assert status == 302 and seen == ['/start']
-    finally:
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=2)
-```
-
 ## vercel.json
 
 ```json
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "fastapi",
-  "buildCommand": "pip install -r requirements.txt",
-  "outputDirectory": null
+  "framework": "fastapi"
 }
+```
+
+## vps/doh-gateway.service
+
+```ini
+[Unit]
+Description=Managed DNS-over-HTTPS gateway
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=doh
+Group=doh
+WorkingDirectory=/opt/locketgoldmanager
+EnvironmentFile=/etc/managed-doh.env
+ExecStart=/opt/locketgoldmanager/.venv/bin/uvicorn vps.doh_gateway:app --host 127.0.0.1 --port 8053 --no-proxy-headers --no-access-log
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/tmp
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
+```
+
+## vps/doh_gateway.py
+
+```python
+"""Standalone RFC 8484 DNS-over-HTTPS gateway for Ubuntu VPS.
+
+Owns no subscription logic. It obtains encrypted-DNS blocking policies from
+the management API using a separate server-only credential.
+"""
+import asyncio
+import base64
+import logging
+import os
+import re
+import time
+from contextlib import asynccontextmanager
+
+import dns.message
+import dns.rcode
+import httpx
+from fastapi import FastAPI, HTTPException, Request, Response
+
+log = logging.getLogger("doh-gateway")
+TOKEN = re.compile(r"^[A-Za-z0-9_-]{32,128}$")
+CACHE_TTL = 30
+MAX_QUERY_BYTES = 4096
+MAX_RESPONSE_BYTES = 65535
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    endpoint = os.environ.get("MANAGER_API_ORIGIN", "").rstrip("/")
+    key = os.environ.get("DNS_GATEWAY_API_TOKEN", "")
+    upstream = os.environ.get("DOH_UPSTREAM", "https://cloudflare-dns.com/dns-query")
+    if not endpoint.startswith("https://") or len(key) < 32 or not upstream.startswith("https://"):
+        raise RuntimeError("MANAGER_API_ORIGIN (HTTPS), DNS_GATEWAY_API_TOKEN and HTTPS upstream required")
+    if endpoint == upstream:
+        raise RuntimeError("Manager and upstream must be separate")
+    app.state.manager = endpoint
+    app.state.key = key
+    app.state.upstream = upstream
+    app.state.cache = {}
+    app.state.http = httpx.AsyncClient(timeout=httpx.Timeout(8.0), follow_redirects=False)
+    try:
+        yield
+    finally:
+        await app.state.http.aclose()
+
+
+app = FastAPI(title="Managed DoH Gateway", docs_url=None, redoc_url=None, lifespan=lifespan)
+
+
+async def lookup_policy(request: Request, token: str) -> dict:
+    state = request.app.state
+    now = time.monotonic()
+    cached = state.cache.get(token)
+    if cached and cached[0] > now:
+        return cached[1]
+    # Fail-open for DNS reachability: manager outages should not break browsing.
+    try:
+        res = await state.http.post(
+            f"{state.manager}/api/internal/dns/policy",
+            headers={"Authorization": f"Bearer {state.key}"},
+            json={"token": token},
+        )
+        res.raise_for_status()
+        obj = res.json()
+        if not isinstance(obj.get("block_domains"), list):
+            raise ValueError("Invalid policy")
+        policy = {
+            "known": obj.get("known") is True,
+            "block_domains": [
+                x.lower().rstrip(".") for x in obj["block_domains"]
+                if isinstance(x, str) and len(x) < 254
+            ] if obj.get("active") is True else []
+        }
+        # Bound process memory for many devices.
+        if len(state.cache) > 10000:
+            state.cache.clear()
+        state.cache[token] = (now + CACHE_TTL, policy)
+        return policy
+    except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+        log.warning("Policy service unavailable: %s", type(exc).__name__)
+        if cached:
+            return cached[1]
+        raise HTTPException(503, "Policy temporarily unavailable")
+
+
+def denied_domain(domain: str, blocked: list[str]) -> bool:
+    domain = domain.lower().rstrip(".")
+    return any(domain == entry or domain.endswith("." + entry) for entry in blocked)
+
+
+async def handle(request: Request, token: str) -> Response:
+    if not TOKEN.fullmatch(token):
+        raise HTTPException(404, "Unknown DNS configuration")
+    if request.method == "GET":
+        encoded = request.query_params.get("dns", "")
+        if len(encoded) > 8192 or not re.fullmatch(r"[A-Za-z0-9_-]+={0,2}", encoded):
+            raise HTTPException(400, "Invalid DNS query")
+        try:
+            wire = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+        except (ValueError, base64.binascii.Error):
+            raise HTTPException(400, "Invalid DNS query")
+    else:
+        if request.headers.get("content-type", "").split(";")[0].strip().lower() != "application/dns-message":
+            raise HTTPException(415, "Expected application/dns-message")
+        wire = await request.body()
+    if len(wire) > MAX_QUERY_BYTES or not wire:
+        raise HTTPException(413, "Invalid DNS message size")
+    try:
+        query = dns.message.from_wire(wire, ignore_trailing=False)
+    except dns.exception.DNSException:
+        raise HTTPException(400, "Invalid DNS message")
+    if len(query.question) != 1:
+        raise HTTPException(400, "Exactly one DNS question is required")
+    policy = await lookup_policy(request, token)
+    if not policy["known"]:
+        raise HTTPException(403, "Unregistered DNS configuration")
+    qname = query.question[0].name.to_text()
+    if denied_domain(qname, policy["block_domains"]):
+        answer = dns.message.make_response(query)
+        answer.set_rcode(dns.rcode.NXDOMAIN)
+        return Response(answer.to_wire(), media_type="application/dns-message",
+                        headers={"Cache-Control": "no-store"})
+    try:
+        res = await request.app.state.http.post(
+            request.app.state.upstream, content=wire,
+            headers={"Content-Type": "application/dns-message", "Accept": "application/dns-message"}
+        )
+        res.raise_for_status()
+        if not res.headers.get("content-type", "").lower().startswith("application/dns-message"):
+            raise ValueError("Unexpected upstream media type")
+        payload = res.content
+        if len(payload) > MAX_RESPONSE_BYTES:
+            raise ValueError("Upstream response too large")
+        decoded = dns.message.from_wire(payload)
+        if decoded.id != query.id or decoded.question != query.question:
+            raise ValueError("Upstream DNS response does not match query")
+    except (httpx.HTTPError, dns.exception.DNSException, ValueError):
+        # RFC 8484 HTTP 502 makes errors explicit.
+        raise HTTPException(502, "Upstream DNS unavailable")
+    return Response(payload, media_type="application/dns-message",
+                    headers={"Cache-Control": "no-store"})
+
+
+@app.api_route("/dns-query/{token}", methods=["GET", "POST"])
+async def dns_query(request: Request, token: str):
+    return await handle(request, token)
+
+
+@app.get("/healthz")
+async def healthz():
+    return {"ok": True}
+```
+
+## vps/managed-doh.env.example
+
+```
+# Install to /etc/managed-doh.env, chmod 600, owned by root.
+MANAGER_API_ORIGIN=https://management.example.com
+DNS_GATEWAY_API_TOKEN=REPLACE_WITH_64_RANDOM_HEX_CHARACTERS
+DOH_UPSTREAM=https://cloudflare-dns.com/dns-query
+```
+
+## vps/nginx-doh.conf
+
+```nginx
+# Copy to /etc/nginx/sites-available/managed-doh and replace dns.example.com.
+# Issue a TLS certificate with certbot after enabling this vhost.
+server {
+    listen 80;
+    server_name dns.example.com;
+
+    access_log off;  # DNS endpoint contains a per-device token in the URL
+    client_max_body_size 8k;
+    location / {
+        proxy_pass http://127.0.0.1:8053;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 15s;
+    }
+}
+# After certbot: use HTTPS only for DoH clients. No DNS request URI should be logged.
+```
+
+## vps/requirements.txt
+
+```text
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+httpx>=0.27,<1
+dnspython>=2.6,<3
 ```
 
 ## web/index.html
@@ -2890,10 +3722,6 @@ def test_real_transport_does_not_follow_redirect():
       max-width: 440px;
     }
 
-    .admin main {
-      max-width: 900px;
-    }
-
     .card {
       background: var(--card);
       padding: 36px 28px;
@@ -2904,6 +3732,21 @@ def test_real_transport_does_not_follow_redirect():
 
     .public {
       text-align: center;
+      border-top: 4px solid #ffbd36;
+    }
+
+    .developer-credit {
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .developer-credit a {
+      display: inline-block;
+      padding: 8px;
+      font-weight: 650;
     }
 
     .logo-wrapper {
@@ -3005,6 +3848,10 @@ def test_real_transport_does_not_follow_redirect():
     .quiet {
       font-size: 13px;
       color: var(--muted);
+    }
+
+    .note-spacing {
+      margin-top: 20px;
     }
 
     .eyebrow {
@@ -3151,7 +3998,6 @@ def test_real_transport_does_not_follow_redirect():
         --accent: #0a84ff;
       }
     }
-
     /* Admin workspace */
     body.admin {
       --background: #f4f5f8;
@@ -3171,1031 +4017,277 @@ def test_real_transport_does_not_follow_redirect():
       padding: max(32px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
     }
 
-    .admin main {
-      max-width: 1240px;
-      min-width: 0;
-    }
-
-    .admin .card {
-      border: 1px solid var(--line);
-      box-shadow: 0 16px 48px #18283f08;
-      border-radius: 20px;
-    }
-
-    .admin .login {
-      max-width: 460px;
-      padding: 40px;
-      margin-inline: auto;
-    }
-
-    .admin[data-login-rendering] .login {
-      visibility: hidden;
-    }
-
+    .admin main { max-width: 1080px; min-width: 0; }
+    .admin .card { border: 1px solid var(--line); box-shadow: 0 16px 48px #18283f08; border-radius: 20px; }
+    .admin .login { max-width: 460px; padding: 40px; margin-inline: auto; }
+    .admin[data-login-rendering] .login { visibility: hidden; }
     .admin .brand-mark {
-      display: inline-grid;
-      place-items: center;
-      width: 48px;
-      height: 48px;
-      border-radius: 14px;
-      background: #25344c;
-      color: #f5d486;
-      font-size: 23px;
-      font-weight: 700;
-      flex-shrink: 0;
+      display: inline-grid; place-items: center; width: 48px; height: 48px;
+      border-radius: 14px; background: #25344c; color: #f5d486;
+      font-size: 23px; font-weight: 700; flex-shrink: 0;
     }
-
-    .admin .login-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 30px;
-    }
-
-    .admin .login-brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      min-width: 0;
-    }
-
-    .admin .login-brand .brand-name {
-      font-size: 14px;
-      line-height: 1.5;
-    }
-
-    .admin .login-header .theme-toggle {
-      flex-shrink: 0;
-      padding: 10px;
-    }
-
-    .admin .login-header .brand-mark {
-      width: 42px;
-      height: 42px;
-      border-radius: 12px;
-    }
-
-    .admin .eyebrow {
-      color: var(--gold);
-      font-size: 10px;
-      font-weight: 750;
-      letter-spacing: .16em;
-    }
-
-    .admin h1 {
-      font-size: 30px;
-      margin-bottom: 12px;
-    }
-
-    .admin h2 {
-      font-size: 27px;
-    }
-
-    .admin h3 {
-      font-size: 16px;
-      letter-spacing: -.02em;
-      margin: 0 0 8px;
-    }
-
-    .admin label {
-      font-weight: 650;
-      color: var(--text);
-    }
-
-    .admin input {
-      border-radius: 10px;
-      background: var(--card);
-      margin-top: 9px;
-      transition: border-color .15s;
-    }
-
-    .admin input:hover {
-      border-color: #acb6c5;
-    }
-
-    .admin input:focus-visible {
-      outline: 3px solid #b8cae65c;
-      outline-offset: 1px;
-      border-color: #7087aa;
-    }
-
-    .admin button {
-      border-radius: 10px;
-      min-height: 46px;
-      font-size: 14px;
-      box-shadow: none;
-    }
-
+    .admin .login-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 30px; }
+    .admin .login-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .admin .login-brand .brand-name { font-size: 14px; line-height: 1.5; }
+    .admin .login-header .theme-toggle { flex-shrink: 0; padding: 10px; }
+    .admin .login-header .brand-mark { width: 42px; height: 42px; border-radius: 12px; }
+    .admin .eyebrow { color: var(--gold); font-size: 10px; font-weight: 750; letter-spacing: .16em; }
+    .admin h1 { font-size: 30px; margin-bottom: 12px; }
+    .admin h2 { font-size: 27px; }
+    .admin h3 { font-size: 16px; letter-spacing: -.02em; margin: 0 0 8px; }
+    .admin label { font-weight: 650; color: var(--text); }
+    .admin input { border-radius: 10px; background: var(--card); margin-top: 9px; transition: border-color .15s; }
+    .admin input:hover { border-color: #acb6c5; }
+    .admin input:focus-visible { outline: 3px solid #b8cae65c; outline-offset: 1px; border-color: #7087aa; }
+    .admin button { border-radius: 10px; min-height: 46px; font-size: 14px; box-shadow: none; }
     @media (hover: hover) and (pointer: fine) {
-      .admin button:hover:not(:disabled) {
-        opacity: .88;
-      }
+      .admin button:hover:not(:disabled) { opacity: .88; }
     }
+    .admin button:disabled { cursor: not-allowed; }
+    .admin .secondary { background: var(--card); }
+    .admin #signIn { margin-top: 18px; }
+    .admin #turnstile { max-width: 100%; overflow-x: auto; }
+    .admin #turnstile:not([data-sitekey=""]) { min-height: 65px; }
+    .admin .login-footer { border-top: 1px solid var(--line); padding-top: 20px; text-align: center; }
+    .admin .login-footer a { color: var(--muted); }
+    .admin #dashboard { padding: 0; overflow: hidden; }
+    .admin .workspace-bar { padding: 22px 28px; border-bottom: 1px solid var(--line); }
+    .admin .brand-name { font-weight: 750; font-size: 15px; letter-spacing: -.02em; }
+    .admin .brand-name small { display: block; color: var(--muted); font-size: 11px; font-weight: 450; margin-top: 4px; }
+    .admin .workspace-heading { padding: 30px 28px 24px; }
+    .admin .workspace-heading p:last-child { margin: 0; font-size: 14px; }
+    .admin .workspace-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 24px; padding: 0 28px 28px; align-items: start; }
+    .admin .editor-panel { padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--field); }
+    .admin #accountForm .row { display: block; }
+    .admin #accountForm .field { min-width: 0; }
+    .admin .directory-panel { min-width: 0; }
+    .admin .directory-heading { padding: 4px 0 16px; }
+    .admin .directory-heading p { font-size: 12px; margin: 0; }
+    .admin .scroll { border: 1px solid var(--line); border-radius: 12px; }
+    .admin table { min-width: 580px; }
+    .admin th { background: var(--field); font-size: 11px; letter-spacing: .03em; white-space: nowrap; padding: 15px; }
+    .admin td { padding: 18px 15px; line-height: 1.6; }
+    .admin tbody tr:last-child td { border-bottom: 0; }
+    .admin tbody tr:hover { background: var(--field); }
+    .admin td button { min-height: 40px; padding: 7px 10px; font-size: 11px; border-radius: 7px; }
+    .admin .pager { padding-top: 4px; }
+    .admin .pager button { font-size: 12px; padding: 10px 14px; }
+    .admin .status { margin: 12px 0; min-height: 0; }
+    .admin .status:not(:empty) { padding: 12px 14px; background: var(--field); border: 1px solid var(--line); border-radius: 10px; }
+    .admin #identity { margin: 0; max-width: 280px; overflow-wrap: anywhere; }
 
-    .admin button:disabled {
-      cursor: not-allowed;
-    }
-
-    .admin .secondary {
-      background: var(--card);
-    }
-
-    .admin #signIn {
-      margin-top: 18px;
-    }
-
-    .admin #turnstile {
-      max-width: 100%;
-      overflow-x: auto;
-    }
-
-    .admin #turnstile:not([data-sitekey=""]) {
-      min-height: 65px;
-    }
-
-    .admin .login-footer {
-      border-top: 1px solid var(--line);
-      padding-top: 20px;
-      text-align: center;
-    }
-
-    .admin .login-footer a {
-      color: var(--muted);
-    }
-
-    .admin #dashboard {
-      padding: 0;
-      overflow: hidden;
-    }
-
-    .admin .workspace-bar {
-      padding: 22px 28px;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .admin .brand-name {
-      font-weight: 750;
-      font-size: 15px;
-      letter-spacing: -.02em;
-    }
-
-    .admin .brand-name small {
-      display: block;
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 450;
-      margin-top: 4px;
-    }
-
-    .admin .workspace-heading {
-      padding: 30px 28px 24px;
-    }
-
-    .admin .workspace-heading p:last-child {
-      margin: 0;
-      font-size: 14px;
-    }
-
-    .admin .workspace-layout {
-      display: grid;
-      grid-template-columns: 300px minmax(0, 1fr);
-      gap: 24px;
-      padding: 0 28px 28px;
-      align-items: start;
-    }
-
-    .admin .editor-panel {
-      padding: 22px;
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      background: var(--field);
-    }
-
-    .admin #accountForm .row {
-      display: block;
-    }
-
-    .admin #accountForm .field {
-      min-width: 0;
-    }
-
-    .admin .directory-panel {
-      min-width: 0;
-    }
-
-    .admin .directory-heading {
-      padding: 4px 0 16px;
-    }
-
-    .admin .directory-heading p {
-      font-size: 12px;
-      margin: 0;
-    }
-
-    .admin .scroll {
-      border: 1px solid var(--line);
-      border-radius: 12px;
-    }
-
-    .admin table {
-      min-width: 580px;
-    }
-
-    .admin th {
-      background: var(--field);
-      font-size: 11px;
-      letter-spacing: .03em;
-      white-space: nowrap;
-      padding: 15px;
-    }
-
-    .admin td {
-      padding: 18px 15px;
-      line-height: 1.6;
-    }
-
-    .admin tbody tr:last-child td {
-      border-bottom: 0;
-    }
-
-    .admin tbody tr:hover {
-      background: var(--field);
-    }
-
-    .admin td:nth-child(2) {
-      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-      font-weight: 600;
-      max-width: 180px;
-    }
-
-    .admin td:nth-child(4) {
-      font-weight: 650;
-      white-space: nowrap;
-    }
-
-    .admin td:last-child {
-      min-width: 190px;
-    }
-
-    .admin td button {
-      min-height: 40px;
-      padding: 7px 10px;
-      font-size: 11px;
-      border-radius: 7px;
-    }
-
-    .admin td button:nth-child(3) {
-      color: var(--danger);
-      border-color: var(--danger-line);
-    }
-
-    .admin .pager {
-      padding-top: 4px;
-    }
-
-    .admin .pager button {
-      font-size: 12px;
-      padding: 10px 14px;
-    }
-
-    .admin .status {
-      margin: 12px 0;
-      min-height: 0;
-    }
-
-    .admin .status:not(:empty) {
-      padding: 12px 14px;
-      background: var(--field);
-      border: 1px solid var(--line);
-      border-radius: 10px;
-    }
-
-    .admin #identity {
-      margin: 0;
-      max-width: 280px;
-      overflow-wrap: anywhere;
-    }
-
-    .admin .theme-toggle {
-      width: auto;
-      display: inline-flex;
-      gap: 8px;
-      padding: 10px 14px;
-      border-radius: 24px;
-      color: var(--gold);
-    }
-
-    .admin .theme-toggle svg {
-      width: 20px;
-      height: 20px;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.7;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-
-    .admin .theme-toggle[data-mode="light"] svg {
-      fill: currentColor;
-      fill-opacity: .22;
-      filter: drop-shadow(0 0 3px #d9b65c66);
-    }
-
-    .admin .theme-toggle[data-mode="dark"] {
-      color: var(--muted);
-    }
-
-    .admin .theme-toggle[data-mode="system"] svg {
-      display: none;
-    }
-
+    .admin .theme-toggle { width: auto; display: inline-flex; gap: 8px; padding: 10px 14px; border-radius: 24px; color: var(--gold); }
+    .admin .theme-toggle svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .admin .theme-toggle[data-mode="light"] svg { fill: currentColor; fill-opacity: .22; filter: drop-shadow(0 0 3px #d9b65c66); }
+    .admin .theme-toggle[data-mode="dark"] { color: var(--muted); }
+    .admin .theme-toggle[data-mode="system"] svg { display: none; }
     .admin .theme-toggle[data-mode="light"] [data-theme-label],
-    .admin .theme-toggle[data-mode="dark"] [data-theme-label] {
-      display: none;
-    }
-
-    .admin .theme-toggle {
-      min-width: 46px;
-    }
-
-    .admin .theme-toggle span {
-      min-width: 30px;
-      font-size: 12px;
-    }
-
-    .admin .session-actions {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: nowrap;
-    }
-
-    .admin .workspace-bar {
-      background: var(--field);
-    }
-
-    .admin .profile {
-      gap: 10px;
-    }
-
+    .admin .theme-toggle[data-mode="dark"] [data-theme-label] { display: none; }
+    .admin .theme-toggle { min-width: 46px; }
+    .admin .theme-toggle span { min-width: 30px; font-size: 12px; }
+    .admin .session-actions { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+    .admin .workspace-bar { background: var(--field); }
+    .admin .profile { gap: 10px; }
     .admin .avatar {
-      display: grid;
-      place-items: center;
-      width: 38px;
-      height: 38px;
-      flex-shrink: 0;
-      border: 1px solid var(--line);
-      border-radius: 50%;
-      background: var(--card);
-      font-size: 12px;
-      font-weight: 750;
-      color: var(--gold);
+      display: grid; place-items: center; width: 38px; height: 38px; flex-shrink: 0;
+      border: 1px solid var(--line); border-radius: 50%; background: var(--card);
+      font-size: 12px; font-weight: 750; color: var(--gold);
     }
-
-    .admin .profile-name {
-      display: block;
-      font-size: 13px;
-      font-weight: 650;
-      margin-bottom: 4px;
-    }
-
-    .admin .profile #identity {
-      font-size: 11px;
-    }
-
-    .admin .directory-heading h3 {
-      font-size: 18px;
-    }
-
-    .admin #signIn,
-    .admin #save {
-      background: linear-gradient(120deg, #334766, #25344c);
-      color: #fff;
-    }
+    .admin .profile-name { display: block; font-size: 13px; font-weight: 650; margin-bottom: 4px; }
+    .admin .profile #identity { font-size: 11px; }
+    .admin .directory-heading h3 { font-size: 18px; }
+    .admin #signIn, .admin #save { background: linear-gradient(120deg, #334766, #25344c); color: #fff; }
 
     .admin[data-theme="dark"] {
       color-scheme: dark;
-      --background: #0d131e;
-      --card: #151e2c;
-      --field: #1a2535;
-      --text: #e7edf6;
-      --muted: #a1afc3;
-      --line: #2c3a4e;
-      --accent: #bdd1ef;
-      --halo: #203048;
-      --gold: #e3c17e;
-      --danger: #ffa6ac;
-      --danger-line: #65404a;
+      --background: #0d131e; --card: #151e2c; --field: #1a2535;
+      --text: #e7edf6; --muted: #a1afc3; --line: #2c3a4e;
+      --accent: #bdd1ef; --halo: #203048; --gold: #e3c17e;
+      --danger: #ffa6ac; --danger-line: #65404a;
     }
-
     @media (prefers-color-scheme: dark) {
       .admin:not([data-theme="light"]) {
         color-scheme: dark;
-        --background: #0d131e;
-        --card: #151e2c;
-        --field: #1a2535;
-        --text: #e7edf6;
-        --muted: #a1afc3;
-        --line: #2c3a4e;
-        --accent: #bdd1ef;
-        --halo: #203048;
-        --gold: #e3c17e;
-        --danger: #ffa6ac;
-        --danger-line: #65404a;
+        --background: #0d131e; --card: #151e2c; --field: #1a2535;
+        --text: #e7edf6; --muted: #a1afc3; --line: #2c3a4e;
+        --accent: #bdd1ef; --halo: #203048; --gold: #e3c17e;
+        --danger: #ffa6ac; --danger-line: #65404a;
       }
     }
 
     @media (max-width: 540px) {
-      body.admin {
-        padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
-      }
-
-      .admin .login {
-        padding: 28px 20px;
-      }
-
-      .admin h1 {
-        font-size: 26px;
-      }
-
-      .admin h2 {
-        font-size: 24px;
-      }
-
-      .admin .workspace-bar {
-        padding: 18px;
-        gap: 18px;
-      }
-
-      .admin .workspace-layout {
-        padding: 0 18px 20px;
-        gap: 22px;
-      }
-
-      .admin .editor-panel {
-        padding: 18px;
-      }
-
-      .admin #save {
-        width: 100%;
-      }
-
-      .admin #identity {
-        max-width: 180px;
-      }
+      body.admin { padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+      .admin .login { padding: 28px 20px; }
+      .admin h1 { font-size: 26px; }
+      .admin h2 { font-size: 24px; }
+      .admin .workspace-bar { padding: 18px; gap: 18px; }
+      .admin .workspace-layout { padding: 0 18px 20px; gap: 22px; }
+      .admin .editor-panel { padding: 18px; }
+      .admin #save { width: 100%; }
+      .admin #identity { max-width: 180px; }
     }
-
-    .admin #dashboard {
-      position: relative;
-      isolation: isolate;
-      background: var(--background);
-      border-radius: 24px;
-    }
-
-    .admin #dashboard> :not(.gold-rain) {
-      position: relative;
-      z-index: 1;
-    }
-
-    .admin .gold-rain {
-      position: absolute;
-      inset: 0;
-      overflow: hidden;
-      contain: strict;
-      pointer-events: none;
-      z-index: 0;
-      color: var(--gold);
-    }
-
-    .admin .gold-rain>svg {
-      position: absolute;
-      top: -80px;
-      width: 34px;
-      height: 34px;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.2;
-      opacity: 0;
-      will-change: transform, opacity;
-      animation: gold-fall 24s linear infinite;
-    }
-
-    .admin .gold-rain>svg:nth-child(1) {
-      left: 3%;
-      animation-delay: -3s;
-    }
-
-    .admin .gold-rain>svg:nth-child(2) {
-      left: 14%;
-      animation-delay: -16s;
-      width: 24px;
-    }
-
-    .admin .gold-rain>svg:nth-child(3) {
-      left: 27%;
-      animation-delay: -8s;
-      animation-duration: 29s;
-    }
-
-    .admin .gold-rain>svg:nth-child(4) {
-      left: 39%;
-      animation-delay: -20s;
-    }
-
-    .admin .gold-rain>svg:nth-child(5) {
-      left: 51%;
-      animation-delay: -12s;
-      width: 22px;
-    }
-
-    .admin .gold-rain>svg:nth-child(6) {
-      left: 63%;
-      animation-delay: -5s;
-      animation-duration: 31s;
-    }
-
-    .admin .gold-rain>svg:nth-child(7) {
-      left: 75%;
-      animation-delay: -19s;
-    }
-
-    .admin .gold-rain>svg:nth-child(8) {
-      left: 88%;
-      animation-delay: -10s;
-      width: 26px;
-    }
-
+    .admin #dashboard { position: relative; isolation: isolate; background: var(--background); border-radius: 24px; }
+    .admin #dashboard > :not(.gold-rain) { position: relative; z-index: 1; }
+    .admin .gold-rain { position: absolute; inset: 0; overflow: hidden; contain: strict; pointer-events: none; z-index: 0; color: var(--gold); }
+    .admin .gold-rain > svg { position: absolute; top: -80px; width: 34px; height: 34px; fill: none; stroke: currentColor; stroke-width: 1.2; opacity: 0; will-change: transform, opacity; animation: gold-fall 24s linear infinite; }
+    .admin .gold-rain > svg:nth-child(1) { left: 3%; animation-delay: -3s; }
+    .admin .gold-rain > svg:nth-child(2) { left: 14%; animation-delay: -16s; width: 24px; }
+    .admin .gold-rain > svg:nth-child(3) { left: 27%; animation-delay: -8s; animation-duration: 29s; }
+    .admin .gold-rain > svg:nth-child(4) { left: 39%; animation-delay: -20s; }
+    .admin .gold-rain > svg:nth-child(5) { left: 51%; animation-delay: -12s; width: 22px; }
+    .admin .gold-rain > svg:nth-child(6) { left: 63%; animation-delay: -5s; animation-duration: 31s; }
+    .admin .gold-rain > svg:nth-child(7) { left: 75%; animation-delay: -19s; }
+    .admin .gold-rain > svg:nth-child(8) { left: 88%; animation-delay: -10s; width: 26px; }
     @keyframes gold-fall {
-      0% {
-        transform: translate3d(0, 0, 0) rotate(-15deg);
-        opacity: 0;
-      }
-
-      12%,
-      82% {
-        opacity: .13;
-      }
-
-      100% {
-        transform: translate3d(24px, 1100px, 0) rotate(65deg);
-        opacity: 0;
-      }
+      0% { transform: translate3d(0, 0, 0) rotate(-15deg); opacity: 0; }
+      12%, 82% { opacity: .13; }
+      100% { transform: translate3d(24px, 1100px, 0) rotate(65deg); opacity: 0; }
     }
-
-    .admin #dashboard .workspace-bar {
-      background: var(--card);
-      padding: 20px 28px;
-    }
-
-    .admin #dashboard .workspace-heading {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 20px;
-      border: 0;
-      padding: 28px;
-      margin: 0;
-    }
-
-    .admin #dashboard .workspace-heading h2 {
-      font-size: clamp(25px, 3vw, 34px);
-      margin-bottom: 0;
-    }
-
-    .admin .gold-emblem {
-      display: grid;
-      place-items: center;
-      width: 64px;
-      height: 64px;
-      flex-shrink: 0;
-      border-radius: 20px;
-      background: linear-gradient(135deg, #ffe7a4, #c9943d);
-      color: #654317;
-      box-shadow: 0 8px 24px #b88a3026;
-      transform: rotate(8deg);
-    }
-
-    .admin .gold-emblem svg {
-      width: 34px;
-      height: 34px;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.5;
-    }
-
-    .admin #dashboard .workspace-layout {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 24px;
-    }
-
-    .admin #dashboard .editor-panel {
-      background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      padding: 24px;
-      box-shadow: 0 4px 16px #00000003;
-    }
-
-    .admin #dashboard #accountForm .field {
-      flex: 1 1 200px;
-    }
-
-    .admin #dashboard #accountForm input {
-      margin-bottom: 0;
-      background: var(--field);
-    }
-
-    .admin #dashboard #save {
-      width: auto;
-      min-height: 48px;
-      padding-inline: 22px;
-      background: linear-gradient(120deg, #f0d38c, #d9ad58);
-      color: #3c2c0c;
-    }
-
-    .admin .section-title {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 22px;
-    }
-
-    .admin .section-title h3 {
-      margin: 0;
-      font-size: 15px;
-    }
-
-    .admin .ui-icon {
-      width: 18px;
-      height: 18px;
-      flex-shrink: 0;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.7;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-
-    .admin .section-title>.ui-icon {
-      color: var(--gold);
-    }
-
-    .admin #dashboard .directory-panel {
-      background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: 18px;
-    }
-
-    .admin #dashboard .directory-heading {
-      padding: 0;
-    }
-
-    .admin #dashboard .directory-heading .section-title {
-      margin-bottom: 20px;
-    }
-
-    .admin #dashboard .scroll {
-      border-radius: 12px;
-    }
-
-    .admin #dashboard th {
-      padding-block: 14px;
-    }
-
-    .admin #dashboard td {
-      padding-block: 16px;
-    }
-
-    .admin #dashboard td:last-child {
-      min-width: 156px;
-    }
-
-    .admin #dashboard td button {
-      min-width: 40px;
-      gap: 6px;
-    }
-
-    .admin #dashboard .pager {
-      margin-top: 20px;
-    }
-
-    .admin #dashboard #logout {
-      gap: 8px;
-    }
-
+    .admin #dashboard .workspace-bar { background: var(--card); padding: 20px 28px; }
+    .admin #dashboard .workspace-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; border: 0; padding: 28px; margin: 0; }
+    .admin #dashboard .workspace-heading h2 { font-size: clamp(25px, 3vw, 34px); margin-bottom: 0; }
+    .admin .gold-emblem { display: grid; place-items: center; width: 64px; height: 64px; flex-shrink: 0; border-radius: 20px; background: linear-gradient(135deg, #ffe7a4, #c9943d); color: #654317; box-shadow: 0 8px 24px #b88a3026; transform: rotate(8deg); }
+    .admin .gold-emblem svg { width: 34px; height: 34px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+    .admin #dashboard .workspace-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+    .admin #dashboard .editor-panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 24px; box-shadow: 0 4px 16px #00000003; }
+    .admin #dashboard #accountForm .field { flex: 1 1 200px; }
+    .admin #dashboard #accountForm input { margin-bottom: 0; background: var(--field); }
+    .admin #dashboard #save { width: auto; min-height: 48px; padding-inline: 22px; background: linear-gradient(120deg, #f0d38c, #d9ad58); color: #3c2c0c; }
+    .admin .section-title { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
+    .admin .section-title h3 { margin: 0; font-size: 15px; }
+    .admin .ui-icon { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .admin .section-title > .ui-icon { color: var(--gold); }
+    .admin #dashboard .directory-panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; }
+    .admin #dashboard .directory-heading { padding: 0; }
+    .admin #dashboard .directory-heading .section-title { margin-bottom: 20px; }
+    .admin #dashboard .scroll { border-radius: 12px; }
+    .admin #dashboard th { padding-block: 14px; }
+    .admin #dashboard td { padding-block: 16px; }
+    .admin #dashboard td:last-child { min-width: 156px; }
+    .admin #dashboard td button { min-width: 40px; gap: 6px; }
+    .admin #dashboard .pager { margin-top: 20px; }
+    .admin #dashboard #logout { gap: 8px; }
     @media (max-width: 540px) {
-      .admin .gold-rain>svg:nth-child(even) {
-        display: none;
-      }
-
-      .admin #dashboard .workspace-bar {
-        padding: 18px;
-      }
-
-      .admin #dashboard .workspace-heading {
-        padding: 24px 18px;
-      }
-
-      .admin .gold-emblem {
-        width: 48px;
-        height: 48px;
-        border-radius: 16px;
-      }
-
-      .admin #dashboard .editor-panel,
-      .admin #dashboard .directory-panel {
-        padding: 18px;
-      }
-
-      .admin #dashboard #accountForm .field,
-      .admin #dashboard #save {
-        flex-basis: 100%;
-        width: 100%;
-      }
+      .admin .gold-rain > svg:nth-child(even) { display: none; }
+      .admin #dashboard .workspace-bar { padding: 18px; }
+      .admin #dashboard .workspace-heading { padding: 24px 18px; }
+      .admin .gold-emblem { width: 48px; height: 48px; border-radius: 16px; }
+      .admin #dashboard .editor-panel, .admin #dashboard .directory-panel { padding: 18px; }
+      .admin #dashboard #accountForm .field, .admin #dashboard #save { flex-basis: 100%; width: 100%; }
     }
-
     @media (prefers-reduced-motion: reduce) {
-      .admin .gold-rain {
-        display: none;
-      }
-
-      .admin .gold-rain>svg {
-        animation: none;
-        will-change: auto;
-      }
-
-      .button,
-      button,
-      .admin input {
-        transition: none;
-      }
-
-      .button:active,
-      button:active:not(:disabled) {
-        transform: none;
-      }
+      .admin .gold-rain { display: none; }
+      .admin .gold-rain > svg { animation: none; will-change: auto; }
+      .button, button, .admin input { transition: none; }
+      .button:active, button:active:not(:disabled) { transform: none; }
     }
-
-    .admin .account-dialog {
-      width: min(520px, calc(100% - 28px));
-      max-height: calc(100svh - 40px);
-      padding: 0;
-      border: 1px solid var(--line);
-      border-radius: 20px;
-      background: var(--card);
-      color: var(--text);
-      box-shadow: 0 24px 100px #00000040;
-    }
-
-    .admin .account-dialog::backdrop {
-      background: #08101db3;
-    }
-
-    .admin #dashboard .account-dialog .editor-panel {
-      border: 0;
-    }
-
-    .admin #dashboard .account-dialog #accountForm .row {
-      display: block;
-    }
-
-    .admin #dashboard .account-dialog input {
-      margin-bottom: 20px;
-    }
-
-    .admin .dialog-heading,
-    .admin .dialog-actions {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-
-    .admin .dialog-heading .section-title {
-      margin-bottom: 0;
-    }
-
-    .admin .dialog-heading {
-      margin-bottom: 24px;
-    }
-
-    .admin .dialog-heading button {
-      width: 44px;
-      padding: 8px;
-      font-size: 24px;
-    }
-
-    .admin .dialog-actions {
-      justify-content: flex-end;
-      margin-top: 24px;
-    }
-
-    .admin .dialog-actions button,
-    .admin #addAccount {
-      width: auto;
-      gap: 8px;
-    }
-
-    .admin #addAccount {
-      background: linear-gradient(120deg, #f0d38c, #d9ad58);
-      color: #3c2c0c;
-    }
-
-    .admin #dashboard .directory-heading {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 14px;
-      margin-bottom: 20px;
-    }
-
-    .admin #dashboard .directory-heading .section-title {
-      margin-bottom: 0;
-    }
-
-    .admin #dashboard .directory-panel {
-      padding: 0;
-      overflow: hidden;
-      box-shadow: 0 8px 30px #00000004;
-    }
-
-    .admin #dashboard .directory-heading {
-      padding: 22px 24px;
-      margin: 0;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .admin #dashboard .directory-panel>.status:not(:empty) {
-      margin: 16px 24px;
-    }
-
-    .admin #dashboard .scroll {
-      border: 0;
-      border-radius: 0;
-    }
-
-    .admin #dashboard table {
-      min-width: 660px;
-    }
-
-    .admin #dashboard th {
-      padding: 14px 24px;
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      font-weight: 700;
-    }
-
-    .admin #dashboard td {
-      padding: 20px 24px;
-      vertical-align: middle;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .admin #dashboard td:nth-child(2) {
-      width: 32%;
-      font-family: inherit;
-      font-size: 15px;
-    }
-
-    .admin #dashboard .row-number {
-      width: 64px;
-      min-width: 64px;
-      color: var(--muted);
-      font-size: 14px;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .admin #dashboard th:last-child {
-      width: 156px;
-    }
-
-    .admin .account-name {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      max-width: 100%;
-    }
-
-    .admin .account-crown {
-      width: 34px;
-      height: 34px;
-      padding: 6px;
-      flex-shrink: 0;
-      border-radius: 10px;
-      background: var(--field);
-      border: 1px solid var(--line);
-      color: var(--gold);
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.6;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-
-    .admin .account-name span {
-      overflow-wrap: anywhere;
-    }
-
-    .admin .account-expiry {
-      font-size: 14px;
-      color: var(--muted);
-      white-space: nowrap;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .admin .account-status {
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      padding: 6px 12px;
-      border-radius: 8px;
-      border: 1px solid var(--line);
-      background: var(--field);
-      color: var(--muted);
-      font-size: 13px;
-      font-weight: 650;
-    }
-
-    .admin .account-status::before {
-      content: '';
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
-      background: currentColor;
-    }
-
-    .admin .account-status.is-gold {
-      color: var(--gold);
-      border-color: currentColor;
-    }
-
-    .admin #dashboard td:last-child:not([colspan]),
-    .admin #dashboard th:last-child {
-      text-align: right;
-      white-space: nowrap;
-    }
-
-    .admin #dashboard td button {
-      border-color: transparent;
-      background: transparent;
-      margin: 0 1px;
-      border-radius: 10px;
-    }
-
-    .admin #dashboard td button:hover:not(:disabled) {
-      border-color: var(--line);
-      background: var(--field);
-      filter: none;
-    }
-
-    .admin #dashboard td button:nth-child(3) {
-      border-color: transparent;
-    }
-
-    .admin #dashboard .pager {
-      margin: 0;
-      padding: 18px 24px;
-      border-top: 1px solid var(--line);
-      background: var(--field);
-    }
-
-    .admin #dashboard .pager #page {
-      font-size: 14px;
-      font-weight: 600;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .admin #dashboard td[colspan] {
-      text-align: center;
-      padding: 64px 24px;
-      color: var(--muted);
-      font-weight: 450;
-      font-family: inherit;
-    }
-
-    .admin #dashboard td[colspan]::before {
-      content: '◇';
-      display: block;
-      color: var(--gold);
-      font-size: 34px;
-      margin-bottom: 12px;
-    }
-
+    .admin .account-dialog { width: min(520px, calc(100% - 28px)); max-height: calc(100svh - 40px); padding: 0; border: 1px solid var(--line); border-radius: 20px; background: var(--card); color: var(--text); box-shadow: 0 24px 100px #00000040; }
+    .admin .account-dialog::backdrop { background: #08101db3; }
+    .admin #dashboard .account-dialog .editor-panel { border: 0; }
+    .admin #dashboard .account-dialog #accountForm .row { display: block; }
+    .admin #dashboard .account-dialog input { margin-bottom: 20px; }
+    .admin .dialog-heading, .admin .dialog-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .admin .dialog-heading .section-title { margin-bottom: 0; }
+    .admin .dialog-heading { margin-bottom: 24px; }
+    .admin .dialog-heading button { width: 44px; padding: 8px; font-size: 24px; }
+    .admin .dialog-actions { justify-content: flex-end; margin-top: 24px; }
+    .admin .dialog-actions button, .admin #addAccount { width: auto; gap: 8px; }
+    .admin #addAccount { background: linear-gradient(120deg, #f0d38c, #d9ad58); color: #3c2c0c; }
+    .admin #dashboard .directory-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 20px; }
+    .admin #dashboard .directory-heading .section-title { margin-bottom: 0; }
+    .admin #dashboard .directory-panel { padding: 0; overflow: hidden; box-shadow: 0 8px 30px #00000004; }
+    .admin #dashboard .directory-heading { padding: 22px 24px; margin: 0; border-bottom: 1px solid var(--line); }
+    .admin #dashboard .directory-panel > .status:not(:empty) { margin: 16px 24px; }
+    .admin #dashboard .scroll { border: 0; border-radius: 0; }
+    .admin #dashboard table { min-width: 660px; }
+    .admin #dashboard th { padding: 14px 24px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
+    .admin #dashboard td { padding: 20px 24px; vertical-align: middle; border-bottom: 1px solid var(--line); }
+    .admin #dashboard td:nth-child(2) { width: 32%; font-family: inherit; font-size: 15px; }
+    .admin #dashboard .row-number { width: 64px; min-width: 64px; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+    .admin #dashboard th:last-child { width: 156px; }
+    .admin .account-name { display: inline-flex; align-items: center; gap: 10px; max-width: 100%; }
+    .admin .account-crown { width: 34px; height: 34px; padding: 6px; flex-shrink: 0; border-radius: 10px; background: var(--field); border: 1px solid var(--line); color: var(--gold); fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    .admin .account-name span { overflow-wrap: anywhere; }
+    .admin .account-expiry { font-size: 14px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .admin .account-status { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--field); color: var(--muted); font-size: 13px; font-weight: 650; }
+    .admin .account-status::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+    .admin .account-status.is-gold { color: var(--gold); border-color: currentColor; }
+    .admin #dashboard td:last-child, .admin #dashboard th:last-child { text-align: right; white-space: nowrap; }
+    .admin #dashboard td button { border-color: transparent; background: transparent; margin: 0 1px; border-radius: 10px; }
+    .admin #dashboard td button:hover:not(:disabled) { border-color: var(--line); background: var(--field); filter: none; }
+    .admin #dashboard td button.danger { color: var(--danger); }
+    .admin #dashboard .pager { margin: 0; padding: 18px 24px; border-top: 1px solid var(--line); background: var(--field); }
+    .admin #dashboard .pager #page { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .admin #dashboard td.empty-state { text-align: center; padding: 64px 24px; color: var(--muted); font-weight: 450; font-family: inherit; }
+    .admin #dashboard td.orphan-note { color: var(--muted); font-size: 13px; }
+    .admin #dashboard td.empty-state::before { content: '◇'; display: block; color: var(--gold); font-size: 34px; margin-bottom: 12px; }
     @media (max-width: 540px) {
+      .admin #dashboard .directory-heading, .admin #dashboard .pager { padding: 16px; }
+      .admin #dashboard td, .admin #dashboard th { padding-left: 18px; padding-right: 18px; }
+    }
+    /* Shared form + DNS device components (replace inline styles) */
+    textarea { display: block; width: 100%; margin: 8px 0 18px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--field); color: var(--text); font: inherit; font-size: 15px; resize: vertical; }
+    .admin textarea { border-radius: 10px; background: var(--card); }
+    #dnsResult { margin: 0 24px 16px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--field); }
+    #dnsResult p { margin: 0 0 8px; }
+    #dnsLink { margin: 0 0 10px; white-space: pre-wrap; word-break: break-all; user-select: all; font-size: 12px; }
+    .dns-device { padding: 8px 0; }
+    .dns-device + .dns-device { border-top: 1px dashed var(--line); }
+    .dns-device-name { display: block; margin-bottom: 6px; font-weight: 600; }
+    .dns-device-state { color: var(--muted); font-weight: 450; }
+    .dns-device-state.is-active { color: var(--gold); }
+    .dns-device-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .dns-device-controls input { width: auto; min-height: 38px; margin: 0; padding: 6px 10px; font-size: 13px; }
+    .admin .directory-intro { margin: 16px 24px; font-size: 13px; }
+    .admin .dialog-note { margin: 0 0 16px; font-size: 12px; }
 
-      .admin #dashboard .directory-heading,
-      .admin #dashboard .pager {
-        padding: 16px;
-      }
-
-      .admin #dashboard td,
-      .admin #dashboard th {
-        padding-left: 18px;
-        padding-right: 18px;
-      }
+    /* Compact layout with readable controls on narrow and short screens. */
+    body { padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+    main { min-width: 0; max-width: 400px; }
+    .card { padding: 28px 22px; border-radius: 20px; }
+    .logo-wrapper { width: 64px; height: 64px; margin-bottom: 16px; border-radius: 18px; }
+    h1 { font-size: clamp(22px, 6vw, 26px); }
+    .features-list { padding: 14px; margin-bottom: 18px; }
+    .features-list div { gap: 9px; line-height: 1.5; }
+    body.admin { padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+    .admin .login { max-width: 400px; padding: 28px 24px; }
+    .admin .login-header { margin-bottom: 24px; }
+    .admin h1 { font-size: 26px; }
+    .admin #dashboard .workspace-bar { padding: 16px 20px; }
+    .admin #dashboard .workspace-heading { padding: 22px 20px; }
+    .admin #dashboard .workspace-heading h2 { font-size: clamp(22px, 3vw, 28px); }
+    .admin .workspace-layout { padding: 0 20px 20px; }
+    .admin #dashboard td, .admin #dashboard th { padding: 14px 16px; }
+    .admin .account-dialog { max-height: calc(100vh - 24px); max-height: calc(100svh - 24px); overflow-y: auto; }
+    @media (max-width: 700px) {
+      .admin .workspace-bar > .row { width: 100%; min-width: 0; justify-content: space-between; }
+      .admin .profile { flex: 1; min-width: 0; }
+      .admin .profile > div { min-width: 0; }
+      .admin .profile-name { overflow-wrap: anywhere; }
+      .admin .session-actions { flex-wrap: wrap; }
+      .admin #dashboard .workspace-heading { padding: 20px 16px; }
+      .admin .workspace-layout { padding: 0 12px 12px; }
+      .admin .gold-emblem { width: 44px; height: 44px; border-radius: 12px; }
+      .admin #dashboard table { min-width: 0; table-layout: fixed; }
+      .admin #dashboard thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+      .admin #dashboard tbody, .admin #dashboard tr, .admin #dashboard td { display: block; width: 100%; max-width: none; min-width: 0; }
+      .admin #dashboard tr { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+      .admin #dashboard td { padding: 6px 0; border: 0; }
+      .admin #dashboard .row-number { width: auto; min-width: 0; font-size: 12px; }
+      .admin #dashboard .row-number::before { content: '#'; }
+      .admin #dashboard td:nth-child(2) { width: 100%; }
+      .admin .account-expiry { white-space: normal; }
+      .admin #dashboard td:last-child { text-align: left; }
+      .admin #dashboard td button { min-width: 44px; min-height: 44px; }
+      .admin #dashboard td.empty-state { padding: 24px 0; }
+      .admin #dashboard .pager { gap: 8px; padding: 12px; }
+      .admin .pager button { padding: 10px; }
+    }
+    @media (max-width: 360px) {
+      .card, .admin .login { padding: 22px 16px; }
+      .admin .workspace-bar > .row { gap: 12px; }
+      .admin .session-actions { width: 100%; justify-content: flex-end; }
+      .admin .login-brand .brand-name { font-size: 12px; }
     }
   </style>
 </head>
@@ -4206,26 +4298,26 @@ def test_real_transport_does_not_follow_redirect():
     <section class="card public" aria-labelledby="title">
       <div class="logo-wrapper">
         <svg viewBox="0 0 24 24">
-          <path
-            d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z">
-          </path>
+          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"></path>
         </svg>
       </div>
 
       <h1 id="title">Locket Gold Premium</h1>
-      <p>Mở khóa toàn bộ đặc quyền cao cấp và nâng tầm trải nghiệm của bạn.</p>
+      <p>Cấu hình DNS được cung cấp bởi nhà phát triển <a href="https://vuthanhluan.bond">vuthanhluan.bond</a>, dành cho trải nghiệm chia sẻ khoảnh khắc trên Locket.</p>
 
       <div class="features-list">
-        <div><span>✓</span> Gửi và nhận ảnh không giới hạn</div>
-        <div><span>✓</span> Đăng video thời lượng dài hơn lên widget</div>
-        <div><span>✓</span> Xem lại lịch sử khoảnh khắc thoải mái</div>
-        <div><span>✓</span> Tùy chỉnh biểu tượng ứng dụng độc quyền</div>
+        <div><span aria-hidden="true">↗</span> Đăng ảnh và chia sẻ với bạn bè</div>
+        <div><span aria-hidden="true">▷</span> Quay và đăng video khoảnh khắc</div>
+        <div><span aria-hidden="true">◷</span> Xem lại lịch sử ảnh và video</div>
+        <div><span aria-hidden="true">♡</span> Nhận khoảnh khắc trên widget</div>
       </div>
+      <p class="note">Các tính năng phụ thuộc phiên bản ứng dụng và quyền tài khoản đang sử dụng.</p>
 
       <a href="/profile.mobileconfig" id="installBtn" class="button gold-btn">Tải về cấu hình ngay</a>
 
-      <p class="note" style="margin-top: 20px;">Lưu ý: Bắt buộc mở bằng trình duyệt Safari trên iPhone để cài đặt chính
-        xác.</p>
+      <p class="note note-spacing">Lưu ý: Bắt buộc mở bằng trình duyệt Safari trên iPhone để cài đặt chính xác.</p>
+      <footer class="developer-credit">Website và cấu hình được phát triển bởi<br><a href="https://vuthanhluan.bond">vuthanhluan.bond ↗</a></footer>
+
     </section>
     <!-- PUBLIC_END -->
     <!-- ADMIN_START -->
@@ -4237,177 +4329,128 @@ def test_real_transport_does_not_follow_redirect():
       } catch { }
     </script>
     <link rel="preconnect" href="https://challenges.cloudflare.com">
-    <link rel="preload" as="script" nonce="__NONCE__"
-      href="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileReady&amp;render=explicit">
+    <link rel="preload" as="script" nonce="__NONCE__" href="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileReady&amp;render=explicit">
     <section class="card login" id="loginScreen" aria-labelledby="loginTitle">
       <div class="login-header">
         <div class="login-brand">
           <span class="brand-mark" aria-hidden="true">✦</span>
           <div class="brand-name">Locket Gold Manager</div>
         </div>
-        <button class="secondary theme-toggle" type="button" data-theme-toggle aria-label="Auto theme. Switch to Light"
-          title="Auto → Light">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M9 17h6m-6 3h6m-5 2h4M8.5 14.5a6 6 0 1 1 7 0c-.9.7-1.5 1.5-1.5 2.5h-4c0-1-.6-1.8-1.5-2.5Z" />
-          </svg>
-          <span data-theme-label>Auto</span>
+        <button class="secondary theme-toggle" type="button" data-theme-toggle aria-label="Giao diện: Tự động. Chuyển sang Sáng" title="Tự động → Sáng">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 17h6m-6 3h6m-5 2h4M8.5 14.5a6 6 0 1 1 7 0c-.9.7-1.5 1.5-1.5 2.5h-4c0-1-.6-1.8-1.5-2.5Z"/></svg>
+          <span data-theme-label>Tự động</span>
         </button>
       </div>
-      <h1 id="loginTitle">Admin sign in</h1>
-      <p>Welcome back. Sign in to your Gold workspace.</p>
+      <h1 id="loginTitle">Đăng nhập quản trị</h1>
+      <p>Đăng nhập để quản lý tài khoản và thiết bị DNS.</p>
       <form id="loginForm">
         <label for="email">Email</label><input id="email" type="email" autocomplete="username" required maxlength="254">
-        <label for="password">Password</label><input id="password" type="password" autocomplete="current-password"
+        <label for="password">Mật khẩu</label><input id="password" type="password" autocomplete="current-password"
           required maxlength="256">
         <div id="turnstile" data-sitekey="__TURNSTILE_SITE_KEY__"></div>
-        <button id="signIn" type="submit">Sign in</button>
+        <button id="signIn" type="submit">Đăng nhập</button>
       </form>
       <p class="status" id="loginMessage" role="status" aria-live="polite"></p>
-      <div class="login-footer"><a class="quiet" href="/">← Back to downloads</a></div>
+      <div class="login-footer"><a class="quiet" href="/">← Về trang tải xuống</a></div>
+      
     </section>
     <script nonce="__NONCE__">
       delete document.body.dataset.loginRendering;
     </script>
     <section class="card" id="dashboard" hidden aria-labelledby="adminTitle">
-      <svg width="0" height="0" aria-hidden="true" focusable="false">
-        <defs>
-          <symbol id="gold-crown" viewBox="0 0 32 32">
-            <path d="m4 9 6 5 6-9 6 9 6-5-3 15H7ZM8 28h16" />
-          </symbol>
-          <symbol id="gold-gem" viewBox="0 0 32 32">
-            <path d="m3 12 6-7h14l6 7-13 16ZM3 12h26M9 5l7 23L23 5" />
-          </symbol>
-          <symbol id="gold-spark" viewBox="0 0 32 32">
-            <path d="m16 3 4 9 9 4-9 4-4 9-4-9-9-4 9-4Z" />
-          </symbol>
-          <symbol id="gold-heart" viewBox="0 0 32 32">
-            <path d="M16 27 5 16C-3 6 10 0 16 9c6-9 19-3 11 7Z" />
-          </symbol>
-        </defs>
-      </svg>
+      <svg width="0" height="0" aria-hidden="true" focusable="false"><defs>
+        <symbol id="gold-crown" viewBox="0 0 32 32"><path d="m4 9 6 5 6-9 6 9 6-5-3 15H7ZM8 28h16"/></symbol>
+        <symbol id="gold-gem" viewBox="0 0 32 32"><path d="m3 12 6-7h14l6 7-13 16ZM3 12h26M9 5l7 23L23 5"/></symbol>
+        <symbol id="gold-spark" viewBox="0 0 32 32"><path d="m16 3 4 9 9 4-9 4-4 9-4-9-9-4 9-4Z"/></symbol>
+        <symbol id="gold-heart" viewBox="0 0 32 32"><path d="M16 27 5 16C-3 6 10 0 16 9c6-9 19-3 11 7Z"/></symbol>
+      </defs></svg>
       <div class="gold-rain" aria-hidden="true">
-        <svg>
-          <use href="#gold-crown" />
-        </svg><svg>
-          <use href="#gold-spark" />
-        </svg>
-        <svg>
-          <use href="#gold-gem" />
-        </svg><svg>
-          <use href="#gold-heart" />
-        </svg>
-        <svg>
-          <use href="#gold-crown" />
-        </svg><svg>
-          <use href="#gold-gem" />
-        </svg>
-        <svg>
-          <use href="#gold-spark" />
-        </svg><svg>
-          <use href="#gold-heart" />
-        </svg>
+        <svg><use href="#gold-crown"/></svg><svg><use href="#gold-spark"/></svg>
+        <svg><use href="#gold-gem"/></svg><svg><use href="#gold-heart"/></svg>
+        <svg><use href="#gold-crown"/></svg><svg><use href="#gold-gem"/></svg>
+        <svg><use href="#gold-spark"/></svg><svg><use href="#gold-heart"/></svg>
       </div>
       <header class="row between workspace-bar">
         <div class="row">
           <span class="brand-mark" aria-hidden="true">✦</span>
-          <div class="brand-name">Locket Gold Manager<small>Admin workspace</small></div>
+          <div class="brand-name">Locket Gold Manager<small>Khu vực quản trị</small></div>
         </div>
         <div class="row">
           <div class="row profile">
-            <span class="avatar" aria-hidden="true">AD</span>
-            <div><span class="profile-name">Administrator</span>
-              <p class="quiet" id="identity"></p>
-            </div>
+            <span class="avatar" id="avatar" aria-hidden="true">AD</span>
+            <div><span class="profile-name">Quản trị viên</span><p class="quiet" id="identity"></p></div>
           </div>
           <div class="session-actions">
-            <button class="secondary theme-toggle" type="button" data-theme-toggle
-              aria-label="Auto theme. Switch to Light" title="Auto → Light">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M9 17h6m-6 3h6m-5 2h4M8.5 14.5a6 6 0 1 1 7 0c-.9.7-1.5 1.5-1.5 2.5h-4c0-1-.6-1.8-1.5-2.5Z" />
-              </svg>
-              <span data-theme-label>Auto</span>
-            </button>
-            <button class="secondary" id="logout" type="button"><svg class="ui-icon" viewBox="0 0 24 24"
-                aria-hidden="true">
-                <path d="M9 4H4v16h5m6-12 4 4-4 4m-6-4h10" />
-              </svg>Sign out</button>
+          <button class="secondary theme-toggle" type="button" data-theme-toggle aria-label="Giao diện: Tự động. Chuyển sang Sáng" title="Tự động → Sáng">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 17h6m-6 3h6m-5 2h4M8.5 14.5a6 6 0 1 1 7 0c-.9.7-1.5 1.5-1.5 2.5h-4c0-1-.6-1.8-1.5-2.5Z"/></svg>
+          <span data-theme-label>Tự động</span>
+        </button>
+          <button class="secondary" id="logout" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v16h5m6-12 4 4-4 4m-6-4h10"/></svg>Đăng xuất</button>
           </div>
         </div>
       </header>
       <div class="workspace-heading">
-        <div>
-          <p class="eyebrow">GOLD WORKSPACE</p>
-          <h2 id="adminTitle">Account management</h2>
-        </div>
-        <span class="gold-emblem" aria-hidden="true"><svg viewBox="0 0 32 32">
-            <use href="#gold-crown" />
-          </svg></span>
+        <div><p class="eyebrow">GOLD WORKSPACE</p><h2 id="adminTitle">Quản lý tài khoản</h2></div>
+        <span class="gold-emblem" aria-hidden="true"><svg viewBox="0 0 32 32"><use href="#gold-crown"/></svg></span>
       </div>
       <div class="workspace-layout">
-        <dialog id="accountDialog" class="account-dialog" aria-labelledby="editorTitle">
-          <form id="accountForm" class="editor-panel" aria-labelledby="editorTitle">
-            <div class="dialog-heading">
-              <div class="section-title"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
-                <h3 id="editorTitle">Add / renew account</h3>
-              </div>
-              <button class="secondary" id="closeAccount" type="button" aria-label="Close dialog">×</button>
-            </div>
-            <div class="row">
-              <div class="field"><label for="accountId">Locket ID</label><input id="accountId" required maxlength="128"
-                  pattern="[A-Za-z0-9_$:@.\-]+" autocomplete="off"></div>
-              <div class="field"><label for="expiry">Expires at · local time</label><input id="expiry"
-                  type="datetime-local" required></div>
-            </div>
-            <p class="status" id="accountMessage" role="status" aria-live="polite"></p>
-            <div class="dialog-actions">
-              <button class="secondary" id="cancelAccount" type="button">Cancel</button>
-              <button id="save" type="submit"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="m5 12 4 4L19 6" />
-                </svg>&nbsp; Save account</button>
-            </div>
-          </form>
-        </dialog>
-        <section class="directory-panel" aria-labelledby="directoryTitle">
-          <div class="directory-heading">
-            <div class="section-title"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="9" cy="7" r="3" />
-                <path d="M3 20v-3a6 6 0 0 1 12 0v3m2-16a3 3 0 0 1 0 6m2 10v-3a6 6 0 0 0-2-4" />
-              </svg>
-              <h3 id="directoryTitle">Accounts</h3>
-            </div>
-            <button id="addAccount" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 5v14M5 12h14" />
-              </svg>Add account</button>
-          </div>
-          <p class="status" id="adminMessage" role="status" aria-live="polite"></p>
-          <div class="scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col" aria-label="Row number">No.</th>
-                  <th scope="col">Account</th>
-                  <th scope="col">Expires at</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="accounts"></tbody>
-            </table>
-          </div>
-          <div class="row between pager"><button class="secondary" id="previous" type="button">← Previous</button><span
-              class="quiet" id="page"></span><button class="secondary" id="next" type="button">Next →</button></div>
-        </section>
+      <dialog id="accountDialog" class="account-dialog" aria-labelledby="editorTitle">
+      <form id="accountForm" class="editor-panel" aria-labelledby="editorTitle">
+        <div class="dialog-heading">
+        <div class="section-title"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><h3 id="editorTitle">Thêm / gia hạn tài khoản</h3></div>
+        <button class="secondary" id="closeAccount" type="button" aria-label="Đóng">×</button>
+        </div>
+        <div class="row">
+          <div class="field"><label for="accountId">Locket ID</label><input id="accountId" required maxlength="128"
+              pattern="[A-Za-z0-9_$:@.\-]+" autocomplete="off"></div>
+          <div class="field"><label for="expiry">Hết hạn lúc · giờ địa phương</label><input id="expiry"
+              type="datetime-local" required></div>
+        </div>
+        <div class="field"><label for="dnsLabel">Tên thiết bị để cấp link DNS (tùy chọn)</label><input id="dnsLabel" maxlength="80" placeholder="iPhone 15 — để trống nếu chỉ lưu tài khoản"></div>
+        <div class="field"><label for="dnsBlocks">Tên miền DNS cần chặn, mỗi dòng một tên miền (tùy chọn)</label><textarea id="dnsBlocks" rows="2" placeholder="ads.example.com"></textarea></div>
+        <p class="quiet dialog-note">Nếu có tên thiết bị, tài khoản và DNS được lưu cùng một thao tác. Chỉ dùng ngày tương lai khi cấp link mới. Muốn thử hết hạn DNS, dùng nút đổi ngày ở thiết bị đã có.</p>
+        <p class="status" id="accountMessage" role="status" aria-live="polite"></p>
+        <div class="dialog-actions">
+          <button class="secondary" id="cancelAccount" type="button">Hủy</button>
+          <button id="save" type="submit"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>&nbsp; Lưu tài khoản / cấp link</button>
+        </div>
+      </form>
+      </dialog>
+      <section class="directory-panel" aria-labelledby="directoryTitle">
+      <div class="directory-heading">
+        <div class="section-title"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 20v-3a6 6 0 0 1 12 0v3m2-16a3 3 0 0 1 0 6m2 10v-3a6 6 0 0 0-2-4"/></svg><h3 id="directoryTitle">Tài khoản &amp; thiết bị DNS</h3></div>
+        <button id="addAccount" type="button"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Thêm tài khoản / DNS</button>
+      </div>
+      <p class="status" id="adminMessage" role="status" aria-live="polite"></p>
+        <p class="quiet directory-intro">Quản lý tài khoản và DNS ở cùng một danh sách. Link DNS chỉ hiển thị một lần lúc cấp để bảo vệ token; không cần cài lại khi đổi hạn.</p>
+        <div id="dnsResult" hidden><p class="quiet">Link riêng chỉ hiện khi tạo. Đừng đăng công khai hoặc chụp ảnh kèm token.</p><pre id="dnsLink"></pre><a id="dnsDownload" href="#">Tải cấu hình .mobileconfig</a></div>
+
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col" aria-label="Số thứ tự">STT</th>
+              <th scope="col">Tài khoản</th>
+              <th scope="col">Hết hạn</th>
+              <th scope="col">Trạng thái</th>
+              <th scope="col">Thiết bị DNS</th>
+              <th scope="col">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody id="accounts"></tbody>
+        </table>
+      </div>
+      <div class="row between pager"><button class="secondary" id="previous" type="button">← Trước</button><span
+          class="quiet" id="page"></span><button class="secondary" id="next" type="button">Sau →</button></div>
+      </section>
       </div>
     </section>
     <script nonce="__NONCE__">
       (() => {
         'use strict';
-        document.documentElement.lang = 'en';
         const themeButtons = document.querySelectorAll('[data-theme-toggle]');
         const themeModes = ['system', 'light', 'dark'];
-        const themeNames = { system: 'Auto', light: 'Light', dark: 'Dark' };
+        const themeNames = { system: 'Tự động', light: 'Sáng', dark: 'Tối' };
         let currentTheme = document.body.dataset.theme || 'system';
         function applyTheme(value) {
           currentTheme = value;
@@ -4417,7 +4460,7 @@ def test_real_transport_does_not_follow_redirect():
           themeButtons.forEach(button => {
             button.dataset.mode = value;
             button.querySelector('[data-theme-label]').textContent = themeNames[value];
-            button.setAttribute('aria-label', 'Theme: ' + themeNames[value] + '. Switch to ' + themeNames[next]);
+            button.setAttribute('aria-label', 'Giao diện: ' + themeNames[value] + '. Chuyển sang ' + themeNames[next]);
             button.title = themeNames[value] + ' → ' + themeNames[next];
           });
         }
@@ -4432,7 +4475,7 @@ def test_real_transport_does_not_follow_redirect():
         const accountDialog = $('accountDialog');
         function openAccountDialog(editing = false) {
           if (!editing) $('accountForm').reset();
-          $('editorTitle').textContent = editing ? 'Edit / renew account' : 'Add account';
+          $('editorTitle').textContent = editing ? 'Sửa / gia hạn tài khoản' : 'Thêm tài khoản';
           $('accountMessage').textContent = '';
           accountDialog.showModal();
           $('accountId').focus();
@@ -4451,12 +4494,12 @@ def test_real_transport_does_not_follow_redirect():
         if (siteKey) {
           window.onTurnstileReady = () => {
             widgetId = window.turnstile.render('#turnstile', {
-              sitekey: siteKey, action: 'admin-login', language: 'en', size: 'flexible',
+              sitekey: siteKey, action: 'admin-login', language: 'vi', size: 'flexible',
               callback: token => { turnstileToken = token; $('loginMessage').textContent = ''; },
               'expired-callback': () => { turnstileToken = ''; },
               'error-callback': () => {
                 turnstileToken = '';
-                $('loginMessage').textContent = 'Unable to load Cloudflare verification. Please try again.';
+                $('loginMessage').textContent = 'Không tải được xác minh Cloudflare. Vui lòng thử lại.';
               }
             });
           };
@@ -4464,7 +4507,7 @@ def test_real_transport_does_not_follow_redirect():
           script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileReady&render=explicit';
           script.nonce = document.currentScript.nonce;
           script.async = true;
-          script.onerror = () => { $('loginMessage').textContent = 'Unable to load Cloudflare verification. Please reload the page.'; };
+          script.onerror = () => { $('loginMessage').textContent = 'Không tải được xác minh Cloudflare. Vui lòng tải lại trang.'; };
           document.head.append(script);
         }
         function clearSession() {
@@ -4473,6 +4516,7 @@ def test_real_transport_does_not_follow_redirect():
           try { localStorage.removeItem(key); } catch { }
           $('dashboard').hidden = true; $('loginScreen').hidden = false;
           $('accounts').replaceChildren(); $('identity').textContent = '';
+          $('dnsResult').hidden = true; $('dnsLink').textContent='';$('dnsDownload').removeAttribute('href');
           $('accountForm').reset(); $('adminMessage').textContent = '';
         }
         async function api(path, options = {}, auth = true) {
@@ -4482,106 +4526,159 @@ def test_real_transport_does_not_follow_redirect():
           if (!response.ok) {
             let data; try { data = await response.json(); } catch { }
             if (response.status === 401 && auth) clearSession();
-            const messages = {
-              'Email hoặc mật khẩu không đúng': 'Incorrect email or password.',
-              'Cloudflare Turnstile chưa được cấu hình đầy đủ.': 'Cloudflare Turnstile is not fully configured.',
-              'Vui lòng hoàn tất xác minh Cloudflare.': 'Please complete Cloudflare verification.',
-              'Không thể xác minh Cloudflare. Vui lòng thử lại.': 'Unable to verify with Cloudflare. Please try again.',
-              'Xác minh Cloudflare không hợp lệ hoặc đã hết hạn.': 'Cloudflare verification is invalid or expired.',
-            };
-            const detail = typeof data?.detail === 'string' ? (messages[data.detail] || data.detail) : null;
-            throw Error(detail || 'Request failed (' + response.status + '). Please check your input.');
+            const detail = typeof data?.detail === 'string' ? data.detail : null;
+            throw Error(detail || 'Yêu cầu thất bại (' + response.status + '). Vui lòng kiểm tra lại dữ liệu.');
           }
           return response.status === 204 ? null : response.json();
         }
+        let dnsDevices = [];
+        function asLocalInput(iso) {
+          const d = new Date(iso);
+          return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+        }
+        function revealDnsLink(result) {
+          const url = new URL(result.profile_download_url, location.origin).href;
+          $('dnsLink').textContent = url;
+          $('dnsDownload').href = url;
+          $('dnsResult').hidden = false;
+        }
+        function addDeviceActions(container, device) {
+          const item = document.createElement('div');
+          item.className = 'dns-device';
+          const name = document.createElement('span');
+          name.className = 'dns-device-name';
+          const active = device.enabled && new Date(device.expires_at) > new Date();
+          const state = document.createElement('span');
+          state.className = 'dns-device-state' + (active ? ' is-active' : '');
+          state.textContent = ' · ' + (device.enabled ? (active ? 'DNS còn hạn' : 'DNS hết hạn') : 'Đã vô hiệu');
+          name.append(document.createTextNode(device.label), state);
+          item.append(name);
+          const controls = document.createElement('div');
+          controls.className = 'dns-device-controls';
+          const input = document.createElement('input');
+          input.type='datetime-local';input.value=asLocalInput(device.expires_at);
+          input.setAttribute('aria-label','Ngày hết hạn DNS: '+device.label);
+          input.disabled=!device.enabled;
+          const update = document.createElement('button');
+          update.type='button';update.className='secondary';update.textContent='Lưu hạn DNS';
+          update.disabled=!device.enabled;
+          update.onclick=async()=>{
+            const selected=new Date(input.value);
+            if(Number.isNaN(selected.getTime())){$('adminMessage').textContent='Ngày không hợp lệ';return}
+            if(selected<=new Date()&&!confirm('Đặt ngày quá khứ khiến chính sách DNS hết hạn. Không ảnh hưởng Gold thật. Tiếp tục?'))return;
+            update.disabled=true;
+            try {
+              await api('/api/admin/dns/devices/'+device.id+'/set-expiry',{method:'POST',body:JSON.stringify({expires_at:selected.toISOString()})});
+              $('adminMessage').textContent='Đã lưu hạn DNS và tài khoản liên kết trong MongoDB.';
+              await load();
+            } catch(error) {$('adminMessage').textContent=error.message}
+            finally {update.disabled=false}
+          };
+          const revoke = document.createElement('button');
+          revoke.type='button';revoke.className='secondary';revoke.textContent='Xóa DNS';
+          revoke.onclick=async()=>{
+            if(!confirm('Xóa vĩnh viễn thiết bị DNS '+device.label+' khỏi database? Link DNS của thiết bị sẽ ngừng hoạt động.'))return;
+            revoke.disabled=true;
+            try {
+              await api('/api/admin/dns/devices/'+device.id,{method:'DELETE'});
+              await load();
+            }catch(error){$('adminMessage').textContent=error.message}
+            finally{revoke.disabled=false}
+          };
+          controls.append(input,update,revoke);
+          item.append(controls);container.append(item);
+        }
         async function load() {
-          const rows = await api('/admin/accounts?skip=' + skip + '&limit=' + limit);
-          if (!session) return;
-          const body = $('accounts'); body.replaceChildren();
-          for (const [rowIndex, row] of rows.entries()) {
-            const tr = document.createElement('tr');
-            const number = document.createElement('td');
-            number.className = 'row-number'; number.textContent = String(skip + rowIndex + 1); tr.append(number);
-            for (const [index, value] of [row.locket_id, new Date(row.expires_date).toLocaleString('en-US'), new Date(row.expires_date) > new Date() ? 'Gold' : 'Expired'].entries()) {
-              const td = document.createElement('td');
-              const label = document.createElement('span'); label.textContent = value;
-              if (index === 0) {
-                const name = document.createElement('span'); name.className = 'account-name';
-                const crown = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-                crown.setAttribute('viewBox', '0 0 32 32'); crown.setAttribute('class', 'account-crown'); crown.setAttribute('aria-hidden', 'true');
-                const symbol = document.createElementNS('http://www.w3.org/2000/svg', 'use');
-                symbol.setAttribute('href', '#gold-crown'); crown.append(symbol);
-                name.append(crown, label); td.append(name);
-              } else {
-                label.className = index === 1 ? 'account-expiry' : 'account-status' + (value === 'Gold' ? ' is-gold' : '');
-                td.append(label);
-              }
-              tr.append(td);
+          const [rows, devices] = await Promise.all([
+            api('/admin/accounts?skip='+skip+'&limit='+limit),
+            api('/api/admin/dns/devices')
+          ]);
+          if(!session)return;
+          dnsDevices = devices;
+          const tbody=$('accounts');tbody.replaceChildren();
+          const grouped=new Map();
+          for(const device of devices){
+            if(!device.locket_id)continue;
+            if(!grouped.has(device.locket_id))grouped.set(device.locket_id,[]);
+            grouped.get(device.locket_id).push(device);
+          }
+          for(const [index,account] of rows.entries()){
+            const tr=document.createElement('tr');
+            for(const value of [String(skip+index+1),account.locket_id,new Date(account.expires_date).toLocaleString(),new Date(account.expires_date)>new Date()?'Còn hạn quản lý':'Hết hạn quản lý']){
+              const td=document.createElement('td');td.textContent=value;tr.append(td);
             }
-            const actions = document.createElement('td');
-            const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary'; edit.textContent = 'Edit';
-            edit.onclick = () => {
-              $('accountId').value = row.locket_id;
-              const date = new Date(row.expires_date);
-              $('expiry').value = new Date(date - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+            const dnsTd=document.createElement('td');
+            const linked=grouped.get(account.locket_id)||[];
+            if(!linked.length){dnsTd.textContent='Chưa cấp link DNS'}
+            else for(const device of linked)addDeviceActions(dnsTd,device);
+            tr.append(dnsTd);
+            const actions=document.createElement('td');
+            const edit=document.createElement('button');
+            edit.type='button';edit.className='secondary';edit.textContent='Sửa / Cấp DNS';
+            edit.onclick=()=>{
+              $('accountId').value=account.locket_id;
+              $('expiry').value=asLocalInput(account.expires_date);
+              $('dnsLabel').value='';$('dnsBlocks').value='';
               openAccountDialog(true);
             };
-            const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary'; remove.textContent = 'Delete';
-            remove.onclick = async () => {
-              if (!confirm('Delete account ' + row.locket_id + '?')) return;
-              remove.disabled = true;
-              try { await api('/admin/accounts/' + encodeURIComponent(row.locket_id), { method: 'DELETE' }); await load(); }
-              catch (error) { $('adminMessage').textContent = error.message; }
-              finally { remove.disabled = false; }
+            const remove=document.createElement('button');
+            remove.type='button';remove.className='secondary danger';remove.textContent='Xóa';
+            remove.onclick=async()=>{
+              if(!confirm('Xóa vĩnh viễn tài khoản '+account.locket_id+' khỏi database cùng toàn bộ thiết bị DNS liên kết? Không thể khôi phục.'))return;
+              remove.disabled=true;
+              try{await api('/admin/accounts/'+encodeURIComponent(account.locket_id),{method:'DELETE'});await load()}
+              catch(error){$('adminMessage').textContent=error.message}
+              finally{remove.disabled=false}
             };
-            const check = document.createElement('button'); check.type = 'button'; check.className = 'secondary'; check.textContent = 'Check API';
-            check.onclick = async () => {
-              check.disabled = true;
-              try {
-                const result = await api('/v1/subscribers/' + encodeURIComponent(row.locket_id));
-                $('adminMessage').textContent = 'API result for ' + row.locket_id + ': ' + (result.subscriber.entitlements.Gold ? 'access is active.' : 'no access or expired.');
-              } catch (error) { $('adminMessage').textContent = error.message; }
-              finally { check.disabled = false; }
-            };
-            for (const [button, pathData] of [
-              [edit, 'm15 4 5 5M4 20l5-1L21 7l-5-5L4 14Z'],
-              [check, 'm9 8-4 4 4 4m6-8 4 4-4 4'],
-              [remove, 'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7'],
-            ]) {
-              button.title = button.textContent;
-              button.setAttribute('aria-label', button.textContent + ' · ' + row.locket_id);
-              const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-              icon.setAttribute('viewBox', '0 0 24 24'); icon.setAttribute('class', 'ui-icon'); icon.setAttribute('aria-hidden', 'true');
-              const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-              path.setAttribute('d', pathData); icon.append(path); button.replaceChildren(icon);
-            }
-            actions.append(edit, check, remove); tr.append(actions); body.append(tr);
+            actions.append(edit,remove);tr.append(actions);tbody.append(tr);
           }
-          if (!rows.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 5; td.textContent = 'No accounts yet.'; tr.append(td); body.append(tr); }
-          $('previous').disabled = skip === 0; $('next').disabled = rows.length < limit || skip + limit > 10000;
-          $('page').textContent = 'Page ' + (skip / limit + 1);
+          // Preserve management access for legacy DNS tokens without a matching account.
+          if(skip===0){
+            const displayed=new Set(rows.map(a=>a.locket_id));
+            const orphan=devices.filter(d=>!d.locket_id || !displayed.has(d.locket_id));
+            if(orphan.length){
+              const tr=document.createElement('tr');
+              const td=document.createElement('td');td.colSpan=4;td.className='orphan-note';
+              td.textContent='DNS chưa hiển thị trong trang tài khoản ('+orphan.length+' thiết bị)';
+              tr.append(td);
+              const dnsTd=document.createElement('td');
+              for(const d of orphan)addDeviceActions(dnsTd,d);
+              tr.append(dnsTd);
+              const empty=document.createElement('td');tr.append(empty);tbody.append(tr);
+            }
+          }
+          if(!rows.length && devices.length===0){
+            const tr=document.createElement('tr');const td=document.createElement('td');
+            td.colSpan=6;td.className='empty-state';td.textContent='Chưa có tài khoản. Chọn Thêm tài khoản / DNS để bắt đầu.';
+            tr.append(td);tbody.append(tr);
+          }
+          $('previous').disabled=skip===0;
+          $('next').disabled=rows.length<limit||skip+limit>10000;
+          $('page').textContent='Trang '+(skip/limit+1)+' · '+devices.length+' thiết bị DNS';
         }
+
         async function enter() {
           if (!session || !Number.isFinite(Date.parse(session.expires_at)) || Date.parse(session.expires_at) <= Date.now()) { clearSession(); return; }
           const admin = await api('/api/admin/me');
           $('identity').textContent = admin.email;
+          $('avatar').textContent = (admin.email || 'AD').slice(0, 2).toUpperCase();
           await load();
           if (!session) return;
           $('loginScreen').hidden = true; $('dashboard').hidden = false;
           clearTimeout(timer);
-          timer = setTimeout(() => { clearSession(); $('loginMessage').textContent = 'Your session has expired. Please sign in again.'; }, Math.max(0, Date.parse(session.expires_at) - Date.now()));
+          timer = setTimeout(() => { clearSession(); $('loginMessage').textContent = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'; }, Math.max(0, Date.parse(session.expires_at) - Date.now()));
         }
         $('loginForm').onsubmit = async event => {
           event.preventDefault();
           if (siteKey && !turnstileToken) {
-            $('loginMessage').textContent = 'Please complete Cloudflare verification.';
+            $('loginMessage').textContent = 'Vui lòng hoàn tất xác minh Cloudflare.';
             return;
           }
           $('signIn').disabled = true; $('loginMessage').textContent = '';
           let password = $('password').value; $('password').value = '';
           try {
             session = await api('/api/admin/login', { method: 'POST', body: JSON.stringify({ email: $('email').value.trim(), password, turnstile_token: turnstileToken }) }, false);
-            try { localStorage.setItem(key, JSON.stringify(session)); } catch { $('loginMessage').textContent = 'Your browser blocked session storage. This session is available in this tab only.'; }
+            try { localStorage.setItem(key, JSON.stringify(session)); } catch { $('loginMessage').textContent = 'Trình duyệt chặn lưu phiên đăng nhập. Phiên chỉ có hiệu lực trong tab này.'; }
             skip = 0; await enter();
           } catch (error) { clearSession(); $('loginMessage').textContent = error.message; }
           finally {
@@ -4593,9 +4690,25 @@ def test_real_transport_does_not_follow_redirect():
           event.preventDefault(); $('save').disabled = true;
           $('accountMessage').textContent = '';
           try {
-            await api('/admin/add-account', { method: 'POST', body: JSON.stringify({ locket_id: $('accountId').value, expires_date: new Date($('expiry').value).toISOString() }) });
-            accountDialog.close();
-            $('adminMessage').textContent = 'Account saved.'; await load();
+            const expiry=new Date($('expiry').value);
+            if(Number.isNaN(expiry.getTime()))throw Error('Ngày hết hạn không hợp lệ');
+            const id=$('accountId').value.trim();
+            const label=$('dnsLabel').value.trim();
+            if(label){
+              if(expiry<=new Date())throw Error('Cấp link mới cần chọn ngày hết hạn trong tương lai.');
+              const result=await api('/api/admin/dns/devices/linked',{method:'POST',body:JSON.stringify({
+                locket_id:id,label,expires_at:expiry.toISOString(),
+                block_domains:$('dnsBlocks').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)
+              })});
+              revealDnsLink(result);
+              $('adminMessage').textContent='Đã lưu tài khoản và cấp link DNS. Hãy sao chép link vì chỉ hiển thị một lần.';
+            } else {
+              await api('/admin/add-account',{method:'POST',body:JSON.stringify({
+                locket_id:id,expires_date:expiry.toISOString()
+              })});
+              $('adminMessage').textContent='Đã lưu tài khoản quản lý.';
+            }
+            accountDialog.close();await load();
           } catch (error) {
             $(accountDialog.open ? 'accountMessage' : 'adminMessage').textContent = error.message;
           }
@@ -4605,8 +4718,8 @@ def test_real_transport_does_not_follow_redirect():
         $('next').onclick = async () => { skip += limit; try { await load(); } catch (error) { $('adminMessage').textContent = error.message; } };
         $('logout').onclick = async () => {
           $('logout').disabled = true;
-          try { await api('/api/admin/logout', { method: 'POST' }); clearSession(); $('loginMessage').textContent = 'You have signed out.'; }
-          catch (error) { if (session) $('adminMessage').textContent = 'Unable to revoke the session: ' + error.message + '. Please try again.'; }
+          try { await api('/api/admin/logout', { method: 'POST' }); clearSession(); $('loginMessage').textContent = 'Bạn đã đăng xuất.'; }
+          catch (error) { if (session) $('adminMessage').textContent = 'Không thể hủy phiên: ' + error.message + '. Vui lòng thử lại.'; }
           finally { $('logout').disabled = false; }
         };
         window.addEventListener('storage', event => { if (event.key === key && event.newValue === null) clearSession(); });
@@ -4619,92 +4732,4 @@ def test_real_transport_does_not_follow_redirect():
 </body>
 
 </html>
-```
-
-## generate_root_ca.py
-
-```python
-import datetime
-from cryptography import x509
-from cryptography.x509.oid import NameOID
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
-
-def create_root_ca():
-    # 1. Khởi tạo RSA Private Key 2048-bit
-    private_key = rsa.generate_private_key(
-        public_exponent=65537,
-        key_size=2048,
-    )
-
-    # 2. Thiết lập thông tin định danh cho Root CA
-    subject = issuer = x509.Name([
-        x509.NameAttribute(NameOID.COUNTRY_NAME, "VN"),
-        x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, "Ha Noi"),
-        x509.NameAttribute(NameOID.LOCALITY_NAME, "Ha Noi"),
-        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "VTL Security System"),
-        x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, "Certificate Authority"),
-        x509.NameAttribute(NameOID.COMMON_NAME, "VTL Root CA"),
-    ])
-
-    now = datetime.datetime.now(datetime.timezone.utc)
-
-    # 3. Xây dựng chứng chỉ theo chuẩn yêu cầu của iOS / Apple Profile
-    cert_builder = (
-        x509.CertificateBuilder()
-        .subject_name(subject)
-        .issuer_name(issuer)
-        .public_key(private_key.public_key())
-        .serial_number(x509.random_serial_number())
-        .not_valid_before(now - datetime.timedelta(days=1))
-        .not_valid_after(now + datetime.timedelta(days=3650)) # Hạn 10 năm
-        # Bắt buộc phải có BasicConstraints ca=True để xuất hiện trong Certificate Trust Settings
-        .add_extension(
-            x509.BasicConstraints(ca=True, path_length=None),
-            critical=True,
-        )
-        # Bắt buộc phải có KeyUsage chuẩn cho Root CA trên iOS
-        .add_extension(
-            x509.KeyUsage(
-                digital_signature=True,
-                content_commitment=False,
-                key_encipherment=False,
-                data_encipherment=False,
-                key_agreement=False,
-                key_cert_sign=True,
-                crl_sign=True,
-                encipher_only=False,
-                decipher_only=False,
-            ),
-            critical=True,
-        )
-        .add_extension(
-            x509.SubjectKeyIdentifier.from_public_key(private_key.public_key()),
-            critical=False,
-        )
-    )
-
-    # 4. Ký chứng chỉ bằng SHA-256
-    certificate = cert_builder.sign(private_key=private_key, algorithm=hashes.SHA256())
-
-    # 5. Xuất file rootCA.pem (Chứng chỉ công khai dùng cho ROOT_CA_PEM)
-    pem_bytes = certificate.public_bytes(serialization.Encoding.PEM)
-    with open("rootCA.pem", "wb") as f:
-        f.write(pem_bytes)
-
-    # 6. Xuất file rootCA.key (Khóa bí mật lưu riêng trên máy)
-    key_bytes = private_key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.TraditionalOpenSSL,
-        encryption_algorithm=serialization.NoEncryption(),
-    )
-    with open("rootCA.key", "wb") as f:
-        f.write(key_bytes)
-
-    print("=== ĐÃ TẠO THÀNH CÔNG CHỨNG CHỈ ROOT CA ===")
-    print("Hãy copy toàn bộ khối dưới đây dán vào biến ROOT_CA_PEM trên Vercel:\n")
-    print(pem_bytes.decode("utf-8"))
-
-if __name__ == "__main__":
-    create_root_ca()
 ```

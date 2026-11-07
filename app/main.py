@@ -1,5 +1,4 @@
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pymongo.errors import PyMongoError
@@ -7,7 +6,7 @@ from pymongo.errors import PyMongoError
 from app.auth import router as auth_router
 from app.database import lifespan
 from app.middleware import SecurityMiddleware
-from app.routers import management
+from app.routers import management, subscribers
 from app.routers import dns_devices, dns_policy
 
 
@@ -17,15 +16,10 @@ def create_app() -> FastAPI:
         version="1.0.0",
         docs_url=None,
         redoc_url=None,
+        openapi_url=None,
         lifespan=lifespan,
     )
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # The admin UI is same-origin; no cross-origin (CORS) access is granted.
     app.add_middleware(SecurityMiddleware)
 
     @app.exception_handler(RequestValidationError)
@@ -37,6 +31,7 @@ def create_app() -> FastAPI:
         return JSONResponse({'detail': 'Database unavailable'}, status_code=503)
 
     app.include_router(management.router)
+    app.include_router(subscribers.router)
     app.include_router(auth_router)
     app.include_router(management.admin_router)
     app.include_router(dns_devices.admin_router)
