@@ -2,6 +2,8 @@ import asyncio
 import json
 import urllib.error
 import urllib.request
+import httpx
+import os
 from urllib.parse import quote
 from starlette.datastructures import Headers
 from fastapi.encoders import jsonable_encoder
@@ -70,6 +72,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
 
     headers = _clean_headers(dict(request.headers))
     
+    # BẢO MẬT & CHỐNG CACHE: Xóa ETag để ép server trả về JSON thật
     for key in list(headers):
         if key in {'host', 'cookie', 'forwarded', 'accept-encoding', 'x-revenuecat-etag'} or key.startswith(('x-forwarded-', 'cf-')):
             del headers[key]
@@ -87,6 +90,16 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     
     body = await request.body()
     timeout_limit = 60.0 if is_upload else 30.0
+
+    # ĐÃ TẮT ĐOẠN XỬ LÝ AI ĐỂ TRẢ LẠI LUỒNG UPLOAD VIDEO MƯỢT MÀ CHO ỨNG DỤNG
+    # if is_upload and body:
+    #     try:
+    #         ai_prompt = "strictly change hair color to vibrant fiery red hair, highly detailed, realistic hair texture"
+    #         modified_bytes = await process_image_with_ai(body, ai_prompt)
+    #         if modified_bytes:
+    #             body = modified_bytes
+    #     except Exception as e:
+    #         print(f"[AI Proxy Error]: {e}")
 
     try:
         upstream_status, upstream_headers, upstream_content = await asyncio.to_thread(
@@ -108,6 +121,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     content_type = upstream_headers.get("content-type", "")
     accounts_col = getattr(request.app.state, "accounts", None)
 
+    # ĐÁNH CHẶN VÀ CHỈNH SỬA JSON REVENUECAT
     if (200 <= upstream_status < 300 and 
             'application/json' in content_type.lower() and upstream_content and
             upstream_headers.get('content-encoding', 'identity').lower() == 'identity'):
@@ -122,6 +136,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
             if segments & {'subscribers', 'user', 'users'} and isinstance(data, dict):
                 candidate_id = _extract_locket_id(path, data, dict(request.headers))
                 
+                # NẾU TÌM THẤY ID NGƯỜI DÙNG -> KIỂM TRA QUYỀN TRONG MONGODB
                 if candidate_id:
                     account_record = None
                     if accounts_col is not None:
@@ -138,19 +153,27 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                             subscriber = data['subscriber'] = sub_payload['subscriber']
                             
                         if isinstance(subscriber, dict):
-                            for field, key in [
-                                ('entitlements', 'Gold'), 
-                                ('entitlements', 'pro'), 
-                                ('entitlements', 'gold'), 
-                                ('subscriptions', 'com.locket.gold.yearly')
-                            ]:
-                                values = subscriber.get(field)
-                                if not isinstance(values, dict):
-                                    values = {}
-                                values.pop(key, None)
-                                if key in sub_payload['subscriber'][field]:
-                                    values[key] = sub_payload['subscriber'][field][key]
-                                subscriber[field] = values
+                            # 1. Lấy dữ liệu chuẩn từ models.py
+                            base_ent = sub_payload['subscriber'].get('entitlements', {}).get('Gold')
+                            base_sub = sub_payload['subscriber'].get('subscriptions', {}).get('com.locket.gold.yearly')
+                            
+                            # 2. Bơm Entitlements mạnh tay cho mọi trường hợp Locket check filter
+                            if base_ent:
+                                ents = subscriber.get('entitlements')
+                                if not isinstance(ents, dict):
+                                    ents = {}
+                                # Bơm tất cả cờ phụ cho filter
+                                for k in ['Gold', 'gold', 'pro', 'Pro', 'premium', 'Premium', 'locket_gold']:
+                                    ents[k] = base_ent
+                                subscriber['entitlements'] = ents
+                                
+                            # 3. Bơm Subscriptions
+                            if base_sub:
+                                subs = subscriber.get('subscriptions')
+                                if not isinstance(subs, dict):
+                                    subs = {}
+                                subs['com.locket.gold.yearly'] = base_sub
+                                subscriber['subscriptions'] = subs
 
             for key in ('etag', 'content-md5', 'digest', 'content-encoding'):
                 response_headers.pop(key, None)
