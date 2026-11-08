@@ -2,8 +2,6 @@ import asyncio
 import json
 import urllib.error
 import urllib.request
-import httpx
-import os
 from urllib.parse import quote
 from starlette.datastructures import Headers
 from fastapi.encoders import jsonable_encoder
@@ -18,23 +16,6 @@ router = APIRouter(tags=["Locket Proxy"])
 HOP_HEADERS = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
                'te', 'trailer', 'transfer-encoding', 'upgrade'}
 MAX_RESPONSE = 50 * 1024 * 1024
-
-async def process_image_with_ai(image_bytes: bytes, prompt: str) -> bytes:
-    api_token = os.getenv("HUGGINGFACE_API_TOKEN", "")
-    if not api_token:
-        return None
-
-    hf_endpoint = "https://api-inference.huggingface.co/models/timbrooks/instruct-pix2pix"
-    headers = {
-        "Authorization": f"Bearer {api_token}",
-        "Content-Type": "application/octet-stream",
-        "X-Wait-For-Model": "true"
-    }
-    async with httpx.AsyncClient(timeout=9.5) as client:
-        resp = await client.post(hf_endpoint, headers=headers, content=image_bytes)
-        if resp.status_code == 200:
-            return resp.content
-        return None
 
 def _clean_headers(headers):
     named = {key.strip().lower() for key in headers.get('connection', '').split(',')}
@@ -89,7 +70,6 @@ async def dynamic_reverse_proxy(request: Request, path: str):
 
     headers = _clean_headers(dict(request.headers))
     
-    # XÓA E-TAG ĐỂ ÉP REVENUECAT NHẢ JSON MỚI THAY VÌ 304 CACHE
     for key in list(headers):
         if key in {'host', 'cookie', 'forwarded', 'accept-encoding', 'x-revenuecat-etag'} or key.startswith(('x-forwarded-', 'cf-')):
             del headers[key]
@@ -107,15 +87,6 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     
     body = await request.body()
     timeout_limit = 60.0 if is_upload else 30.0
-
-    if is_upload and body:
-        try:
-            ai_prompt = "strictly change hair color to vibrant fiery red hair, highly detailed, realistic hair texture"
-            modified_bytes = await process_image_with_ai(body, ai_prompt)
-            if modified_bytes:
-                body = modified_bytes
-        except Exception as e:
-            print(f"[AI Proxy Error]: {e}")
 
     try:
         upstream_status, upstream_headers, upstream_content = await asyncio.to_thread(
@@ -137,7 +108,6 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     content_type = upstream_headers.get("content-type", "")
     accounts_col = getattr(request.app.state, "accounts", None)
 
-    # ĐÁNH CHẶN & CHỈNH SỬA JSON REVENUECAT
     if (200 <= upstream_status < 300 and 
             'application/json' in content_type.lower() and upstream_content and
             upstream_headers.get('content-encoding', 'identity').lower() == 'identity'):
@@ -168,7 +138,12 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                             subscriber = data['subscriber'] = sub_payload['subscriber']
                             
                         if isinstance(subscriber, dict):
-                            for field, key in [('entitlements', 'Gold'), ('subscriptions', 'com.locket.gold.yearly')]:
+                            for field, key in [
+                                ('entitlements', 'Gold'), 
+                                ('entitlements', 'pro'), 
+                                ('entitlements', 'gold'), 
+                                ('subscriptions', 'com.locket.gold.yearly')
+                            ]:
                                 values = subscriber.get(field)
                                 if not isinstance(values, dict):
                                     values = {}

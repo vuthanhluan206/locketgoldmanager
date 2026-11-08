@@ -6,7 +6,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.middleware import SecurityMiddleware 
 
 from app.auth import router as auth_router
-# ĐÃ SỬA CHỖ NÀY: Import thêm admin_router
 from app.routers.management import router as management_router, admin_router
 from app.routers.subscribers import router as subscribers_router
 from app.locket_modifier import router as locket_proxy_router
@@ -31,9 +30,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(management_router)
-# ĐÃ SỬA CHỖ NÀY: Nạp admin_router để mở khóa các API /admin/...
 app.include_router(admin_router)
 app.include_router(subscribers_router)
 
-# Proxy luôn phải nằm cuối cùng
 app.include_router(locket_proxy_router)
