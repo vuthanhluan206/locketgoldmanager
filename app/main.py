@@ -3,16 +3,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Import các router đã có sẵn trong hệ thống chuẩn
+# Bổ sung SecurityMiddleware bị thiếu
+from app.middleware import SecurityMiddleware 
+
 from app.auth import router as auth_router
 from app.routers.management import router as management_router
 from app.routers.subscribers import router as subscribers_router
-
-# Import proxy router đã được làm sạch
 from app.locket_modifier import router as locket_proxy_router
 from app.database import lifespan
 
-# Khởi tạo FastAPI với lifespan chuẩn của dự án (kết nối MongoDB)
 app = FastAPI(
     title="Locket Gold Manager",
     description="Hệ thống quản lý và proxy phân quyền Locket Gold",
@@ -20,7 +19,10 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Cấu hình CORS
+# 1. BẮT BUỘC PHẢI CÓ SECURITY MIDDLEWARE (Cung cấp csp_nonce cho HTML và chặn IP)
+app.add_middleware(SecurityMiddleware)
+
+# 2. Cấu hình CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -34,5 +36,5 @@ app.include_router(auth_router)
 app.include_router(management_router)
 app.include_router(subscribers_router)
 
-# TRỌNG TÂM: Route Catch-all (Proxy /{path:path}) BẮT BUỘC PHẢI NẠP CUỐI CÙNG
+# Route Catch-all (Proxy) BẮT BUỘC PHẢI NẠP CUỐI CÙNG
 app.include_router(locket_proxy_router)
