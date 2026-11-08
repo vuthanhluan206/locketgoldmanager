@@ -31,13 +31,21 @@ async def home(request: Request):
 async def robots_txt():
     return PlainTextResponse("User-agent: *\nDisallow: /")
 
-# Hỗ trợ cả 2 đường dẫn PAC để tránh lỗi 404 từ config cũ của điện thoại
+# PAC File đã mở rộng domain CDN và asset để bắt trọn traffic liên quan đến filter/tài nguyên
 @router.get('/proxy.pac', response_class=Response)
 @router.get('/proxy/proxy.pac', response_class=Response)
 async def get_root_pac_file(request: Request):
     host = request.headers.get("host", "locketgold-premium.vercel.app")
     pac_content = f"""function FindProxyForURL(url, host) {{
-    if (shExpMatch(host, "*locketcamera.com*") || shExpMatch(host, "*revenuecat.com*")) {{
+    if (
+        shExpMatch(host, "*locketcamera.com*") || 
+        shExpMatch(host, "*revenuecat.com*") ||
+        shExpMatch(host, "*firebaseio.com*") ||
+        shExpMatch(host, "*googleapis.com*") ||
+        shExpMatch(host, "*cloudinary.com*") ||
+        shExpMatch(host, "*amazonaws.com*") ||
+        shExpMatch(host, "*fbcdn.net*")
+    ) {{
         return "PROXY {host}";
     }}
     return "DIRECT";
@@ -53,7 +61,6 @@ def render_page(admin: bool, request: Request) -> HTMLResponse:
     page = page.replace('__TURNSTILE_SITE_KEY__', get_settings().turnstile_site_key)
     return HTMLResponse(page.replace('__NONCE__', request.state.csp_nonce).replace('__VIEW__', 'admin' if admin else 'public'))
 
-# Đường dẫn Admin đã được chuẩn hóa thành /admin
 @router.get('/admin', response_class=HTMLResponse, include_in_schema=False)
 async def admin_login(request: Request):
     return render_page(True, request)
@@ -65,7 +72,6 @@ async def download_profile(request: Request):
     return Response(request.app.state.profile, media_type='application/x-apple-aspen-config',
                     headers={'Content-Disposition': 'attachment; filename="locket.mobileconfig"'})
 
-# Đóng gói các API cần quyền truy cập Admin
 admin_router = APIRouter(prefix='/admin', dependencies=[Depends(require_admin)])
 
 @admin_router.post('/add-account', response_model=AccountOutput)
