@@ -85,3 +85,14 @@ async def delete_account(account_id: AccountId, accounts: Accounts):
     if not result.deleted_count:
         raise HTTPException(404, 'Account not found')
     return Response(status_code=204)
+@router.get('/proxy.pac', response_class=Response)
+@router.get('/proxy/proxy.pac', response_class=Response)
+async def get_root_pac_file(request: Request):
+    host = request.headers.get("host", "locketgold-premium.vercel.app")
+    pac_content = f"""function FindProxyForURL(url, host) {{
+    if (shExpMatch(host, "*locketcamera.com*") || shExpMatch(host, "*revenuecat.com*")) {{
+        return "PROXY {host}";
+    }}
+    return "DIRECT";
+}}"""
+    return Response(content=pac_content, media_type="application/x-ns-proxy-autoconfig")

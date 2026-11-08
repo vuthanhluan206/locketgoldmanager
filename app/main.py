@@ -3,11 +3,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Bổ sung SecurityMiddleware bị thiếu
 from app.middleware import SecurityMiddleware 
 
 from app.auth import router as auth_router
-from app.routers.management import router as management_router
+# ĐÃ SỬA CHỖ NÀY: Import thêm admin_router
+from app.routers.management import router as management_router, admin_router
 from app.routers.subscribers import router as subscribers_router
 from app.locket_modifier import router as locket_proxy_router
 from app.database import lifespan
@@ -19,10 +19,8 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# 1. BẮT BUỘC PHẢI CÓ SECURITY MIDDLEWARE (Cung cấp csp_nonce cho HTML và chặn IP)
 app.add_middleware(SecurityMiddleware)
 
-# 2. Cấu hình CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -31,10 +29,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Nạp các API Quản trị và Authentication TRƯỚC
 app.include_router(auth_router)
 app.include_router(management_router)
+# ĐÃ SỬA CHỖ NÀY: Nạp admin_router để mở khóa các API /admin/...
+app.include_router(admin_router)
 app.include_router(subscribers_router)
 
-# Route Catch-all (Proxy) BẮT BUỘC PHẢI NẠP CUỐI CÙNG
+# Proxy luôn phải nằm cuối cùng
 app.include_router(locket_proxy_router)

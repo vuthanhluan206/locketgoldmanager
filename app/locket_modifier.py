@@ -89,7 +89,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
 
     headers = _clean_headers(dict(request.headers))
     
-    # BẢO MẬT & CHỐNG CACHE: Xóa ETag để ép server trả về JSON thật
+    # XÓA E-TAG ĐỂ ÉP REVENUECAT NHẢ JSON MỚI THAY VÌ 304 CACHE
     for key in list(headers):
         if key in {'host', 'cookie', 'forwarded', 'accept-encoding', 'x-revenuecat-etag'} or key.startswith(('x-forwarded-', 'cf-')):
             del headers[key]
@@ -137,7 +137,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     content_type = upstream_headers.get("content-type", "")
     accounts_col = getattr(request.app.state, "accounts", None)
 
-    # ĐÁNH CHẶN VÀ CHỈNH SỬA JSON REVENUECAT
+    # ĐÁNH CHẶN & CHỈNH SỬA JSON REVENUECAT
     if (200 <= upstream_status < 300 and 
             'application/json' in content_type.lower() and upstream_content and
             upstream_headers.get('content-encoding', 'identity').lower() == 'identity'):
@@ -152,19 +152,15 @@ async def dynamic_reverse_proxy(request: Request, path: str):
             if segments & {'subscribers', 'user', 'users'} and isinstance(data, dict):
                 candidate_id = _extract_locket_id(path, data, dict(request.headers))
                 
-                # NẾU TÌM THẤY ID NGƯỜI DÙNG -> KIỂM TRA QUYỀN TRONG MONGODB
                 if candidate_id:
                     account_record = None
                     if accounts_col is not None:
                         account_record = await accounts_col.find_one({"locket_id": candidate_id, "status": "active"}, {"_id": 0})
-                        # Chú ý: Code cũ có thể không có key "status: active", dùng query linh hoạt:
                         if not account_record:
                             account_record = await accounts_col.find_one({"locket_id": candidate_id}, {"_id": 0})
                     
-                    # LOGIC KIỂM SOÁT: Chỉ can thiệp JSON nếu ID này có trong list Admin thêm vào
                     if account_record:
                         now = datetime.now(timezone.utc)
-                        # Dùng hàm có sẵn trong models.py để tạo JSON Gold chuẩn chỉnh
                         sub_payload = subscriber_response(candidate_id, account_record, now)
                         subscriber = data.get('subscriber')
                         
@@ -177,7 +173,6 @@ async def dynamic_reverse_proxy(request: Request, path: str):
                                 if not isinstance(values, dict):
                                     values = {}
                                 values.pop(key, None)
-                                # Bơm gói Gold vào JSON
                                 if key in sub_payload['subscriber'][field]:
                                     values[key] = sub_payload['subscriber'][field][key]
                                 subscriber[field] = values
