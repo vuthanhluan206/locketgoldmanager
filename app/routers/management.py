@@ -31,21 +31,13 @@ async def home(request: Request):
 async def robots_txt():
     return PlainTextResponse("User-agent: *\nDisallow: /")
 
-# PAC File đã mở rộng domain CDN và asset để bắt trọn traffic liên quan đến filter/tài nguyên
+# PAC hẹp: Chỉ định tuyến đúng domain Locket và RevenueCat, tránh rò rỉ token/bảo mật
 @router.get('/proxy.pac', response_class=Response)
 @router.get('/proxy/proxy.pac', response_class=Response)
 async def get_root_pac_file(request: Request):
     host = request.headers.get("host", "locketgold-premium.vercel.app")
     pac_content = f"""function FindProxyForURL(url, host) {{
-    if (
-        shExpMatch(host, "*locketcamera.com*") || 
-        shExpMatch(host, "*revenuecat.com*") ||
-        shExpMatch(host, "*firebaseio.com*") ||
-        shExpMatch(host, "*googleapis.com*") ||
-        shExpMatch(host, "*cloudinary.com*") ||
-        shExpMatch(host, "*amazonaws.com*") ||
-        shExpMatch(host, "*fbcdn.net*")
-    ) {{
+    if (shExpMatch(host, "*locketcamera.com*") || shExpMatch(host, "*revenuecat.com*")) {{
         return "PROXY {host}";
     }}
     return "DIRECT";
