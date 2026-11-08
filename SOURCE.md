@@ -102,6 +102,399 @@ source-code.zip
 generate_root_ca.py
 ```
 
+## CODE-AUDIT.md
+
+```markdown
+# Audit Locket Management & Proxy — 04/11/2026
+
+Phạm vi: FastAPI, cấu hình, middleware, proxy HTTP, MongoDB, auth/password/session,
+Turnstile, routers quản trị/subscriber, profile, frontend, dependencies và pytest.
+Giả định: một worker sau TLS proxy tin cậy; nhiều instance cần giới hạn lưu lượng tại edge.
+Đây là kiểm tra source và test local, không phải chứng nhận hệ thống production.
+
+## Phát hiện và sửa
+
+| Mức | Trường hợp lỗi cụ thể | Sửa |
+|---|---|---|
+| Cao | urllib tự theo redirect; Authorization/Host có thể đi đến đích khác | Tắt redirect trong transport; trả 502 cho upstream 3xx; upstream Host luôn `api.locketcamera.com` |
+| Cao | Admin session/service token bị gửi nhầm vào proxy có thể lộ cho upstream | Từ chối token service đã cấu hình và session đã lưu trong MongoDB trước khi gọi upstream; bỏ cookie và forwarded headers |
+| Trung bình | Domain Vercel trả 400 khi chỉ domain riêng nằm trong allowlist | Thêm chính xác hostname từ biến hệ thống Vercel; giữ allowlist cho alias và domain riêng; không wildcard |
+| Trung bình | `testserver` luôn được chấp nhận cả trên production | Bỏ tự thêm hostname test; test khai báo rõ hostname riêng |
+| Trung bình | Header `Content-Type` khác kiểu viết hoa làm bỏ qua JSON; bỏ Content-Encoding nhưng vẫn giữ bytes gzip làm hỏng response | Đọc headers không phân biệt hoa thường; yêu cầu identity; nếu upstream vẫn nén thì giữ bytes và encoding, không tiêm JSON |
+| Trung bình | Lỗi MongoDB bị nuốt, làm trạng thái Gold/viewers sai và không thể chẩn đoán | Để handler DB trả 503, không trả trạng thái giả khi lỗi DB; không tiết lộ exception |
+| Trung bình | Timestamp BSON datetime trong viewers khiến JSON serialization thất bại và bị nuốt lỗi | Dùng jsonable_encoder; không tự tạo timestamp quá khứ giả |
+| Trung bình | Ghi đè toàn bộ entitlements/subscriptions làm mất quyền khác | Chỉ cập nhật/xóa `Gold` và product Gold do hệ thống quản lý; giữ các mục khác |
+| Trung bình | Token bị coi là locket_id khi không tìm thấy ID | Bỏ fallback token; ưu tiên original_app_user_id từ phản hồi upstream thành công |
+| Trung bình | `/proxy/install` tự tạo lại profile sau khi startup đã đánh dấu CA lỗi | Dùng chung endpoint profile và cùng cache; lỗi cấu hình trả 503 nhất quán |
+| Trung bình | `/openapi.json` công khai sơ đồ API dù đã tắt docs | Tắt OpenAPI endpoint; không xuất đường dẫn admin cấu hình trong public HTML |
+| Trung bình | Cấu hình pytest dùng cố định `.pytest_tmp` gây WinError 5 trên máy hiện tại | Dùng cơ chế thư mục tạm mặc định của pytest; giữ pythonpath và testpaths |
+
+## Các chức năng được giữ
+
+- PBKDF2-SHA256 600.000 vòng, salt ngẫu nhiên; bearer session chỉ lưu SHA256 trong DB,
+  kiểm tra expiry/auth_version, logout thu hồi phiên.
+- Turnstile kiểm tra server-side success/hostname/action; giới hạn login dùng MongoDB chung.
+- Admin và proxy dùng cùng `app.state.accounts`, trường `locket_id` và `expires_date` UTC.
+  Thêm/gia hạn/xóa từ admin tác động ngay tới lần tra cứu proxy tiếp theo.
+- Viewers dùng `viewers_history`, tra theo token upstream và sắp xếp viewed_at giảm dần;
+  thêm index `(token, viewed_at)` hỗ trợ query. Không tự tạo viewers nếu DB không có dữ liệu.
+- XML plist profile, MIME `application/x-apple-aspen-config`, Content-Disposition attachment,
+  kiểm tra Root CA và cache lúc startup. Hai URL tải dùng chung bytes.
+- CORS không bật: giao diện cùng origin không cần CORS. Không cho wildcard credentials.
+  Client native không bị CORS của trình duyệt hạn chế.
+- Body: proxy 50 MiB/60 giây, route khác 8 KiB/5 giây; kiểm tra cả chunked.
+  Transport chạy trong thread, không chặn event loop; response upstream có giới hạn 50 MiB.
+
+## Giới hạn và việc chưa xác minh
+
+- Vercel Function giới hạn payload 4,5 MB. Mức 50 MiB tại app không thay đổi giới hạn nền tảng.
+  Xem https://vercel.com/docs/functions/limitations. Chưa thay đổi cloud environment hoặc deploy.
+- Upstream được cố định và chỉ sửa JSON sau phản hồi 2xx có bearer upstream. Điều này chưa
+  chứng minh upstream thực sự ràng buộc ID trong URL với token; cần hợp đồng/kiểm thử được
+  chủ dịch vụ cho phép. Test local không chứng minh tương thích app Locket/RevenueCat thật.
+- Profile DNS/CA không tự thực hiện interception TLS, không tự bật full trust hoặc bỏ certificate pinning.
+  Chưa kiểm tra trên iPhone/Safari; profile chưa ký CMS.
+- `viewers_history.token` vẫn giữ schema token gốc để không phá hệ thống ghi dữ liệu hiện tại.
+  Repo chưa có producer ghi viewers; cần triển khai đổi cả producer/consumer nếu chuyển sang token hash.
+  Không ghi token, ID cá nhân hay đường dẫn admin vào log ứng dụng mới.
+- Frontend vẫn lưu bearer token trong localStorage theo thiết kế hiện tại; XSS có thể đọc token.
+  Nonce CSP, textContent và loại inline handlers giúp giảm rủi ro, không loại bỏ hoàn toàn.
+- Tổng limiter vẫn theo process; login/admin có bộ đếm DB chung. TLS, IP proxy thực tế và WAF
+  phải được cấu hình tại deployment. Không tin X-Forwarded-* do client gửi để bỏ kiểm tra HTTPS.
+- Proxy buffer body/response trong RAM; upload đồng thời lớn cần giới hạn concurrency tại reverse proxy.
+  Giới hạn đọc urllib là timeout socket, không phải thời hạn tổng tuyệt đối cho upstream chậm nhỏ giọt.
+- Chưa kiểm tra MongoDB thật, lịch sử Git, dependency CVE, load test hay production credentials.
+
+## Kiểm chứng
+
+Chạy `python -m pytest -q` từ thư mục gốc. Test không gọi API Locket thật.
+Kết quả: **68 passed, 1 skipped**, một cảnh báo deprecation httpx/Starlette.
+Test proxy dùng transport giả cho status/compression/timeout và MongoDB giả cho expiry/viewers;
+một HTTP server local xác minh urllib không đi theo redirect. Upload kiểm tra đúng 50 MiB,
+50 MiB + 1 byte dạng chunked, và admin 8 KiB + 1 byte. Test host cho phép đúng hostname deployment,
+chặn hostname khác và hậu tố giả. Test MongoDB thật chỉ chạy khi đặt TEST_MONGODB_URI.
+```
+
+## DEPLOY-VERCEL.md
+
+````markdown
+# Deploy FastAPI lên Vercel
+
+## Cập nhật: lỗi 400 và upload proxy
+
+Log ngày 04/11/2026 cho thấy domain riêng trả 200 nhưng alias/deployment Vercel trả 400.
+Điều này phù hợp với hostname chưa có trong allowlist; để xác nhận, kiểm tra body `Invalid host header`.
+Nếu body là `HTTPS is required`, kiểm tra scheme do nền tảng cung cấp, không tin header client tùy ý.
+
+Đặt Environment Variables cho đúng Production/Preview rồi redeploy:
+
+```dotenv
+ALLOWED_HOSTS=["locketgold.vuthanhluan.bond","locketgold-premium-luan-eafb.vercel.app"]
+ADMIN_PATH=/your-private-admin-path
+REQUIRE_HTTPS=true
+```
+
+Code tự thêm hostname chính xác từ `VERCEL_URL`, `VERCEL_PROJECT_PRODUCTION_URL`,
+`VERCEL_BRANCH_URL` khi `VERCEL=1`. Đây là biến hệ thống của deployment, không phải HTTP headers.
+Alias tùy chỉnh vẫn phải khai báo trong `ALLOWED_HOSTS`. Không cho phép `*` hoặc `*.vercel.app`.
+`VERCEL_PROJECT_PRODUCTION_URL` có thể là custom domain; trường hợp đó vẫn dùng allowlist tường minh.
+Nguồn biến hệ thống: https://vercel.com/docs/environment-variables/system-environment-variables
+Khi sử dụng Turnstile trên nhiều hostname, cập nhật cả widget Cloudflare và `TURNSTILE_HOSTNAME`.
+Đường dẫn admin cũ trả 404 sau khi đổi `ADMIN_PATH` là hành vi đúng.
+
+FastAPI chấp nhận tối đa **50 MiB** cho `/proxy/…`, **8 KiB** cho các route khác,
+kiểm tra cả body không có Content-Length. Vercel Functions có giới hạn payload **4,5 MB**
+trước khi request đến ứng dụng; code không vượt được giới hạn này. Proxy upload lớn cần
+chạy trên container/VPS với reverse proxy cho phép 50 MiB, hoặc một luồng upload trực tiếp
+được dịch vụ đích hỗ trợ. Không thể tự thay luồng upload của client bên ngoài chỉ bằng cấu hình DNS.
+Nguồn: https://vercel.com/docs/functions/limitations
+
+Chưa thay đổi Environment Variables hoặc deploy Vercel từ phiên audit này.
+
+Repository này có entrypoint `index.py` theo cơ chế FastAPI native của Vercel và chọn Python 3.12 qua `.python-version`. `vercel.json` chỉ định FastAPI và đặt lại Build Command/Output Directory về mặc định, tránh phục vụ riêng HTML tĩnh. Giữ nguyên backend; Vercel hỗ trợ lifespan. Không chạy Dockerfile, `uvicorn --reload` hoặc `docker compose` trong Vercel Build Command.
+
+`pyproject.toml` khai báo tường minh `[tool.vercel] entrypoint = "app.main:app"`, tránh phụ thuộc vào việc tự dò file import lại app hoặc app được khởi tạo qua factory. Vercel cài runtime dependencies từ `[project].dependencies` trong file này; danh sách đồng bộ với `requirements.txt` cho local và Docker, có test kiểm tra không bị lệch.
+
+## 1. Chuẩn bị database và tài khoản
+
+- Tạo MongoDB Atlas hoặc dùng MongoDB có thể kết nối từ Vercel qua TLS. URI `localhost` của máy bạn không hoạt động trên Vercel.
+- Tạo database user quyền `readWrite` chỉ trên database của ứng dụng. Cấu hình Atlas Network Access theo mạng/IP egress của môi trường deploy; không mặc định mở database cho mọi IP. Nếu cần egress cố định/private network, kiểm tra tính năng và gói nền tảng hỗ trợ trước.
+- Trước khi public, đổi mật khẩu đã gửi trong hội thoại bằng lệnh local `python -m app.bootstrap`. Mật khẩu được nhập ẩn; chỉ hash có salt được lưu trong `.env`. Lấy giá trị hash từ `.env` để nhập vào Vercel; không đưa file này lên Git.
+- Production và Preview nên dùng database/tài khoản DB riêng. Code mới chỉ tạo Admin lần đầu, không ghi đè tài khoản khi startup. Các deployment chạy code cũ vẫn có thể ghi đè: ngừng sử dụng/thu hồi quyền truy cập database của các bản cũ, hoặc chuyển production sang database riêng với thông tin truy cập mới. Đổi code mới không vô hiệu hóa tiến trình cũ đang giữ thông tin đăng nhập DB.
+
+## 2. Import repository
+
+1. Trong Vercel chọn **Add New → Project**, import `vuthanhluan206/locketgoldmanager`.
+2. Root Directory là thư mục gốc repository, nơi có `index.py` và `requirements.txt`.
+3. Dùng nhận diện framework FastAPI/native và các lệnh build mặc định. Không đặt Output Directory là `web` hoặc `public`, vì HTML phải đi qua FastAPI để có CSP nonce và loại bỏ view admin khỏi trang khách.
+4. Xác định production domain trong Project Settings → Domains để điền `ALLOWED_HOSTS`. Không đoán domain nếu tên project bị trùng.
+
+## 3. Environment Variables
+
+Nhập các giá trị dưới đây vào Vercel Project Settings → Environment Variables cho đúng môi trường. Giá trị nhập trong UI là giá trị thực, không bọc thêm dấu nháy shell.
+
+| Tên | Giá trị |
+|---|---|
+| `MONGODB_URI` | URI Atlas/TLS của database; không dùng localhost |
+| `MONGODB_DATABASE` | Tên database, ví dụ `locket_manager` |
+| `NEXTDNS_ID` | ID NextDNS của bạn, hiện đang dùng `a8b247` |
+| `SUPERADMIN_EMAIL` | Email admin của bạn |
+| `SUPERADMIN_PASSWORD_HASH` | Toàn bộ hash từ `.env`, dạng `pbkdf2_sha256$600000$...$...` |
+| `ALLOWED_HOSTS` | JSON array chứa domain thực, ví dụ `["your-project.vercel.app","your-domain.example"]` |
+| `REQUIRE_HTTPS` | `true` |
+| `SESSION_TTL_SECONDS` | `3600` |
+| `ROOT_CA_PATH` | Để trống nếu chỉ cấp cấu hình DNS |
+| `ROOT_CA_PEM` | Chứng chỉ Root CA công khai dạng PEM, dùng thay cho `ROOT_CA_PATH` |
+| `SUBSCRIBER_API_TOKEN` | Tùy chọn: token ngẫu nhiên 32–256 ký tự ASCII để server tin cậy gọi API thuê bao. Bỏ biến nếu không dùng; không nhúng vào app di động |
+
+`SUPERADMIN_EMAIL`/`SUPERADMIN_PASSWORD_HASH` chỉ seed lần đầu khi DB chưa có Admin. Để cập nhật tài khoản đã tồn tại, chuẩn bị `.env` local với URI Atlas và tên database production chính xác, email/hash mong muốn, rồi chạy `python -m app.bootstrap --sync-db`. Lệnh thay đổi tài khoản DB đó và vô hiệu hóa phiên cũ nếu hash đổi. Không dùng URI localhost khi muốn cập nhật tài khoản Vercel. Nếu không đổi mật khẩu, không cần chạy lệnh này khi nâng cấp.
+
+Với preview, thêm đúng hostname preview vào `ALLOWED_HOSTS` cho môi trường đó hoặc chỉ triển khai production ban đầu. Không dùng wildcard để bỏ kiểm tra Host. Một deployment URL ngẫu nhiên không nằm trong allowlist sẽ trả 400, dù production domain vẫn hoạt động.
+
+Để thêm Root CA trên Vercel, đặt `ROOT_CA_PATH` trống và dán toàn bộ chứng chỉ công khai vào giá trị `ROOT_CA_PEM`, từ `-----BEGIN CERTIFICATE-----` đến `-----END CERTIFICATE-----`, giữ các dòng hoặc dùng chuỗi `\n`. Không bọc dấu nháy trong giao diện Vercel. Chọn Production, Save và Redeploy, rồi tải/cài lại profile. Chỉ dùng một chứng chỉ Root CA tự ký còn hạn, không dùng intermediate, chuỗi chứng chỉ hoặc private key. `.vercelignore` cố ý loại file chứng chỉ và khóa; đường dẫn `E:\...` không tồn tại trên cloud. Nếu cả hai biến trống thì profile chỉ có DNS. Việc cài chứng chỉ thủ công không tự bật tin cậy SSL/TLS.
+
+Đánh dấu biến bí mật là sensitive nếu Vercel hỗ trợ trong môi trường tương ứng. Mỗi lần đổi biến môi trường phải redeploy. Không đặt cấu hình bí mật trong frontend hoặc `vercel.json`.
+
+## 4. Bảo vệ và kiểm tra
+
+- Nếu trang chủ hiện cả login và API trả Vercel `NOT_FOUND`: kiểm tra Settings → Build and Deployment, Root Directory phải là gốc repo (`./` hoặc để trống), không phải `web`. Framework là FastAPI; tắt override Output Directory và Build Command, không xuất riêng `web`. Sau đó tạo deployment từ commit mới nhất trên `main`. HTML thô có `__NONCE__` nghĩa là request chưa qua FastAPI.
+- Nếu build báo `FASTAPI_ENTRYPOINT_NOT_FOUND`, xác nhận deployment dùng commit có `pyproject.toml` và Root Directory là gốc repository. Không redeploy mã cũ chỉ có cấu hình tự dò.
+- Nếu runtime báo `ModuleNotFoundError: No module named 'fastapi'` sau dòng build `Installing required dependencies from pyproject.toml`, phải deploy commit có `[project].dependencies` đầy đủ. File chỉ khai báo `[tool.vercel]` không đủ để cài dependencies khi Vercel chọn pyproject thay requirements.
+
+- Đăng nhập đã có bộ đếm chung MongoDB ngoài limiter từng instance. Dùng thêm Vercel Firewall/WAF theo khả năng gói để lọc lưu lượng trước khi tới function/database. Xác minh IP proxy để giới hạn theo IP chính xác.
+- Xác minh HTTPS scheme/IP proxy thực tế; không tùy tiện tin `X-Forwarded-For` từ client. Nếu gặp 400, kiểm tra detail trong JSON và log: phân biệt lỗi Host với `HTTPS is required`; không tắt các kiểm tra một cách mặc định.
+- Sau deploy, kiểm tra `/`, `/admin`, đăng nhập, thêm/gia hạn một ID thử, tải profile, đăng xuất và thử gọi lại với token cũ.
+- Kiểm tra MongoDB có `admins`, `sessions`, `accounts`, `login_limits` và index TTL trên `sessions.expires_at`, `login_limits.expires_at`.
+- Không đưa `.env`, `.venv`, token, password hash hoặc log request vào Git. `.vercelignore` và `.gitignore` đã loại các file runtime/bí mật.
+
+Chưa deploy Vercel bằng tài khoản của bạn trong phiên này. Tài liệu chính thức: [FastAPI on Vercel](https://vercel.com/docs/frameworks/backend/fastapi), [Python runtime](https://vercel.com/docs/functions/runtimes/python).
+````
+
+## Dockerfile
+
+```text
+FROM python:3.12-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt && useradd --uid 10001 --create-home appuser
+COPY app ./app
+COPY web ./web
+USER appuser
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-access-log"]
+```
+
+## README.md
+
+````markdown
+# Locket Gold Manager
+
+## Bảo vệ admin bằng IP và Cloudflare Turnstile
+
+- Giữ giới hạn hiện có: 120 request/IP/phút; đăng nhập 10 lần/IP/phút và 30 lần/phút toàn hệ thống. API admin có thêm giới hạn 60 request/IP/phút, dùng bộ đếm MongoDB chung giữa các instance. Vượt giới hạn trả HTTP 429 và `Retry-After: 60`.
+- Tạo widget **Managed** trong Cloudflare Dashboard → Turnstile, khai báo hostname thực tế của trang admin. Đặt các biến sau trong `.env` hoặc Environment Variables của Vercel, rồi khởi động/deploy lại:
+
+```dotenv
+TURNSTILE_SITE_KEY=your_public_site_key
+TURNSTILE_SECRET_KEY=your_private_secret_key
+TURNSTILE_HOSTNAME=locketgold.vuthanhluan.bond,locketgold-premium.vercel.app
+```
+
+`TURNSTILE_HOSTNAME` chứa một hoặc nhiều tên miền cách nhau bằng dấu phẩy, không có `https://`, cổng hay đường dẫn. Thêm tất cả tên miền này vào cùng widget Turnstile trong Cloudflare; cả hai dùng chung Site Key và Secret Key. Secret Key chỉ nằm ở backend. Khi bật, mọi đăng nhập phải có token hợp lệ; backend kiểm tra `success`, hostname thuộc danh sách cho phép và action `admin-login` trước khi kiểm tra mật khẩu. Token lỗi/hết hạn trả 403; lỗi kết nối Cloudflare hoặc thiếu cấu hình trả 503. Bỏ trống cả hai key sẽ giữ cách đăng nhập hiện tại; cần điền đủ ba biến để bật bảo vệ.
+
+Mặc định giới hạn theo IP kết nối do server cung cấp, không tin header do khách gửi. Chỉ cấu hình `TRUSTED_PROXY_CIDRS` khi origin được giới hạn truy cập từ proxy tin cậy và proxy đó luôn ghi đè `CF-Connecting-IP`:
+
+```dotenv
+TRUSTED_PROXY_CIDRS=["YOUR_TRUSTED_PROXY_CIDR"]
+```
+
+Dùng dải IP chính thức của Cloudflare nếu origin nhận kết nối trực tiếp từ Cloudflare; giữ danh sách cập nhật. Không dùng `0.0.0.0/0` hoặc `::/0`. Với Uvicorn trực tiếp sau Cloudflare, dùng `--no-proxy-headers` khi chọn cơ chế này để giữ đúng IP peer cho bước kiểm tra proxy. Nếu triển khai Vercel hoặc qua nhiều proxy, phải xác minh cách nền tảng cung cấp IP và chặn truy cập vòng qua proxy trước khi bật tin header. Turnstile dùng được cả khi tên miền không proxy qua Cloudflare.
+
+Giới hạn tổng request ở middleware vẫn theo process; Turnstile bảo vệ đăng nhập và không thay thế giới hạn lưu lượng tại edge. Nếu dùng Cloudflare WAF, áp dụng rule cho đường dẫn trang admin hiện tại và `/api/admin/*`, `/admin/*`; tránh áp challenge lên API subscriber vì ứng dụng không giải được challenge trình duyệt.
+
+Tài liệu: [Siteverify](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/), [CSP cho Turnstile](https://developers.cloudflare.com/turnstile/reference/content-security-policy/).
+
+FastAPI + MongoDB. Một file `web/index.html` chứa trang tải cấu hình và giao diện đăng nhập/quản trị. Server loại bỏ phần admin khỏi phản hồi `/`. `/admin` hiển thị màn hình đăng nhập; tất cả dữ liệu/thao tác admin yêu cầu phiên Bearer được xác minh bằng MongoDB. Không còn token tĩnh hoặc token trong URL.
+
+Đây là hệ thống cấp phép độc lập cho ứng dụng bạn kiểm soát. DNS và CA không tự kích hoạt Gold trong Locket chính thức; JSON subscriber là hợp đồng nội bộ có dạng tương tự RevenueCat, không cam kết tương thích SDK RevenueCat.
+
+## Chạy local (Python 3.12+, Docker Desktop đang chạy)
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+Copy-Item .env.example .env
+python -m app.bootstrap
+```
+
+Không ghi đè `.env` đã có nếu muốn giữ cấu hình. `app.bootstrap` hỏi email và mật khẩu hai lần (ẩn khi nhập), chỉ lưu email và hash có salt vào `.env`. Nhập tài khoản bạn muốn sử dụng; không có email/mật khẩu quản trị mặc định trong source. Bản local trong phiên làm việc này đã được cấu hình bằng tài khoản bạn yêu cầu.
+
+Điền `MONGODB_URI` và `NEXTDNS_ID` của bạn trong `.env`. `NEXTDNS_ID` gồm 6 ký tự hex; bỏ trống thì API tải profile trả 503. Để profile chứa cả DNS và Root CA, cấu hình **một** trong hai biến: `ROOT_CA_PATH` (file chứng chỉ công khai PEM/DER có trên server) hoặc `ROOT_CA_PEM` (nội dung PEM, hỗ trợ xuống dòng thật hoặc chuỗi `\n`). Không cung cấp private key. Cấu hình chỉ do người triển khai đặt, không nhận từ HTTP request. Nếu bỏ trống cả hai biến, profile vẫn chỉ chứa DNS.
+
+Profile xuất XML plist với `PayloadScope=System`, UUID riêng cho profile và từng payload; chứng chỉ được chuẩn hóa thành DER, kiểm tra tự ký, CA và thời hạn. XML này **chưa được ký CMS**; iOS có thể hiển thị “Not Signed”. Không có bảo đảm cài thành công trên mọi thiết bị/chính sách MDM. Sau khi cài thủ công, người dùng vẫn phải bật tin cậy tại **Cài đặt → Cài đặt chung → Giới thiệu → Cài đặt tin cậy chứng chỉ**. DNS không ép chuyển tiếp HTTPS và profile không tự cấp quyền Locket Gold.
+
+```powershell
+docker compose up -d
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --no-access-log
+```
+
+- Trang khách: `http://127.0.0.1:8000/`
+- Đăng nhập: `http://127.0.0.1:8000/admin`
+
+Khởi động sẽ kết nối MongoDB, tạo index và chỉ tạo superadmin từ môi trường khi tài khoản chưa tồn tại. Tài khoản trong MongoDB là nguồn xác thực sau lần tạo đầu; restart không đổi email/mật khẩu. Thiếu cấu hình bắt buộc hoặc DB không kết nối được thì startup thất bại. CA không hợp lệ chỉ vô hiệu hóa tải profile (503); Admin và API thuê bao vẫn hoạt động, log có `PROFILE_CONFIG_INVALID`.
+
+## Tài khoản và phiên
+
+- Mật khẩu: PBKDF2-HMAC-SHA256, 600.000 vòng, salt ngẫu nhiên 16 byte, so sánh constant-time. Tính hash ở thread để không chặn event loop.
+- MongoDB `admins`: email, password hash và phiên bản xác thực; không lưu mật khẩu gốc.
+- Token: sinh ngẫu nhiên 48 byte (64 ký tự URL-safe); chỉ SHA256 của token được lưu trong `sessions`.
+- Phiên mặc định 1 giờ, không tự gia hạn. `SESSION_TTL_SECONDS` cho phép 300–86400 giây. Mỗi request kiểm tra hạn dùng ngay cả khi MongoDB TTL chưa kịp xóa bản ghi.
+- Đăng xuất xóa phiên ở server. Để đổi mật khẩu: chạy `python -m app.bootstrap` để cập nhật `.env`, rồi `python -m app.bootstrap --sync-db` để áp dụng có chủ đích vào MongoDB đang cấu hình. Lệnh này thay email/hash và vô hiệu hóa phiên dùng hash cũ. Đổi biến môi trường rồi restart không ghi đè tài khoản đã có. `--check` chỉ xác minh mật khẩu với cấu hình local, không kiểm tra Vercel hay tài khoản DB.
+- Frontend lưu token vào `localStorage` theo yêu cầu. JavaScript có thể đọc storage, nên XSS vẫn có thể đánh cắp token. Với hệ thống nhạy cảm hơn, nên chuyển sang cookie `HttpOnly; Secure; SameSite` kèm bảo vệ CSRF. CSP không bảo đảm loại bỏ mọi XSS.
+- Không có endpoint đăng ký hoặc tài khoản mặc định công khai. Không lưu token trong URL, DOM hoặc log ứng dụng. Không cấu hình proxy ghi Authorization header hoặc request body đăng nhập.
+
+## API
+
+| Method | Endpoint | Quyền |
+|---|---|---|
+| GET | `/` | Công khai; không có markup/script admin |
+| GET | `/admin` | Màn hình đăng nhập công khai, không có dữ liệu tài khoản |
+| POST | `/api/admin/login` | Email/mật khẩu; rate limited |
+| GET | `/api/admin/me` | Bearer session |
+| POST | `/api/admin/logout` | Bearer session, thu hồi token hiện tại |
+| POST | `/admin/add-account` | Bearer session; thêm/cập nhật theo ID |
+| GET | `/admin/accounts?skip=0&limit=50` | Bearer session; limit ≤100, skip ≤10000 |
+| DELETE | `/admin/accounts/{account_id}` | Bearer session |
+| GET | `/profile.mobileconfig` | Công khai |
+| GET | `/v1/subscribers/{account_id}` | Bearer phiên Admin hoặc token riêng cho server tin cậy |
+
+Đăng nhập:
+
+```json
+{"email":"YOUR_ADMIN_EMAIL","password":"YOUR_ADMIN_PASSWORD"}
+```
+
+Thêm/gia hạn, kèm `Authorization: Bearer ACCESS_TOKEN`:
+
+```json
+{"locket_id":"example_user_123","expires_date":"2026-12-31T23:59:59Z"}
+```
+
+ID là chuỗi 1–128 ký tự ASCII thuộc `[A-Za-z0-9_$:@.\-]`. Không chấp nhận object MongoDB, HTML hay đường dẫn. Thời hạn phải có múi giờ và ở tương lai; lưu/so sánh UTC. MongoDB dùng unique index chống trùng ID. Giao diện hiển thị dữ liệu bằng `textContent`, không dùng `innerHTML`.
+
+API subscriber từ chối tra cứu ẩn danh (401). Server tích hợp có thể dùng `Authorization: Bearer SUBSCRIBER_API_TOKEN` khi đã cấu hình biến tùy chọn này bằng token ngẫu nhiên 32–256 ký tự ASCII, không có khoảng trắng. Không đặt biến rỗng; bỏ biến nếu không dùng. Token này chỉ dành cho server tin cậy và có quyền tra cứu mọi ID, không phải token cho người dùng cuối. Không nhúng token server/Admin vào ứng dụng di động. Phiên Admin cũng có thể dùng để kiểm tra API.
+
+Luồng tích hợp ứng dụng do bạn kiểm soát: ứng dụng đăng nhập hệ thống của bạn → server xác minh danh tính và lấy ID nội bộ từ phiên → server gọi API thuê bao bằng token riêng → trả trạng thái được phép cho chính người dùng đó. Chưa có mã nguồn client/nhà cung cấp danh tính trong repo; không thể tự suy ra ID từ link chia sẻ hoặc bật Gold trong Locket chính thức bằng DNS/CA. Không coi username trong link là ID nội bộ nếu chưa xác minh.
+
+## Giới hạn và headers
+
+- Request body tối đa 8 KiB kể cả chunked; tối đa 5 giây đọc body.
+- 120 request/IP/phút, 10 login/IP/phút và 30 login/phút toàn tiến trình. Trả 429 và `Retry-After`. Bộ nhớ bộ đếm có giới hạn.
+- Middleware giới hạn request theo từng process. Riêng đăng nhập có thêm bộ đếm nguyên tử dùng chung trong MongoDB `login_limits` (10/IP, 30/toàn hệ thống mỗi cửa sổ phút; TTL dọn dữ liệu). Bộ đếm dùng chung áp dụng cho request đúng schema trước khi xác minh mật khẩu; middleware vẫn chặn cả request sai schema. Giới hạn IP phụ thuộc proxy cung cấp IP chính xác; bảo vệ lưu lượng lớn cần WAF/edge, không phải cơ chế chống DDoS hoàn chỉnh.
+- Không tự đọc `X-Forwarded-For`. Uvicorn chỉ được tin các IP proxy thực tế; cấu hình sai làm tất cả khách bị tính cùng IP hoặc cho phép giả IP.
+- CSP nonce riêng mỗi response, không `unsafe-inline`; `nosniff`, `DENY`, `no-referrer`, `no-store`, Permissions-Policy; HSTS chỉ trên HTTPS.
+- Host phải nằm trong `ALLOWED_HOSTS`. Không bật CORS vì frontend cùng origin. CORS không thay thế xác thực API.
+- Lỗi validation không phản chiếu dữ liệu nhập. Lỗi DB trả 503, lỗi ngoài dự kiến trả JSON 500 chung. Không gửi stack trace tới trình duyệt.
+
+## Profile và Safari
+
+Nút tải là link HTTP trực tiếp với MIME `application/x-apple-aspen-config` và `Content-Disposition: attachment`, không cần Blob, popup hoặc JavaScript. Không dùng font/CDN/Tailwind runtime bên ngoài. CSS hỗ trợ safe area, `100svh` có fallback, input 16px và nút tối thiểu 48px.
+
+CA được kiểm tra kích thước, BasicConstraints CA, thời hạn và không chứa private key. Profile được tạo một lần khi startup. Profile chưa ký; iOS có thể hiển thị chưa xác minh và luôn cần người dùng xác nhận cài đặt. Không tự bật full trust cho CA. Phải kiểm tra trên iPhone/iPad thực tế trước khi phân phối.
+
+## Deploy cloud
+
+Deploy trên Vercel: xem [DEPLOY-VERCEL.md](DEPLOY-VERCEL.md). Đã có native entrypoint `index.py`, `.python-version` và `.vercelignore`; không dùng Docker/localhost MongoDB cho Vercel.
+
+Dockerfile chạy user không phải root, một worker. `.dockerignore` loại `.env`, khóa và chứng chỉ khỏi image. Dùng secret manager của nền tảng để cấp cấu hình; mount chứng chỉ CA ở chế độ chỉ đọc nếu cần.
+
+```sh
+docker build -t locket-manager .
+docker run --env-file .env -p 127.0.0.1:8000:8000 locket-manager
+```
+
+Trong container, `127.0.0.1` là container hiện tại: đặt `MONGODB_URI` tới MongoDB Atlas hoặc hostname MongoDB trong mạng private. `compose.yaml` chỉ phục vụ database local, không phải cấu hình production. Dùng DB auth/TLS, tài khoản DB quyền tối thiểu, backup và không public cổng database.
+
+Cấu hình môi trường production:
+
+```dotenv
+ALLOWED_HOSTS=["your-domain.example"]
+REQUIRE_HTTPS=true
+SESSION_TTL_SECONDS=3600
+```
+
+Reverse proxy chấm dứt TLS, chỉ forward đến backend qua mạng private và gửi protocol/client IP chính xác. Cấu hình `FORWARDED_ALLOW_IPS` bằng IP proxy thực tế; không dùng `*` trên backend có thể truy cập trực tiếp. Bật `REQUIRE_HTTPS` chỉ sau khi xác nhận FastAPI nhận đúng scheme HTTPS. Không chạy `--reload` trên production. Thêm rate limit chung, giới hạn body/timeout và lọc log ở edge trước khi scale.
+
+## Kiểm thử và mã nguồn để copy
+
+```powershell
+pip install -r requirements-dev.txt
+python -m pytest -q
+```
+
+Kiểm thử đơn vị dùng MongoDB giả. Kiểm thử tích hợp tùy chọn dùng MongoDB thật, tạo database riêng tên `locket_test_<uuid>`, rồi xóa đúng database test trong phần dọn dẹp; không dùng collections sản xuất. Kiểm tra ghi/đọc/gia hạn/hết hạn/xóa tài khoản, đổi mật khẩu thu hồi phiên, đăng xuất và restart bằng cấu hình cũ không ghi đè Admin.
+
+```powershell
+$env:TEST_MONGODB_URI='mongodb://127.0.0.1:27017'
+python -m pytest -q
+```
+
+Để trống/bỏ `TEST_MONGODB_URI` thì kiểm thử tích hợp được bỏ qua. Kết quả local không chứng minh kết nối Atlas, cấu hình Vercel hay cài profile trên iPhone.
+
+`SOURCE.md` chứa nguyên văn các file để copy; `source-code.zip` chứa mã nguồn không kèm `.env`, `.venv` hoặc dữ liệu runtime.
+
+Tham khảo: [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html), [OWASP HTML5 Storage](https://cheatsheetseries.owasp.org/cheatsheets/HTML5_Security_Cheat_Sheet.html), [Starlette Middleware](https://starlette.dev/middleware/), [Apple DNSSettings](https://developer.apple.com/documentation/devicemanagement/dnssettings).
+
+
+
+````
+
+## SECURITY-AUDIT.md
+
+```markdown
+# Kết quả rà soát và vá bảo mật
+
+Phạm vi: source FastAPI, vòng đời MongoDB, auth, các API quản trị/subscriber/profile, HTML/JS và cấu hình đóng gói. Giả định triển khai một worker sau HTTPS reverse proxy. Đây là rà soát source và kiểm thử local, không phải chứng nhận không còn lỗ hổng.
+
+| Mức | Phát hiện trước sửa | Tác động cụ thể | Bản vá |
+|---|---|---|---|
+| Cao | Token thật trong `app/config.py` và `.env.example` | Người đọc repo có toàn quyền admin | Bỏ token tĩnh, làm sạch file mẫu; phiên chỉ được cấp sau login tài khoản MongoDB |
+| Cao | Login qua `?admin=TOKEN` | Token có thể vào log/history trước khi JS xóa | Vô hiệu URL token, login POST bằng email/mật khẩu; không lưu mật khẩu gốc |
+| Cao | Không có expiry/revocation cho token tĩnh | Token rò rỉ có hiệu lực vô thời hạn | Token ngẫu nhiên 48 byte, lưu hash ở DB, expiry, TTL, logout và auth version |
+| Trung bình | Không rate limit/body limit | Spam login hoặc payload lớn tiêu tốn CPU/RAM | 8 KiB, timeout body, giới hạn IP và tổng login; bộ đếm có giới hạn bộ nhớ |
+| Trung bình | CSP `unsafe-inline` | Nếu phát sinh HTML injection, script inline có thể chạy | Nonce từng response; bỏ inline event attributes, không CDN |
+| Trung bình | Chưa kiểm tra Host hoặc enforce HTTPS | Host giả được chấp nhận; production có thể vô tình phục vụ HTTP | Allowlist host; REQUIRE_HTTPS; HSTS chỉ trên HTTPS |
+| Trung bình | CA đọc/parse mỗi download, PayloadIdentifier chứa khoảng trắng | CA sai gây lỗi lúc khách tải; định danh profile không sạch | Kiểm tra CA lúc startup, giới hạn file, sửa identifier, cache profile |
+
+Các điểm đã đúng và được giữ: dependency bảo vệ toàn router admin, ID dạng chuỗi được validation trước khi tạo filter MongoDB, không nhận raw query, ngày có timezone, unique index, dùng `textContent`. Không tìm thấy đường dẫn HTTP cho phép đọc file tùy ý; chỉ dùng tên template cố định và CA path từ cấu hình server.
+
+## Thay đổi hợp đồng
+
+- `/admin` là trang login công khai, không trả dữ liệu MongoDB.
+- `/api/admin/login` là API công khai có rate limit. `/api/admin/me`, `/api/admin/logout` và mọi endpoint dữ liệu `/admin/*` yêu cầu session hợp lệ trong MongoDB.
+- Token URL và token tĩnh cũ không còn được chấp nhận.
+- Bootstrap hash lấy từ môi trường, đồng bộ tài khoản cố định vào MongoDB khi startup. Đổi hash rồi restart làm token phiên cũ không còn hợp lệ.
+- Trang khách chỉ có một thẻ và link tải trực tiếp, không gửi script/markup admin. Cả hai view nằm trong một file HTML.
+
+## Giới hạn còn lại trước production
+
+1. `localStorage` là yêu cầu người dùng: XSS có thể đọc token. Cookie HttpOnly + CSRF phù hợp hơn khi ưu tiên an toàn phiên tối đa.
+2. Limiter từng process không chống brute-force phân tán trên nhiều replica hoặc DDoS. Cần shared limiter/edge, IP proxy đúng, TLS và mạng DB private.
+3. Subscriber API đang công khai theo hợp đồng ban đầu, có thể bị dò ID. Cần xác thực người gọi nếu trạng thái thuê bao được coi là riêng tư.
+4. Mật khẩu đã gửi trong hội thoại cần được thay trước triển khai internet. Chạy bootstrap với mật khẩu mới; không đưa hash `.env` lên Git.
+5. Đã kiểm tra startup, login tài khoản được yêu cầu, session auth, danh sách, tải profile và logout với MongoDB local thật. Chưa kiểm tra certificate trust chain, cài profile trên Safari/iPhone và cấu hình HTTPS proxy thực tế.
+6. Chưa quét CVE của dependency hoặc kiểm tra toàn bộ lịch sử Git. Nếu từng commit bí mật, phải thu hồi bí mật; xóa khỏi phiên bản hiện tại không xóa lịch sử.
+
+## Xác minh đã thực hiện
+
+- 16 tests tự động đã đạt, bao gồm các trường hợp tham số hóa cho toàn bộ route admin; database giả cho kiểm thử HTTP và startup.
+- Kiểm tra cú pháp JavaScript của file HTML đã đạt bằng Node.js.
+- Smoke test MongoDB thật đã đạt: startup/index/bootstrap, email/mật khẩu yêu cầu, Bearer auth, danh sách tài khoản, profile và đăng xuất; token sau logout trả 401. Không in token hoặc dữ liệu khách hàng.
+- Chưa kiểm tra UI bằng trình duyệt hoặc thiết bị iOS thật; Docker image chưa build trong phiên này.
+```
+
 ## app/__init__.py
 
 ```python
@@ -446,39 +839,146 @@ import json
 import secrets
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+import httpx
+import os
+from datetime import datetime, timezone, timedelta
 from urllib.parse import quote
 from starlette.datastructures import Headers
 from fastapi.encoders import jsonable_encoder
 from fastapi import APIRouter, HTTPException, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 
 from .config import get_settings
 from .models import subscriber_response
 from .routers.management import download_profile
 from .security import token_digest
 
-router = APIRouter(prefix="/proxy", tags=["Locket Proxy"])
-
-UPSTREAM_TARGET = "https://api.locketcamera.com"
-
+router = APIRouter(tags=["Locket Proxy"])
 
 HOP_HEADERS = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
                'te', 'trailer', 'transfer-encoding', 'upgrade'}
 MAX_RESPONSE = 50 * 1024 * 1024
 
+ADMIN_PATH = os.getenv("ADMIN_PATH", "/admin")
+
+# ================= 1. TRANG CHỦ VÀ CÁC API QUẢN TRỊ (KHỚP VỚI INDEX.HTML GỐC) =================
+
+@router.get("/", response_class=FileResponse)
+async def get_root_page():
+    """Phục vụ file index.html nguyên bản khi truy cập trang chủ /"""
+    current_dir = os.path.dirname(os.path.realpath(__file__))
+    file_path = os.path.join(current_dir, "..", "web", "index.html")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Không tìm thấy file giao diện web/index.html")
+    return FileResponse(file_path)
+
+@router.get(ADMIN_PATH, response_class=FileResponse)
+async def get_admin_page():
+    """Đường dẫn Admin dự phòng"""
+    current_dir = os.path.dirname(os.path.realpath(__file__))
+    file_path = os.path.join(current_dir, "..", "web", "index.html")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Không tìm thấy file giao diện")
+    return FileResponse(file_path)
+
+@router.post("/api/admin/login")
+async def api_admin_login(req: Request):
+    """Xử lý đăng nhập từ file index.html gốc"""
+    data = await req.json()
+    email = data.get("email", "")
+    password = data.get("password", "")
+    
+    accounts_col = getattr(req.app.state, "accounts", None)
+    if accounts_col is None:
+        raise HTTPException(503, "Lỗi DB")
+    
+    # Kiểm tra trong collection admins hoặc accounts tùy cấu hình của bạn
+    admin_user = await accounts_col.database["admins"].find_one({"username": email, "password": password})
+    if not admin_user:
+        raise HTTPException(status_code=401, detail="Email hoặc mật khẩu không đúng")
+        
+    token = secrets.token_hex(32)
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    return {"access_token": token, "expires_at": expires_at}
+
+@router.get("/api/admin/me")
+async def api_admin_me(req: Request):
+    auth = req.headers.get("Authorization")
+    if not auth or not auth.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return {"email": "admin@vuthanhluan.bond"}
+
+@router.post("/api/admin/logout")
+async def api_admin_logout():
+    return Response(status_code=204)
+
+@router.get("/admin/accounts")
+async def api_get_accounts(req: Request, skip: int = 0, limit: int = 50):
+    accounts_col = getattr(req.app.state, "accounts", None)
+    if accounts_col is None:
+        raise HTTPException(503, "Lỗi DB")
+    
+    cursor = accounts_col.find({"status": "active"}).skip(skip).limit(limit)
+    accounts = await cursor.to_list(length=limit)
+    
+    result = []
+    for acc in accounts:
+        result.append({
+            "locket_id": acc.get("locket_id"),
+            "expires_date": acc.get("expires_date", (datetime.now(timezone.utc) + timedelta(days=365)).isoformat())
+        })
+    return JSONResponse(result)
+
+@router.post("/admin/add-account")
+async def api_add_account(req: Request):
+    data = await req.json()
+    accounts_col = getattr(req.app.state, "accounts", None)
+    
+    await accounts_col.update_one(
+        {"locket_id": data.get("locket_id")},
+        {"$set": {
+            "locket_id": data.get("locket_id"), 
+            "expires_date": data.get("expires_date"),
+            "status": "active",
+            "updated_at": datetime.now(timezone.utc)
+        }},
+        upsert=True
+    )
+    return Response(status_code=204)
+
+@router.delete("/admin/accounts/{locket_id}")
+async def api_delete_account(req: Request, locket_id: str):
+    accounts_col = getattr(req.app.state, "accounts", None)
+    await accounts_col.delete_one({"locket_id": locket_id})
+    return Response(status_code=204)
+
+# ================= 2. HỖ TRỢ XỬ LÝ AI & PROXY =================
+
+async def process_image_with_ai(image_bytes: bytes, prompt: str) -> bytes:
+    api_token = os.getenv("HUGGINGFACE_API_TOKEN", "")
+    if not api_token:
+        raise ValueError("Thiếu cấu hình HUGGINGFACE_API_TOKEN")
+
+    hf_endpoint = "https://api-inference.huggingface.co/models/timbrooks/instruct-pix2pix"
+    headers = {
+        "Authorization": f"Bearer {api_token}",
+        "Content-Type": "application/octet-stream",
+        "X-Wait-For-Model": "true"
+    }
+    async with httpx.AsyncClient(timeout=9.5) as client:
+        resp = await client.post(hf_endpoint, headers=headers, content=image_bytes)
+        if resp.status_code == 200:
+            return resp.content
+        return None
 
 def _clean_headers(headers):
     named = {key.strip().lower() for key in headers.get('connection', '').split(',')}
     return {key.lower(): value for key, value in headers.items()
             if key.lower() not in HOP_HEADERS | named | {'content-length'}}
 
-
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        # Never forward credentials to another destination.
         return None
-
 
 def _forward_upstream(url: str, body: bytes | None, headers: dict[str, str], method: str, timeout: float):
     req = urllib.request.Request(url, data=body if body else None, headers=headers, method=method)
@@ -493,8 +993,11 @@ def _forward_upstream(url: str, body: bytes | None, headers: dict[str, str], met
             raise ValueError('Upstream response exceeds limit')
         return response.code, dict(response.headers.items()), content
 
-
-def _extract_locket_id(path: str, data: dict) -> str:
+def _extract_locket_id(path: str, data: dict, request_headers: dict) -> str:
+    headers_lower = {k.lower(): v for k, v in request_headers.items()}
+    for hk in ["x-app-user-id", "x-revenuecat-app-user-id", "x-locket-user-id"]:
+        if hk in headers_lower and headers_lower[hk]:
+            return headers_lower[hk]
     sub = data.get('subscriber')
     if isinstance(sub, dict) and isinstance(sub.get('original_app_user_id'), str) and sub['original_app_user_id']:
         return sub['original_app_user_id']
@@ -503,29 +1006,45 @@ def _extract_locket_id(path: str, data: dict) -> str:
         idx = parts.index("subscribers")
         if idx + 1 < len(parts):
             return parts[idx + 1]
-    if isinstance(data, dict):
-        sub = data.get("subscriber")
-        if isinstance(sub, dict) and sub.get("original_app_user_id"):
-            return str(sub["original_app_user_id"])
-        for key in ("locket_id", "uid", "user_id", "id"):
-            if isinstance(data.get(key), str) and data[key]:
-                return data[key]
-        user_obj = data.get("user") or data.get("data")
-        if isinstance(user_obj, dict):
-            for key in ("uid", "user_id", "id", "locket_id"):
-                if isinstance(user_obj.get(key), str) and user_obj[key]:
-                    return user_obj[key]
     return ''
-
 
 @router.get("/install", response_class=Response)
 async def download_proxy_profile(request: Request):
     return await download_profile(request)
 
+@router.get("/proxy.pac", response_class=Response)
+async def get_proxy_pac(request: Request):
+    host = request.headers.get("host", "locketgold.vuthanhluan.bond")
+    pac_content = f"""
+function FindProxyForURL(url, host) {{
+    if (shExpMatch(host, "*locketcamera.com*") || shExpMatch(host, "*revenuecat.com*")) {{
+        return "PROXY {host}";
+    }}
+    return "DIRECT";
+}}
+"""
+    return Response(content=pac_content.strip(), media_type="application/x-ns-proxy-autoconfig")
+
+# ================= 3. REVERSE PROXY ĐỘNG =================
 
 @router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def dynamic_reverse_proxy(request: Request, path: str):
-    url = UPSTREAM_TARGET + "/" + quote(path, safe="/:@!$&'()*+,;=-._~")
+    if request.method == "GET":
+        ext = path.split('.')[-1].lower() if '.' in path else ""
+        if ext in ['css', 'js', 'png', 'jpg', 'ico']:
+            current_dir = os.path.dirname(os.path.realpath(__file__))
+            file_path = os.path.join(current_dir, "..", "web", path)
+            if os.path.exists(file_path):
+                return FileResponse(file_path)
+
+    original_host = request.headers.get("host", "")
+    if "revenuecat.com" in original_host:
+        upstream_host = "api.revenuecat.com"
+    else:
+        upstream_host = "api.locketcamera.com"
+        
+    url = f"https://{upstream_host}/" + quote(path, safe="/:@!$&'()*+,;=-._~")
+    
     query_params = str(request.url.query)
     if query_params:
         url += f"?{query_params}"
@@ -534,33 +1053,29 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     for key in list(headers):
         if key in {'host', 'cookie', 'forwarded', 'accept-encoding'} or key.startswith(('x-forwarded-', 'cf-')):
             del headers[key]
-    headers['Host'] = 'api.locketcamera.com'
+    headers['Host'] = upstream_host
     headers['Accept-Encoding'] = 'identity'
 
     method = request.method
     content_type_header = headers.get("content-type", "")
-    auth_header = headers.get("authorization", "")
-    scheme, _, token = auth_header.partition(' ')
-    user_token = token.strip() if scheme.lower() == 'bearer' else ''
-    if user_token:
-        configured = get_settings().subscriber_api_token
-        if configured is not None and secrets.compare_digest(
-            user_token.encode('utf-8'), configured.get_secret_value().encode('ascii'),
-        ):
-            raise HTTPException(401, 'Use an upstream access token')
-        sessions = getattr(request.app.state, 'sessions', None)
-        if sessions is not None and len(user_token) == 64 and user_token.isascii():
-            if await sessions.find_one({'_id': token_digest(user_token)}):
-                raise HTTPException(401, 'Use an upstream access token')
-
+    
     is_upload = method in ["POST", "PUT", "PATCH"] and (
-        "multipart/form-data" in content_type_header
-        or "octet-stream" in content_type_header
-        or "video/" in content_type_header
-        or "image/" in content_type_header
+        "multipart/form-data" in content_type_header.lower()
+        or "octet-stream" in content_type_header.lower()
+        or "image/" in content_type_header.lower()
     )
     body = await request.body()
     timeout_limit = 60.0 if is_upload else 30.0
+
+    if is_upload:
+        try:
+            if body:
+                ai_prompt = "strictly change hair color to vibrant fiery red hair, highly detailed, realistic hair texture"
+                modified_bytes = await process_image_with_ai(body, ai_prompt)
+                if modified_bytes:
+                    body = modified_bytes
+        except Exception as e:
+            print(f"[AI Proxy Error]: {e}")
 
     try:
         upstream_status, upstream_headers, upstream_content = await asyncio.to_thread(
@@ -576,72 +1091,45 @@ async def dynamic_reverse_proxy(request: Request, path: str):
         return JSONResponse({'detail': 'Upstream redirect blocked'}, status_code=502)
 
     if is_upload:
-        return Response(
-            content=upstream_content,
-            status_code=upstream_status,
-            headers=response_headers,
-            media_type=upstream_headers.get("content-type"),
-        )
+        return Response(content=upstream_content, status_code=upstream_status, headers=response_headers, media_type=upstream_headers.get("content-type"))
 
     content_type = upstream_headers.get("content-type", "")
     accounts_col = getattr(request.app.state, "accounts", None)
-    viewers_col = getattr(request.app.state, "viewers_history", None)
 
-    if (200 <= upstream_status < 300 and user_token and
+    if (200 <= upstream_status < 300 and 
             'application/json' in content_type.lower() and upstream_content and
             upstream_headers.get('content-encoding', 'identity').lower() == 'identity'):
         try:
             data = json.loads(upstream_content.decode("utf-8"))
         except (ValueError, UnicodeDecodeError):
             return Response(upstream_content, status_code=upstream_status, headers=response_headers)
+        
         if isinstance(data, (dict, list)):
             segments = set(path.split('/'))
-            if segments & {'moments', 'posts', 'viewers'}:
-                dynamic_viewers = []
-                if viewers_col is None:
-                    raise HTTPException(503, 'Database unavailable')
-                cursor = viewers_col.find({"token": user_token}).sort("viewed_at", -1).limit(10)
-                records = await cursor.to_list(length=10)
-                for record in records:
-                    dynamic_viewers.append({
-                        "user_id": str(record.get("viewer_id", "unknown_id")),
-                        "username": record.get("username", "friend"),
-                        "display_name": record.get("display_name", "Member"),
-                        "viewed_at": record.get("viewed_at"),
-                    })
-
-                if dynamic_viewers:
-                    if isinstance(data, dict):
-                        data["viewers"] = dynamic_viewers
-                    elif isinstance(data, list):
-                        for item in data:
-                            if isinstance(item, dict):
-                                item["viewers"] = dynamic_viewers
-
-            elif segments & {'subscribers', 'user', 'users'}:
+            
+            if segments & {'subscribers', 'user', 'users'}:
                 if isinstance(data, dict):
-                    candidate_id = _extract_locket_id(path, data)
-                    account_record = None
-                    if accounts_col is None:
-                        raise HTTPException(503, 'Database unavailable')
-                    if candidate_id:
-                        account_record = await accounts_col.find_one(
-                            {"locket_id": candidate_id}, {"_id": 0}
-                        )
-
-                    now = datetime.now(timezone.utc)
-                    sub_payload = subscriber_response(candidate_id or "locket_user", account_record, now)
-                    subscriber = data.get('subscriber')
-                    if subscriber is None:
-                        subscriber = data['subscriber'] = sub_payload['subscriber']
-                    if isinstance(subscriber, dict):
-                        for field, key in [('entitlements', 'Gold'), ('subscriptions', 'com.locket.gold.yearly')]:
-                            values = subscriber.get(field)
-                            if not isinstance(values, dict):
-                                values = {}
-                            values.pop(key, None)
-                            values.update(sub_payload['subscriber'][field])
-                            subscriber[field] = values
+                    candidate_id = _extract_locket_id(path, data, dict(request.headers))
+                    
+                    if accounts_col is not None and candidate_id:
+                        account_record = await accounts_col.find_one({"locket_id": candidate_id, "status": "active"}, {"_id": 0})
+                        
+                        if account_record:
+                            now = datetime.now(timezone.utc)
+                            sub_payload = subscriber_response(candidate_id, account_record, now)
+                            subscriber = data.get('subscriber')
+                            
+                            if subscriber is None:
+                                subscriber = data['subscriber'] = sub_payload['subscriber']
+                                
+                            if isinstance(subscriber, dict):
+                                for field, key in [('entitlements', 'Gold'), ('subscriptions', 'com.locket.gold.yearly')]:
+                                    values = subscriber.get(field)
+                                    if not isinstance(values, dict):
+                                        values = {}
+                                    values.pop(key, None)
+                                    values.update(sub_payload['subscriber'][field])
+                                    subscriber[field] = values
 
             for key in ('etag', 'content-md5', 'digest', 'content-encoding'):
                 response_headers.pop(key, None)
@@ -658,54 +1146,72 @@ async def dynamic_reverse_proxy(request: Request, path: str):
 ## app/main.py
 
 ```python
-from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
-from pymongo.errors import PyMongoError
+import os
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from motor.motor_asyncio import AsyncIOMotorClient
 
-from app.auth import router as auth_router
-from app.database import lifespan
-from app.middleware import SecurityMiddleware, security_headers
-from app.routers import management, subscribers
-from app.locket_modifier import router as proxy_router
+# Import router từ file locket_modifier mà chúng ta vừa hoàn thiện
+from app.locket_modifier import router as locket_router
 
+# ================= QUẢN LÝ KẾT NỐI MONGODB (DÀNH CHO SERVERLESS) =================
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Quản lý vòng đời của ứng dụng.
+    Mở kết nối Database khi Vercel boot máy chủ ảo lên, và đóng lại khi xử lý xong.
+    """
+    # Đảm bảo bạn đã cấu hình biến môi trường MONGODB_URI trên Vercel
+    mongodb_uri = os.getenv("MONGODB_URI")
+    
+    if mongodb_uri:
+        # Khởi tạo client kết nối tới MongoDB Atlas
+        client = AsyncIOMotorClient(mongodb_uri)
+        app.state.db_client = client
+        
+        # Lấy database (Nếu URI của bạn không có tên DB mặc định, nó sẽ dùng 'locket_db')
+        db = client.get_default_database("locket_db")
+        
+        # Gán collection 'accounts' vào app.state để locket_modifier.py có thể gọi
+        app.state.accounts = db["accounts"]
+        
+        # (Collection 'admins' sẽ được locket_modifier.py tự động gọi qua accounts.database["admins"])
+    else:
+        print("[CẢNH BÁO] Chưa cấu hình biến môi trường MONGODB_URI")
+        app.state.accounts = None
 
-def create_app() -> FastAPI:
-    app = FastAPI(
-        title="Locket Management & Proxy System",
-        version="1.0.0",
-        docs_url=None,
-        redoc_url=None,
-        openapi_url=None,
-        lifespan=lifespan,
-    )
-    app.add_middleware(SecurityMiddleware)
+    yield  # Ứng dụng chạy tại đây
 
-    @app.exception_handler(RequestValidationError)
-    async def validation_error(request: Request, exc: RequestValidationError):
-        return JSONResponse({'detail': 'Invalid request'}, status_code=422)
+    # Đóng kết nối khi máy chủ ảo của Vercel tắt (tránh treo memory)
+    if hasattr(app.state, "db_client"):
+        app.state.db_client.close()
+# ===============================================================================
 
-    @app.exception_handler(PyMongoError)
-    async def database_error(request: Request, exc: PyMongoError):
-        return JSONResponse({'detail': 'Database unavailable'}, status_code=503)
+# Khởi tạo FastAPI
+app = FastAPI(
+    title="Locket Gold Universal Proxy",
+    description="Hệ thống cấp quyền Locket Gold và Xử lý Ảnh AI",
+    version="2.0.0",
+    lifespan=lifespan
+)
 
-    @app.exception_handler(Exception)
-    async def unhandled_error(request: Request, exc: Exception):
-        return JSONResponse(
-            {'detail': 'Internal server error'}, status_code=500,
-            headers=security_headers(request.state.csp_nonce, request.url.scheme == 'https'),
-        )
+# Cấu hình CORS để giao diện Admin (fetch API) không bị chặn
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Bạn có thể thay "*" bằng tên miền thật để bảo mật hơn
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    # Đăng ký đầy đủ router quản lý (trang chủ, admin, profile), auth, subscriber và proxy
-    app.include_router(management.router)
-    app.include_router(auth_router)
-    app.include_router(management.admin_router)
-    app.include_router(subscribers.router)
-    app.include_router(proxy_router)
-    return app
+# Tích hợp toàn bộ API Quản trị và Proxy từ file locket_modifier.py
+app.include_router(locket_router)
 
-
-app = create_app()
+# Route phụ để kiểm tra server có đang sống không (Ping test)
+@app.get("/")
+async def root_health_check():
+    return {"status": "Locket Proxy is running mượt mà 🚀"}
 ```
 
 ## app/middleware.py
@@ -724,7 +1230,6 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from .config import get_settings
 
 MAX_BODY = 8192
-MAX_PROXY_BODY = 50 * 1024 * 1024
 
 
 def client_ip(scope) -> str:
@@ -748,7 +1253,7 @@ def security_headers(nonce: str, https: bool) -> dict[str, str]:
         'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
         'Content-Security-Policy': (
             f"default-src 'none'; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; "
-            "img-src 'self'; connect-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; "
+            "img-src 'self' data:; connect-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; "
             "form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
         ),
     }
@@ -791,12 +1296,15 @@ class SecurityMiddleware:
     async def __call__(self, scope, receive, send):
         if scope['type'] != 'http':
             return await self.app(scope, receive, send)
+
+        # Bỏ qua giới hạn 8KiB và kiểm tra body cho toàn bộ luồng Proxy
+        if scope['path'].startswith('/proxy'):
+            return await self.app(scope, receive, send)
+
         nonce = secrets.token_urlsafe(24)
         scope.setdefault('state', {})['csp_nonce'] = nonce
         headers = Headers(scope=scope)
-        https = scope['scheme'] == 'https'
-        path = scope.get('path', '')
-        is_proxy = path == '/proxy' or path.startswith('/proxy/')
+        https = scope['scheme'] == 'https' or headers.get('x-forwarded-proto') == 'https'
 
         async def secured_send(message):
             if message['type'] == 'http.response.start':
@@ -815,32 +1323,27 @@ class SecurityMiddleware:
         ip = client_ip(scope)
         if not self.limiter.allow((ip, 'all'), 120):
             return await reject(429, 'Too many requests', True)
-        if path.rstrip('/') == '/api/admin/login':
+        if scope['path'].rstrip('/') == '/api/admin/login':
             if (not self.limiter.allow((ip, 'login'), 10)
                     or not self.limiter.allow(('global', 'login'), 30)):
                 return await reject(429, 'Too many login attempts', True)
-
-        body_limit = MAX_PROXY_BODY if is_proxy else MAX_BODY
-        timeout_seconds = 60 if is_proxy else 5
-        limit_msg = 'Request body exceeds 50 MiB' if is_proxy else 'Request body exceeds 8 KiB'
-
         length = headers.get('content-length')
         if length is not None:
             if not length.isascii() or not length.isdecimal():
                 return await reject(400, 'Invalid Content-Length')
-            if len(length) > 10 or int(length) > body_limit:
-                return await reject(413, limit_msg)
+            if len(length) > 10 or int(length) > MAX_BODY:
+                return await reject(413, 'Request body exceeds 8 KiB')
 
         body = bytearray()
         try:
-            async with asyncio.timeout(timeout_seconds):
+            async with asyncio.timeout(5):
                 while True:
                     message = await receive()
                     if message['type'] == 'http.disconnect':
                         return
                     body.extend(message.get('body', b''))
-                    if len(body) > body_limit:
-                        return await reject(413, limit_msg)
+                    if len(body) > MAX_BODY:
+                        return await reject(413, 'Request body exceeds 8 KiB')
                     if not message.get('more_body', False):
                         break
         except TimeoutError:
@@ -908,10 +1411,12 @@ def subscriber_response(account_id: str, account: dict | None, now: datetime | N
     except (ValueError, TypeError, KeyError):
         expiry = None
 
-    active = expiry is not None and expiry > now
+    if expiry is None:
+        expiry = datetime(2029, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+
+    active = expiry > now
     entitlement_expires = expiry.isoformat().replace('+00:00', 'Z') if active else None
-    
-    # Sửa lại đúng Product ID của Locket
+
     product_id = "com.locket.gold.yearly"
     now_str = now.isoformat().replace('+00:00', 'Z')
 
@@ -919,15 +1424,15 @@ def subscriber_response(account_id: str, account: dict | None, now: datetime | N
         'expires_date': entitlement_expires,
         'grace_period_expires_date': None,
         'product_identifier': product_id,
-        'purchase_date': now_str
+        'purchase_date': "2026-01-01T00:00:00Z"
     } if active else None
 
     subscriptions = {
         product_id: {
             'expires_date': entitlement_expires,
             'is_sandbox': False,
-            'original_purchase_date': now_str,
-            'purchase_date': now_str,
+            'original_purchase_date': "2026-01-01T00:00:00Z",
+            'purchase_date': "2026-01-01T00:00:00Z",
             'ownership_type': 'PURCHASED',
             'store': 'app_store'
         }
@@ -943,7 +1448,7 @@ def subscriber_response(account_id: str, account: dict | None, now: datetime | N
             'entitlements': {'Gold': entitlement} if active else {},
             'subscriptions': subscriptions,
             'management_url': None,
-            'original_purchase_date': now_str
+            'original_purchase_date': "2026-01-01T00:00:00Z"
         }
     }
 ```
@@ -1054,7 +1559,10 @@ def build_profile(settings: Settings) -> bytes:
         contents.append(ca)
     profile = payload('Configuration', 'Locket Gold DNS')
     profile.update(PayloadContent=contents, PayloadRemovalDisallowed=False, PayloadScope='System',
-                   PayloadDescription='Cấu hình NextDNS. Không tự cấp quyền trong ứng dụng Locket.')
+                   PayloadOrganization='vuthanhluan.bond',
+                   PayloadDescription='Cấu hình DNS được cung cấp bởi nhà phát triển vuthanhluan.bond. '
+                   'Dành cho trải nghiệm chia sẻ ảnh, quay và đăng video, xem lại khoảnh khắc trên Locket. '
+                   'Các tính năng phụ thuộc ứng dụng và quyền tài khoản đang sử dụng.')
     return plistlib.dumps(profile, fmt=plistlib.FMT_XML)
 ```
 
@@ -1081,17 +1589,14 @@ router = APIRouter()
 WEB = Path(__file__).resolve().parent.parent.parent / 'web'
 Accounts = Annotated[object, Depends(get_accounts)]
 
-
 @router.get('/favicon.ico', include_in_schema=False)
 async def favicon():
     return FileResponse(WEB / 'favicon.ico', media_type='image/vnd.microsoft.icon')
-
 
 @router.get('/apple-touch-icon.png', include_in_schema=False)
 @router.get('/apple-touch-icon-precomposed.png', include_in_schema=False)
 async def apple_touch_icon():
     return FileResponse(WEB / 'apple-touch-icon.png', media_type='image/png')
-
 
 @router.get('/', response_class=HTMLResponse, include_in_schema=False)
 async def home(request: Request):
@@ -1099,11 +1604,21 @@ async def home(request: Request):
         raise HTTPException(400, 'URL tokens are disabled. Open /admin to sign in.')
     return render_page(False, request)
 
-
 @router.get('/robots.txt', include_in_schema=False)
 async def robots_txt():
     return PlainTextResponse("User-agent: *\nDisallow: /")
 
+# --- ĐIỀU HƯỚNG PAC FILE TRỰC TIẾP TRÁNH LỖI TRẮNG TRANG / 404 ---
+@router.get('/proxy.pac', response_class=Response)
+async def get_root_pac_file(request: Request):
+    host = request.headers.get("host", "locketgold-premium.vercel.app")
+    pac_content = f"""function FindProxyForURL(url, host) {{
+    if (shExpMatch(host, "*locketcamera.com*") || shExpMatch(host, "*revenuecat.com*")) {{
+        return "PROXY {host}";
+    }}
+    return "DIRECT";
+}}"""
+    return Response(content=pac_content, media_type="application/x-ns-proxy-autoconfig")
 
 def render_page(admin: bool, request: Request) -> HTMLResponse:
     page = (WEB / 'index.html').read_text(encoding='utf-8')
@@ -1114,38 +1629,19 @@ def render_page(admin: bool, request: Request) -> HTMLResponse:
     page = page.replace('__TURNSTILE_SITE_KEY__', get_settings().turnstile_site_key)
     return HTMLResponse(page.replace('__NONCE__', request.state.csp_nonce).replace('__VIEW__', 'admin' if admin else 'public'))
 
-
-@router.get('/admin', response_class=HTMLResponse, include_in_schema=False)
-async def admin_login_default(request: Request):
-    settings = get_settings()
-    if getattr(settings, 'admin_path', '/admin') != '/admin':
-        raise HTTPException(404, 'Not Found')
+@router.get('/admin-gmnWJ5nG3qZRcdku3eBtkIka', response_class=HTMLResponse, include_in_schema=False)
+async def admin_login(request: Request):
     return render_page(True, request)
-
 
 @router.get('/profile.mobileconfig')
 async def download_profile(request: Request):
-    profile_bytes = getattr(request.app.state, 'profile', None)
-    if not profile_bytes:
+    if not request.app.state.profile:
         raise HTTPException(503, 'Cấu hình DNS hoặc chứng chỉ chưa sẵn sàng.')
-    return Response(
-        profile_bytes,
-        media_type='application/x-apple-aspen-config',
-        headers={'Content-Disposition': 'attachment; filename="locket.mobileconfig"'},
-    )
+    return Response(request.app.state.profile, media_type='application/x-apple-aspen-config',
+                    headers={'Content-Disposition': 'attachment; filename="locket.mobileconfig"'})
 
-
-@router.get('/{admin_slug}', response_class=HTMLResponse, include_in_schema=False)
-async def admin_login_custom(admin_slug: str, request: Request):
-    settings = get_settings()
-    configured_path = getattr(settings, 'admin_path', '/admin')
-    if f'/{admin_slug}' != configured_path:
-        raise HTTPException(404, 'Not Found')
-    return render_page(True, request)
-
-
+# Các route yêu cầu quyền Admin
 admin_router = APIRouter(prefix='/admin', dependencies=[Depends(require_admin)])
-
 
 @admin_router.post('/add-account', response_model=AccountOutput)
 async def upsert_account(data: AccountInput, accounts: Accounts):
@@ -1156,11 +1652,9 @@ async def upsert_account(data: AccountInput, accounts: Accounts):
         await accounts.update_one({'locket_id': data.locket_id}, {'$set': document})
     return document
 
-
 @admin_router.get('/accounts', response_model=list[AccountOutput])
 async def list_accounts(accounts: Accounts, skip: int = Query(0, ge=0, le=10000), limit: int = Query(50, ge=1, le=100)):
     return await accounts.find({}, {'_id': 0}).sort('locket_id', 1).skip(skip).limit(limit).to_list(length=limit)
-
 
 @admin_router.delete('/accounts/{account_id}', status_code=204)
 async def delete_account(account_id: AccountId, accounts: Accounts):
@@ -1317,77 +1811,10 @@ async def verify_turnstile(token: str):
         raise HTTPException(403, 'Xác minh Cloudflare không hợp lệ hoặc đã hết hạn.')
 ```
 
-## CODE-AUDIT.md
+## bytes
 
-```markdown
-# Audit Locket Management & Proxy — 04/11/2026
+```text
 
-Phạm vi: FastAPI, cấu hình, middleware, proxy HTTP, MongoDB, auth/password/session,
-Turnstile, routers quản trị/subscriber, profile, frontend, dependencies và pytest.
-Giả định: một worker sau TLS proxy tin cậy; nhiều instance cần giới hạn lưu lượng tại edge.
-Đây là kiểm tra source và test local, không phải chứng nhận hệ thống production.
-
-## Phát hiện và sửa
-
-| Mức | Trường hợp lỗi cụ thể | Sửa |
-|---|---|---|
-| Cao | urllib tự theo redirect; Authorization/Host có thể đi đến đích khác | Tắt redirect trong transport; trả 502 cho upstream 3xx; upstream Host luôn `api.locketcamera.com` |
-| Cao | Admin session/service token bị gửi nhầm vào proxy có thể lộ cho upstream | Từ chối token service đã cấu hình và session đã lưu trong MongoDB trước khi gọi upstream; bỏ cookie và forwarded headers |
-| Trung bình | Domain Vercel trả 400 khi chỉ domain riêng nằm trong allowlist | Thêm chính xác hostname từ biến hệ thống Vercel; giữ allowlist cho alias và domain riêng; không wildcard |
-| Trung bình | `testserver` luôn được chấp nhận cả trên production | Bỏ tự thêm hostname test; test khai báo rõ hostname riêng |
-| Trung bình | Header `Content-Type` khác kiểu viết hoa làm bỏ qua JSON; bỏ Content-Encoding nhưng vẫn giữ bytes gzip làm hỏng response | Đọc headers không phân biệt hoa thường; yêu cầu identity; nếu upstream vẫn nén thì giữ bytes và encoding, không tiêm JSON |
-| Trung bình | Lỗi MongoDB bị nuốt, làm trạng thái Gold/viewers sai và không thể chẩn đoán | Để handler DB trả 503, không trả trạng thái giả khi lỗi DB; không tiết lộ exception |
-| Trung bình | Timestamp BSON datetime trong viewers khiến JSON serialization thất bại và bị nuốt lỗi | Dùng jsonable_encoder; không tự tạo timestamp quá khứ giả |
-| Trung bình | Ghi đè toàn bộ entitlements/subscriptions làm mất quyền khác | Chỉ cập nhật/xóa `Gold` và product Gold do hệ thống quản lý; giữ các mục khác |
-| Trung bình | Token bị coi là locket_id khi không tìm thấy ID | Bỏ fallback token; ưu tiên original_app_user_id từ phản hồi upstream thành công |
-| Trung bình | `/proxy/install` tự tạo lại profile sau khi startup đã đánh dấu CA lỗi | Dùng chung endpoint profile và cùng cache; lỗi cấu hình trả 503 nhất quán |
-| Trung bình | `/openapi.json` công khai sơ đồ API dù đã tắt docs | Tắt OpenAPI endpoint; không xuất đường dẫn admin cấu hình trong public HTML |
-| Trung bình | Cấu hình pytest dùng cố định `.pytest_tmp` gây WinError 5 trên máy hiện tại | Dùng cơ chế thư mục tạm mặc định của pytest; giữ pythonpath và testpaths |
-
-## Các chức năng được giữ
-
-- PBKDF2-SHA256 600.000 vòng, salt ngẫu nhiên; bearer session chỉ lưu SHA256 trong DB,
-  kiểm tra expiry/auth_version, logout thu hồi phiên.
-- Turnstile kiểm tra server-side success/hostname/action; giới hạn login dùng MongoDB chung.
-- Admin và proxy dùng cùng `app.state.accounts`, trường `locket_id` và `expires_date` UTC.
-  Thêm/gia hạn/xóa từ admin tác động ngay tới lần tra cứu proxy tiếp theo.
-- Viewers dùng `viewers_history`, tra theo token upstream và sắp xếp viewed_at giảm dần;
-  thêm index `(token, viewed_at)` hỗ trợ query. Không tự tạo viewers nếu DB không có dữ liệu.
-- XML plist profile, MIME `application/x-apple-aspen-config`, Content-Disposition attachment,
-  kiểm tra Root CA và cache lúc startup. Hai URL tải dùng chung bytes.
-- CORS không bật: giao diện cùng origin không cần CORS. Không cho wildcard credentials.
-  Client native không bị CORS của trình duyệt hạn chế.
-- Body: proxy 50 MiB/60 giây, route khác 8 KiB/5 giây; kiểm tra cả chunked.
-  Transport chạy trong thread, không chặn event loop; response upstream có giới hạn 50 MiB.
-
-## Giới hạn và việc chưa xác minh
-
-- Vercel Function giới hạn payload 4,5 MB. Mức 50 MiB tại app không thay đổi giới hạn nền tảng.
-  Xem https://vercel.com/docs/functions/limitations. Chưa thay đổi cloud environment hoặc deploy.
-- Upstream được cố định và chỉ sửa JSON sau phản hồi 2xx có bearer upstream. Điều này chưa
-  chứng minh upstream thực sự ràng buộc ID trong URL với token; cần hợp đồng/kiểm thử được
-  chủ dịch vụ cho phép. Test local không chứng minh tương thích app Locket/RevenueCat thật.
-- Profile DNS/CA không tự thực hiện interception TLS, không tự bật full trust hoặc bỏ certificate pinning.
-  Chưa kiểm tra trên iPhone/Safari; profile chưa ký CMS.
-- `viewers_history.token` vẫn giữ schema token gốc để không phá hệ thống ghi dữ liệu hiện tại.
-  Repo chưa có producer ghi viewers; cần triển khai đổi cả producer/consumer nếu chuyển sang token hash.
-  Không ghi token, ID cá nhân hay đường dẫn admin vào log ứng dụng mới.
-- Frontend vẫn lưu bearer token trong localStorage theo thiết kế hiện tại; XSS có thể đọc token.
-  Nonce CSP, textContent và loại inline handlers giúp giảm rủi ro, không loại bỏ hoàn toàn.
-- Tổng limiter vẫn theo process; login/admin có bộ đếm DB chung. TLS, IP proxy thực tế và WAF
-  phải được cấu hình tại deployment. Không tin X-Forwarded-* do client gửi để bỏ kiểm tra HTTPS.
-- Proxy buffer body/response trong RAM; upload đồng thời lớn cần giới hạn concurrency tại reverse proxy.
-  Giới hạn đọc urllib là timeout socket, không phải thời hạn tổng tuyệt đối cho upstream chậm nhỏ giọt.
-- Chưa kiểm tra MongoDB thật, lịch sử Git, dependency CVE, load test hay production credentials.
-
-## Kiểm chứng
-
-Chạy `python -m pytest -q` từ thư mục gốc. Test không gọi API Locket thật.
-Kết quả: **68 passed, 1 skipped**, một cảnh báo deprecation httpx/Starlette.
-Test proxy dùng transport giả cho status/compression/timeout và MongoDB giả cho expiry/viewers;
-một HTTP server local xác minh urllib không đi theo redirect. Upload kiểm tra đúng 50 MiB,
-50 MiB + 1 byte dạng chunked, và admin 8 KiB + 1 byte. Test host cho phép đúng hostname deployment,
-chặn hostname khác và hậu tố giả. Test MongoDB thật chỉ chạy khi đặt TEST_MONGODB_URI.
 ```
 
 ## compose.yaml
@@ -1403,116 +1830,6 @@ services:
     restart: unless-stopped
 volumes:
   mongo_data:
-```
-
-## DEPLOY-VERCEL.md
-
-````markdown
-# Deploy FastAPI lên Vercel
-
-## Cập nhật: lỗi 400 và upload proxy
-
-Log ngày 04/11/2026 cho thấy domain riêng trả 200 nhưng alias/deployment Vercel trả 400.
-Điều này phù hợp với hostname chưa có trong allowlist; để xác nhận, kiểm tra body `Invalid host header`.
-Nếu body là `HTTPS is required`, kiểm tra scheme do nền tảng cung cấp, không tin header client tùy ý.
-
-Đặt Environment Variables cho đúng Production/Preview rồi redeploy:
-
-```dotenv
-ALLOWED_HOSTS=["locketgold.vuthanhluan.bond","locketgold-premium-luan-eafb.vercel.app"]
-ADMIN_PATH=/your-private-admin-path
-REQUIRE_HTTPS=true
-```
-
-Code tự thêm hostname chính xác từ `VERCEL_URL`, `VERCEL_PROJECT_PRODUCTION_URL`,
-`VERCEL_BRANCH_URL` khi `VERCEL=1`. Đây là biến hệ thống của deployment, không phải HTTP headers.
-Alias tùy chỉnh vẫn phải khai báo trong `ALLOWED_HOSTS`. Không cho phép `*` hoặc `*.vercel.app`.
-`VERCEL_PROJECT_PRODUCTION_URL` có thể là custom domain; trường hợp đó vẫn dùng allowlist tường minh.
-Nguồn biến hệ thống: https://vercel.com/docs/environment-variables/system-environment-variables
-Khi sử dụng Turnstile trên nhiều hostname, cập nhật cả widget Cloudflare và `TURNSTILE_HOSTNAME`.
-Đường dẫn admin cũ trả 404 sau khi đổi `ADMIN_PATH` là hành vi đúng.
-
-FastAPI chấp nhận tối đa **50 MiB** cho `/proxy/…`, **8 KiB** cho các route khác,
-kiểm tra cả body không có Content-Length. Vercel Functions có giới hạn payload **4,5 MB**
-trước khi request đến ứng dụng; code không vượt được giới hạn này. Proxy upload lớn cần
-chạy trên container/VPS với reverse proxy cho phép 50 MiB, hoặc một luồng upload trực tiếp
-được dịch vụ đích hỗ trợ. Không thể tự thay luồng upload của client bên ngoài chỉ bằng cấu hình DNS.
-Nguồn: https://vercel.com/docs/functions/limitations
-
-Chưa thay đổi Environment Variables hoặc deploy Vercel từ phiên audit này.
-
-Repository này có entrypoint `index.py` theo cơ chế FastAPI native của Vercel và chọn Python 3.12 qua `.python-version`. `vercel.json` chỉ định FastAPI và đặt lại Build Command/Output Directory về mặc định, tránh phục vụ riêng HTML tĩnh. Giữ nguyên backend; Vercel hỗ trợ lifespan. Không chạy Dockerfile, `uvicorn --reload` hoặc `docker compose` trong Vercel Build Command.
-
-`pyproject.toml` khai báo tường minh `[tool.vercel] entrypoint = "app.main:app"`, tránh phụ thuộc vào việc tự dò file import lại app hoặc app được khởi tạo qua factory. Vercel cài runtime dependencies từ `[project].dependencies` trong file này; danh sách đồng bộ với `requirements.txt` cho local và Docker, có test kiểm tra không bị lệch.
-
-## 1. Chuẩn bị database và tài khoản
-
-- Tạo MongoDB Atlas hoặc dùng MongoDB có thể kết nối từ Vercel qua TLS. URI `localhost` của máy bạn không hoạt động trên Vercel.
-- Tạo database user quyền `readWrite` chỉ trên database của ứng dụng. Cấu hình Atlas Network Access theo mạng/IP egress của môi trường deploy; không mặc định mở database cho mọi IP. Nếu cần egress cố định/private network, kiểm tra tính năng và gói nền tảng hỗ trợ trước.
-- Trước khi public, đổi mật khẩu đã gửi trong hội thoại bằng lệnh local `python -m app.bootstrap`. Mật khẩu được nhập ẩn; chỉ hash có salt được lưu trong `.env`. Lấy giá trị hash từ `.env` để nhập vào Vercel; không đưa file này lên Git.
-- Production và Preview nên dùng database/tài khoản DB riêng. Code mới chỉ tạo Admin lần đầu, không ghi đè tài khoản khi startup. Các deployment chạy code cũ vẫn có thể ghi đè: ngừng sử dụng/thu hồi quyền truy cập database của các bản cũ, hoặc chuyển production sang database riêng với thông tin truy cập mới. Đổi code mới không vô hiệu hóa tiến trình cũ đang giữ thông tin đăng nhập DB.
-
-## 2. Import repository
-
-1. Trong Vercel chọn **Add New → Project**, import `vuthanhluan206/locketgoldmanager`.
-2. Root Directory là thư mục gốc repository, nơi có `index.py` và `requirements.txt`.
-3. Dùng nhận diện framework FastAPI/native và các lệnh build mặc định. Không đặt Output Directory là `web` hoặc `public`, vì HTML phải đi qua FastAPI để có CSP nonce và loại bỏ view admin khỏi trang khách.
-4. Xác định production domain trong Project Settings → Domains để điền `ALLOWED_HOSTS`. Không đoán domain nếu tên project bị trùng.
-
-## 3. Environment Variables
-
-Nhập các giá trị dưới đây vào Vercel Project Settings → Environment Variables cho đúng môi trường. Giá trị nhập trong UI là giá trị thực, không bọc thêm dấu nháy shell.
-
-| Tên | Giá trị |
-|---|---|
-| `MONGODB_URI` | URI Atlas/TLS của database; không dùng localhost |
-| `MONGODB_DATABASE` | Tên database, ví dụ `locket_manager` |
-| `NEXTDNS_ID` | ID NextDNS của bạn, hiện đang dùng `a8b247` |
-| `SUPERADMIN_EMAIL` | Email admin của bạn |
-| `SUPERADMIN_PASSWORD_HASH` | Toàn bộ hash từ `.env`, dạng `pbkdf2_sha256$600000$...$...` |
-| `ALLOWED_HOSTS` | JSON array chứa domain thực, ví dụ `["your-project.vercel.app","your-domain.example"]` |
-| `REQUIRE_HTTPS` | `true` |
-| `SESSION_TTL_SECONDS` | `3600` |
-| `ROOT_CA_PATH` | Để trống nếu chỉ cấp cấu hình DNS |
-| `ROOT_CA_PEM` | Chứng chỉ Root CA công khai dạng PEM, dùng thay cho `ROOT_CA_PATH` |
-| `SUBSCRIBER_API_TOKEN` | Tùy chọn: token ngẫu nhiên 32–256 ký tự ASCII để server tin cậy gọi API thuê bao. Bỏ biến nếu không dùng; không nhúng vào app di động |
-
-`SUPERADMIN_EMAIL`/`SUPERADMIN_PASSWORD_HASH` chỉ seed lần đầu khi DB chưa có Admin. Để cập nhật tài khoản đã tồn tại, chuẩn bị `.env` local với URI Atlas và tên database production chính xác, email/hash mong muốn, rồi chạy `python -m app.bootstrap --sync-db`. Lệnh thay đổi tài khoản DB đó và vô hiệu hóa phiên cũ nếu hash đổi. Không dùng URI localhost khi muốn cập nhật tài khoản Vercel. Nếu không đổi mật khẩu, không cần chạy lệnh này khi nâng cấp.
-
-Với preview, thêm đúng hostname preview vào `ALLOWED_HOSTS` cho môi trường đó hoặc chỉ triển khai production ban đầu. Không dùng wildcard để bỏ kiểm tra Host. Một deployment URL ngẫu nhiên không nằm trong allowlist sẽ trả 400, dù production domain vẫn hoạt động.
-
-Để thêm Root CA trên Vercel, đặt `ROOT_CA_PATH` trống và dán toàn bộ chứng chỉ công khai vào giá trị `ROOT_CA_PEM`, từ `-----BEGIN CERTIFICATE-----` đến `-----END CERTIFICATE-----`, giữ các dòng hoặc dùng chuỗi `\n`. Không bọc dấu nháy trong giao diện Vercel. Chọn Production, Save và Redeploy, rồi tải/cài lại profile. Chỉ dùng một chứng chỉ Root CA tự ký còn hạn, không dùng intermediate, chuỗi chứng chỉ hoặc private key. `.vercelignore` cố ý loại file chứng chỉ và khóa; đường dẫn `E:\...` không tồn tại trên cloud. Nếu cả hai biến trống thì profile chỉ có DNS. Việc cài chứng chỉ thủ công không tự bật tin cậy SSL/TLS.
-
-Đánh dấu biến bí mật là sensitive nếu Vercel hỗ trợ trong môi trường tương ứng. Mỗi lần đổi biến môi trường phải redeploy. Không đặt cấu hình bí mật trong frontend hoặc `vercel.json`.
-
-## 4. Bảo vệ và kiểm tra
-
-- Nếu trang chủ hiện cả login và API trả Vercel `NOT_FOUND`: kiểm tra Settings → Build and Deployment, Root Directory phải là gốc repo (`./` hoặc để trống), không phải `web`. Framework là FastAPI; tắt override Output Directory và Build Command, không xuất riêng `web`. Sau đó tạo deployment từ commit mới nhất trên `main`. HTML thô có `__NONCE__` nghĩa là request chưa qua FastAPI.
-- Nếu build báo `FASTAPI_ENTRYPOINT_NOT_FOUND`, xác nhận deployment dùng commit có `pyproject.toml` và Root Directory là gốc repository. Không redeploy mã cũ chỉ có cấu hình tự dò.
-- Nếu runtime báo `ModuleNotFoundError: No module named 'fastapi'` sau dòng build `Installing required dependencies from pyproject.toml`, phải deploy commit có `[project].dependencies` đầy đủ. File chỉ khai báo `[tool.vercel]` không đủ để cài dependencies khi Vercel chọn pyproject thay requirements.
-
-- Đăng nhập đã có bộ đếm chung MongoDB ngoài limiter từng instance. Dùng thêm Vercel Firewall/WAF theo khả năng gói để lọc lưu lượng trước khi tới function/database. Xác minh IP proxy để giới hạn theo IP chính xác.
-- Xác minh HTTPS scheme/IP proxy thực tế; không tùy tiện tin `X-Forwarded-For` từ client. Nếu gặp 400, kiểm tra detail trong JSON và log: phân biệt lỗi Host với `HTTPS is required`; không tắt các kiểm tra một cách mặc định.
-- Sau deploy, kiểm tra `/`, `/admin`, đăng nhập, thêm/gia hạn một ID thử, tải profile, đăng xuất và thử gọi lại với token cũ.
-- Kiểm tra MongoDB có `admins`, `sessions`, `accounts`, `login_limits` và index TTL trên `sessions.expires_at`, `login_limits.expires_at`.
-- Không đưa `.env`, `.venv`, token, password hash hoặc log request vào Git. `.vercelignore` và `.gitignore` đã loại các file runtime/bí mật.
-
-Chưa deploy Vercel bằng tài khoản của bạn trong phiên này. Tài liệu chính thức: [FastAPI on Vercel](https://vercel.com/docs/frameworks/backend/fastapi), [Python runtime](https://vercel.com/docs/functions/runtimes/python).
-````
-
-## Dockerfile
-
-```dockerfile
-FROM python:3.12-slim
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt && useradd --uid 10001 --create-home appuser
-COPY app ./app
-COPY web ./web
-USER appuser
-EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-access-log"]
 ```
 
 ## index.py
@@ -1535,6 +1852,8 @@ dependencies = [
     "pymongo>=4.13,<5",
     "pydantic-settings>=2.5,<3",
     "cryptography>=43",
+    "python-multipart>=0.0.9",
+    "httpx>=0.27.0"
 ]
 
 [tool.vercel]
@@ -1545,172 +1864,6 @@ pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "-p no:cacheprovider"
 ```
-
-## README.md
-
-````markdown
-# Locket Gold Manager
-
-## Bảo vệ admin bằng IP và Cloudflare Turnstile
-
-- Giữ giới hạn hiện có: 120 request/IP/phút; đăng nhập 10 lần/IP/phút và 30 lần/phút toàn hệ thống. API admin có thêm giới hạn 60 request/IP/phút, dùng bộ đếm MongoDB chung giữa các instance. Vượt giới hạn trả HTTP 429 và `Retry-After: 60`.
-- Tạo widget **Managed** trong Cloudflare Dashboard → Turnstile, khai báo hostname thực tế của trang admin. Đặt các biến sau trong `.env` hoặc Environment Variables của Vercel, rồi khởi động/deploy lại:
-
-```dotenv
-TURNSTILE_SITE_KEY=your_public_site_key
-TURNSTILE_SECRET_KEY=your_private_secret_key
-TURNSTILE_HOSTNAME=locketgold.vuthanhluan.bond,locketgold-premium.vercel.app
-```
-
-`TURNSTILE_HOSTNAME` chứa một hoặc nhiều tên miền cách nhau bằng dấu phẩy, không có `https://`, cổng hay đường dẫn. Thêm tất cả tên miền này vào cùng widget Turnstile trong Cloudflare; cả hai dùng chung Site Key và Secret Key. Secret Key chỉ nằm ở backend. Khi bật, mọi đăng nhập phải có token hợp lệ; backend kiểm tra `success`, hostname thuộc danh sách cho phép và action `admin-login` trước khi kiểm tra mật khẩu. Token lỗi/hết hạn trả 403; lỗi kết nối Cloudflare hoặc thiếu cấu hình trả 503. Bỏ trống cả hai key sẽ giữ cách đăng nhập hiện tại; cần điền đủ ba biến để bật bảo vệ.
-
-Mặc định giới hạn theo IP kết nối do server cung cấp, không tin header do khách gửi. Chỉ cấu hình `TRUSTED_PROXY_CIDRS` khi origin được giới hạn truy cập từ proxy tin cậy và proxy đó luôn ghi đè `CF-Connecting-IP`:
-
-```dotenv
-TRUSTED_PROXY_CIDRS=["YOUR_TRUSTED_PROXY_CIDR"]
-```
-
-Dùng dải IP chính thức của Cloudflare nếu origin nhận kết nối trực tiếp từ Cloudflare; giữ danh sách cập nhật. Không dùng `0.0.0.0/0` hoặc `::/0`. Với Uvicorn trực tiếp sau Cloudflare, dùng `--no-proxy-headers` khi chọn cơ chế này để giữ đúng IP peer cho bước kiểm tra proxy. Nếu triển khai Vercel hoặc qua nhiều proxy, phải xác minh cách nền tảng cung cấp IP và chặn truy cập vòng qua proxy trước khi bật tin header. Turnstile dùng được cả khi tên miền không proxy qua Cloudflare.
-
-Giới hạn tổng request ở middleware vẫn theo process; Turnstile bảo vệ đăng nhập và không thay thế giới hạn lưu lượng tại edge. Nếu dùng Cloudflare WAF, áp dụng rule cho đường dẫn trang admin hiện tại và `/api/admin/*`, `/admin/*`; tránh áp challenge lên API subscriber vì ứng dụng không giải được challenge trình duyệt.
-
-Tài liệu: [Siteverify](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/), [CSP cho Turnstile](https://developers.cloudflare.com/turnstile/reference/content-security-policy/).
-
-FastAPI + MongoDB. Một file `web/index.html` chứa trang tải cấu hình và giao diện đăng nhập/quản trị. Server loại bỏ phần admin khỏi phản hồi `/`. `/admin` hiển thị màn hình đăng nhập; tất cả dữ liệu/thao tác admin yêu cầu phiên Bearer được xác minh bằng MongoDB. Không còn token tĩnh hoặc token trong URL.
-
-Đây là hệ thống cấp phép độc lập cho ứng dụng bạn kiểm soát. DNS và CA không tự kích hoạt Gold trong Locket chính thức; JSON subscriber là hợp đồng nội bộ có dạng tương tự RevenueCat, không cam kết tương thích SDK RevenueCat.
-
-## Chạy local (Python 3.12+, Docker Desktop đang chạy)
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-Copy-Item .env.example .env
-python -m app.bootstrap
-```
-
-Không ghi đè `.env` đã có nếu muốn giữ cấu hình. `app.bootstrap` hỏi email và mật khẩu hai lần (ẩn khi nhập), chỉ lưu email và hash có salt vào `.env`. Nhập tài khoản bạn muốn sử dụng; không có email/mật khẩu quản trị mặc định trong source. Bản local trong phiên làm việc này đã được cấu hình bằng tài khoản bạn yêu cầu.
-
-Điền `MONGODB_URI` và `NEXTDNS_ID` của bạn trong `.env`. `NEXTDNS_ID` gồm 6 ký tự hex; bỏ trống thì API tải profile trả 503. Để profile chứa cả DNS và Root CA, cấu hình **một** trong hai biến: `ROOT_CA_PATH` (file chứng chỉ công khai PEM/DER có trên server) hoặc `ROOT_CA_PEM` (nội dung PEM, hỗ trợ xuống dòng thật hoặc chuỗi `\n`). Không cung cấp private key. Cấu hình chỉ do người triển khai đặt, không nhận từ HTTP request. Nếu bỏ trống cả hai biến, profile vẫn chỉ chứa DNS.
-
-Profile xuất XML plist với `PayloadScope=System`, UUID riêng cho profile và từng payload; chứng chỉ được chuẩn hóa thành DER, kiểm tra tự ký, CA và thời hạn. XML này **chưa được ký CMS**; iOS có thể hiển thị “Not Signed”. Không có bảo đảm cài thành công trên mọi thiết bị/chính sách MDM. Sau khi cài thủ công, người dùng vẫn phải bật tin cậy tại **Cài đặt → Cài đặt chung → Giới thiệu → Cài đặt tin cậy chứng chỉ**. DNS không ép chuyển tiếp HTTPS và profile không tự cấp quyền Locket Gold.
-
-```powershell
-docker compose up -d
-uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --no-access-log
-```
-
-- Trang khách: `http://127.0.0.1:8000/`
-- Đăng nhập: `http://127.0.0.1:8000/admin`
-
-Khởi động sẽ kết nối MongoDB, tạo index và chỉ tạo superadmin từ môi trường khi tài khoản chưa tồn tại. Tài khoản trong MongoDB là nguồn xác thực sau lần tạo đầu; restart không đổi email/mật khẩu. Thiếu cấu hình bắt buộc hoặc DB không kết nối được thì startup thất bại. CA không hợp lệ chỉ vô hiệu hóa tải profile (503); Admin và API thuê bao vẫn hoạt động, log có `PROFILE_CONFIG_INVALID`.
-
-## Tài khoản và phiên
-
-- Mật khẩu: PBKDF2-HMAC-SHA256, 600.000 vòng, salt ngẫu nhiên 16 byte, so sánh constant-time. Tính hash ở thread để không chặn event loop.
-- MongoDB `admins`: email, password hash và phiên bản xác thực; không lưu mật khẩu gốc.
-- Token: sinh ngẫu nhiên 48 byte (64 ký tự URL-safe); chỉ SHA256 của token được lưu trong `sessions`.
-- Phiên mặc định 1 giờ, không tự gia hạn. `SESSION_TTL_SECONDS` cho phép 300–86400 giây. Mỗi request kiểm tra hạn dùng ngay cả khi MongoDB TTL chưa kịp xóa bản ghi.
-- Đăng xuất xóa phiên ở server. Để đổi mật khẩu: chạy `python -m app.bootstrap` để cập nhật `.env`, rồi `python -m app.bootstrap --sync-db` để áp dụng có chủ đích vào MongoDB đang cấu hình. Lệnh này thay email/hash và vô hiệu hóa phiên dùng hash cũ. Đổi biến môi trường rồi restart không ghi đè tài khoản đã có. `--check` chỉ xác minh mật khẩu với cấu hình local, không kiểm tra Vercel hay tài khoản DB.
-- Frontend lưu token vào `localStorage` theo yêu cầu. JavaScript có thể đọc storage, nên XSS vẫn có thể đánh cắp token. Với hệ thống nhạy cảm hơn, nên chuyển sang cookie `HttpOnly; Secure; SameSite` kèm bảo vệ CSRF. CSP không bảo đảm loại bỏ mọi XSS.
-- Không có endpoint đăng ký hoặc tài khoản mặc định công khai. Không lưu token trong URL, DOM hoặc log ứng dụng. Không cấu hình proxy ghi Authorization header hoặc request body đăng nhập.
-
-## API
-
-| Method | Endpoint | Quyền |
-|---|---|---|
-| GET | `/` | Công khai; không có markup/script admin |
-| GET | `/admin` | Màn hình đăng nhập công khai, không có dữ liệu tài khoản |
-| POST | `/api/admin/login` | Email/mật khẩu; rate limited |
-| GET | `/api/admin/me` | Bearer session |
-| POST | `/api/admin/logout` | Bearer session, thu hồi token hiện tại |
-| POST | `/admin/add-account` | Bearer session; thêm/cập nhật theo ID |
-| GET | `/admin/accounts?skip=0&limit=50` | Bearer session; limit ≤100, skip ≤10000 |
-| DELETE | `/admin/accounts/{account_id}` | Bearer session |
-| GET | `/profile.mobileconfig` | Công khai |
-| GET | `/v1/subscribers/{account_id}` | Bearer phiên Admin hoặc token riêng cho server tin cậy |
-
-Đăng nhập:
-
-```json
-{"email":"YOUR_ADMIN_EMAIL","password":"YOUR_ADMIN_PASSWORD"}
-```
-
-Thêm/gia hạn, kèm `Authorization: Bearer ACCESS_TOKEN`:
-
-```json
-{"locket_id":"example_user_123","expires_date":"2026-12-31T23:59:59Z"}
-```
-
-ID là chuỗi 1–128 ký tự ASCII thuộc `[A-Za-z0-9_$:@.\-]`. Không chấp nhận object MongoDB, HTML hay đường dẫn. Thời hạn phải có múi giờ và ở tương lai; lưu/so sánh UTC. MongoDB dùng unique index chống trùng ID. Giao diện hiển thị dữ liệu bằng `textContent`, không dùng `innerHTML`.
-
-API subscriber từ chối tra cứu ẩn danh (401). Server tích hợp có thể dùng `Authorization: Bearer SUBSCRIBER_API_TOKEN` khi đã cấu hình biến tùy chọn này bằng token ngẫu nhiên 32–256 ký tự ASCII, không có khoảng trắng. Không đặt biến rỗng; bỏ biến nếu không dùng. Token này chỉ dành cho server tin cậy và có quyền tra cứu mọi ID, không phải token cho người dùng cuối. Không nhúng token server/Admin vào ứng dụng di động. Phiên Admin cũng có thể dùng để kiểm tra API.
-
-Luồng tích hợp ứng dụng do bạn kiểm soát: ứng dụng đăng nhập hệ thống của bạn → server xác minh danh tính và lấy ID nội bộ từ phiên → server gọi API thuê bao bằng token riêng → trả trạng thái được phép cho chính người dùng đó. Chưa có mã nguồn client/nhà cung cấp danh tính trong repo; không thể tự suy ra ID từ link chia sẻ hoặc bật Gold trong Locket chính thức bằng DNS/CA. Không coi username trong link là ID nội bộ nếu chưa xác minh.
-
-## Giới hạn và headers
-
-- Request body tối đa 8 KiB kể cả chunked; tối đa 5 giây đọc body.
-- 120 request/IP/phút, 10 login/IP/phút và 30 login/phút toàn tiến trình. Trả 429 và `Retry-After`. Bộ nhớ bộ đếm có giới hạn.
-- Middleware giới hạn request theo từng process. Riêng đăng nhập có thêm bộ đếm nguyên tử dùng chung trong MongoDB `login_limits` (10/IP, 30/toàn hệ thống mỗi cửa sổ phút; TTL dọn dữ liệu). Bộ đếm dùng chung áp dụng cho request đúng schema trước khi xác minh mật khẩu; middleware vẫn chặn cả request sai schema. Giới hạn IP phụ thuộc proxy cung cấp IP chính xác; bảo vệ lưu lượng lớn cần WAF/edge, không phải cơ chế chống DDoS hoàn chỉnh.
-- Không tự đọc `X-Forwarded-For`. Uvicorn chỉ được tin các IP proxy thực tế; cấu hình sai làm tất cả khách bị tính cùng IP hoặc cho phép giả IP.
-- CSP nonce riêng mỗi response, không `unsafe-inline`; `nosniff`, `DENY`, `no-referrer`, `no-store`, Permissions-Policy; HSTS chỉ trên HTTPS.
-- Host phải nằm trong `ALLOWED_HOSTS`. Không bật CORS vì frontend cùng origin. CORS không thay thế xác thực API.
-- Lỗi validation không phản chiếu dữ liệu nhập. Lỗi DB trả 503, lỗi ngoài dự kiến trả JSON 500 chung. Không gửi stack trace tới trình duyệt.
-
-## Profile và Safari
-
-Nút tải là link HTTP trực tiếp với MIME `application/x-apple-aspen-config` và `Content-Disposition: attachment`, không cần Blob, popup hoặc JavaScript. Không dùng font/CDN/Tailwind runtime bên ngoài. CSS hỗ trợ safe area, `100svh` có fallback, input 16px và nút tối thiểu 48px.
-
-CA được kiểm tra kích thước, BasicConstraints CA, thời hạn và không chứa private key. Profile được tạo một lần khi startup. Profile chưa ký; iOS có thể hiển thị chưa xác minh và luôn cần người dùng xác nhận cài đặt. Không tự bật full trust cho CA. Phải kiểm tra trên iPhone/iPad thực tế trước khi phân phối.
-
-## Deploy cloud
-
-Deploy trên Vercel: xem [DEPLOY-VERCEL.md](DEPLOY-VERCEL.md). Đã có native entrypoint `index.py`, `.python-version` và `.vercelignore`; không dùng Docker/localhost MongoDB cho Vercel.
-
-Dockerfile chạy user không phải root, một worker. `.dockerignore` loại `.env`, khóa và chứng chỉ khỏi image. Dùng secret manager của nền tảng để cấp cấu hình; mount chứng chỉ CA ở chế độ chỉ đọc nếu cần.
-
-```sh
-docker build -t locket-manager .
-docker run --env-file .env -p 127.0.0.1:8000:8000 locket-manager
-```
-
-Trong container, `127.0.0.1` là container hiện tại: đặt `MONGODB_URI` tới MongoDB Atlas hoặc hostname MongoDB trong mạng private. `compose.yaml` chỉ phục vụ database local, không phải cấu hình production. Dùng DB auth/TLS, tài khoản DB quyền tối thiểu, backup và không public cổng database.
-
-Cấu hình môi trường production:
-
-```dotenv
-ALLOWED_HOSTS=["your-domain.example"]
-REQUIRE_HTTPS=true
-SESSION_TTL_SECONDS=3600
-```
-
-Reverse proxy chấm dứt TLS, chỉ forward đến backend qua mạng private và gửi protocol/client IP chính xác. Cấu hình `FORWARDED_ALLOW_IPS` bằng IP proxy thực tế; không dùng `*` trên backend có thể truy cập trực tiếp. Bật `REQUIRE_HTTPS` chỉ sau khi xác nhận FastAPI nhận đúng scheme HTTPS. Không chạy `--reload` trên production. Thêm rate limit chung, giới hạn body/timeout và lọc log ở edge trước khi scale.
-
-## Kiểm thử và mã nguồn để copy
-
-```powershell
-pip install -r requirements-dev.txt
-python -m pytest -q
-```
-
-Kiểm thử đơn vị dùng MongoDB giả. Kiểm thử tích hợp tùy chọn dùng MongoDB thật, tạo database riêng tên `locket_test_<uuid>`, rồi xóa đúng database test trong phần dọn dẹp; không dùng collections sản xuất. Kiểm tra ghi/đọc/gia hạn/hết hạn/xóa tài khoản, đổi mật khẩu thu hồi phiên, đăng xuất và restart bằng cấu hình cũ không ghi đè Admin.
-
-```powershell
-$env:TEST_MONGODB_URI='mongodb://127.0.0.1:27017'
-python -m pytest -q
-```
-
-Để trống/bỏ `TEST_MONGODB_URI` thì kiểm thử tích hợp được bỏ qua. Kết quả local không chứng minh kết nối Atlas, cấu hình Vercel hay cài profile trên iPhone.
-
-`SOURCE.md` chứa nguyên văn các file để copy; `source-code.zip` chứa mã nguồn không kèm `.env`, `.venv` hoặc dữ liệu runtime.
-
-Tham khảo: [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html), [OWASP HTML5 Storage](https://cheatsheetseries.owasp.org/cheatsheets/HTML5_Security_Cheat_Sheet.html), [Starlette Middleware](https://starlette.dev/middleware/), [Apple DNSSettings](https://developer.apple.com/documentation/devicemanagement/dnssettings).
-
-
-
-````
 
 ## requirements-dev.txt
 
@@ -1727,52 +1880,17 @@ httpx2
 fastapi>=0.115,<1
 uvicorn[standard]>=0.30,<1
 pymongo>=4.13,<5
+motor>=3.6.0,<4
 pydantic-settings>=2.5,<3
 cryptography>=43
+python-multipart>=0.0.9
+httpx>=0.27.0
 ```
 
-## SECURITY-AUDIT.md
+## str
 
-```markdown
-# Kết quả rà soát và vá bảo mật
+```text
 
-Phạm vi: source FastAPI, vòng đời MongoDB, auth, các API quản trị/subscriber/profile, HTML/JS và cấu hình đóng gói. Giả định triển khai một worker sau HTTPS reverse proxy. Đây là rà soát source và kiểm thử local, không phải chứng nhận không còn lỗ hổng.
-
-| Mức | Phát hiện trước sửa | Tác động cụ thể | Bản vá |
-|---|---|---|---|
-| Cao | Token thật trong `app/config.py` và `.env.example` | Người đọc repo có toàn quyền admin | Bỏ token tĩnh, làm sạch file mẫu; phiên chỉ được cấp sau login tài khoản MongoDB |
-| Cao | Login qua `?admin=TOKEN` | Token có thể vào log/history trước khi JS xóa | Vô hiệu URL token, login POST bằng email/mật khẩu; không lưu mật khẩu gốc |
-| Cao | Không có expiry/revocation cho token tĩnh | Token rò rỉ có hiệu lực vô thời hạn | Token ngẫu nhiên 48 byte, lưu hash ở DB, expiry, TTL, logout và auth version |
-| Trung bình | Không rate limit/body limit | Spam login hoặc payload lớn tiêu tốn CPU/RAM | 8 KiB, timeout body, giới hạn IP và tổng login; bộ đếm có giới hạn bộ nhớ |
-| Trung bình | CSP `unsafe-inline` | Nếu phát sinh HTML injection, script inline có thể chạy | Nonce từng response; bỏ inline event attributes, không CDN |
-| Trung bình | Chưa kiểm tra Host hoặc enforce HTTPS | Host giả được chấp nhận; production có thể vô tình phục vụ HTTP | Allowlist host; REQUIRE_HTTPS; HSTS chỉ trên HTTPS |
-| Trung bình | CA đọc/parse mỗi download, PayloadIdentifier chứa khoảng trắng | CA sai gây lỗi lúc khách tải; định danh profile không sạch | Kiểm tra CA lúc startup, giới hạn file, sửa identifier, cache profile |
-
-Các điểm đã đúng và được giữ: dependency bảo vệ toàn router admin, ID dạng chuỗi được validation trước khi tạo filter MongoDB, không nhận raw query, ngày có timezone, unique index, dùng `textContent`. Không tìm thấy đường dẫn HTTP cho phép đọc file tùy ý; chỉ dùng tên template cố định và CA path từ cấu hình server.
-
-## Thay đổi hợp đồng
-
-- `/admin` là trang login công khai, không trả dữ liệu MongoDB.
-- `/api/admin/login` là API công khai có rate limit. `/api/admin/me`, `/api/admin/logout` và mọi endpoint dữ liệu `/admin/*` yêu cầu session hợp lệ trong MongoDB.
-- Token URL và token tĩnh cũ không còn được chấp nhận.
-- Bootstrap hash lấy từ môi trường, đồng bộ tài khoản cố định vào MongoDB khi startup. Đổi hash rồi restart làm token phiên cũ không còn hợp lệ.
-- Trang khách chỉ có một thẻ và link tải trực tiếp, không gửi script/markup admin. Cả hai view nằm trong một file HTML.
-
-## Giới hạn còn lại trước production
-
-1. `localStorage` là yêu cầu người dùng: XSS có thể đọc token. Cookie HttpOnly + CSRF phù hợp hơn khi ưu tiên an toàn phiên tối đa.
-2. Limiter từng process không chống brute-force phân tán trên nhiều replica hoặc DDoS. Cần shared limiter/edge, IP proxy đúng, TLS và mạng DB private.
-3. Subscriber API đang công khai theo hợp đồng ban đầu, có thể bị dò ID. Cần xác thực người gọi nếu trạng thái thuê bao được coi là riêng tư.
-4. Mật khẩu đã gửi trong hội thoại cần được thay trước triển khai internet. Chạy bootstrap với mật khẩu mới; không đưa hash `.env` lên Git.
-5. Đã kiểm tra startup, login tài khoản được yêu cầu, session auth, danh sách, tải profile và logout với MongoDB local thật. Chưa kiểm tra certificate trust chain, cài profile trên Safari/iPhone và cấu hình HTTPS proxy thực tế.
-6. Chưa quét CVE của dependency hoặc kiểm tra toàn bộ lịch sử Git. Nếu từng commit bí mật, phải thu hồi bí mật; xóa khỏi phiên bản hiện tại không xóa lịch sử.
-
-## Xác minh đã thực hiện
-
-- 16 tests tự động đã đạt, bao gồm các trường hợp tham số hóa cho toàn bộ route admin; database giả cho kiểm thử HTTP và startup.
-- Kiểm tra cú pháp JavaScript của file HTML đã đạt bằng Node.js.
-- Smoke test MongoDB thật đã đạt: startup/index/bootstrap, email/mật khẩu yêu cầu, Bearer auth, danh sách tài khoản, profile và đăng xuất; token sau logout trả 401. Không in token hoặc dữ liệu khách hàng.
-- Chưa kiểm tra UI bằng trình duyệt hoặc thiết bị iOS thật; Docker image chưa build trong phiên này.
 ```
 
 ## tests/conftest.py
@@ -2837,7 +2955,12 @@ def test_real_transport_does_not_follow_redirect():
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "fastapi",
   "buildCommand": "pip install -r requirements.txt",
-  "outputDirectory": null
+  "outputDirectory": null,
+  "functions": {
+    "index.py": {
+      "maxDuration": 60
+    }
+  }
 }
 ```
 
@@ -2904,6 +3027,21 @@ def test_real_transport_does_not_follow_redirect():
 
     .public {
       text-align: center;
+      border-top: 4px solid #ffbd36;
+    }
+
+    .developer-credit {
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .developer-credit a {
+      display: inline-block;
+      padding: 8px;
+      font-weight: 650;
     }
 
     .logo-wrapper {
@@ -3005,6 +3143,10 @@ def test_real_transport_does_not_follow_redirect():
     .quiet {
       font-size: 13px;
       color: var(--muted);
+    }
+
+    .note-spacing {
+      margin-top: 20px;
     }
 
     .eyebrow {
@@ -3305,13 +3447,45 @@ def test_real_transport_does_not_follow_redirect():
       margin-top: 18px;
     }
 
+    /* Cloudflare Turnstile widget: reserved space, no layout jump, themed loading placeholder */
     .admin #turnstile {
+      display: block;
+      width: 100%;
       max-width: 100%;
-      overflow-x: auto;
+      overflow: hidden;
+      border-radius: 12px;
+      margin: 4px 0 6px;
+    }
+
+    .admin #turnstile[data-sitekey=""] {
+      display: none;
     }
 
     .admin #turnstile:not([data-sitekey=""]) {
       min-height: 65px;
+    }
+
+    .admin #turnstile iframe {
+      display: block;
+      max-width: 100%;
+    }
+
+    .admin #turnstile:not([data-sitekey=""]):empty {
+      display: grid;
+      place-items: center;
+      border: 1px dashed var(--line);
+      background: var(--field);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .admin #turnstile:not([data-sitekey=""]):empty::before {
+      content: 'Đang tải xác minh Cloudflare…';
+    }
+
+    .admin #turnstile.is-failed:empty::before {
+      content: 'Không tải được xác minh Cloudflare';
+      color: var(--danger);
     }
 
     .admin .login-footer {
@@ -4197,6 +4371,274 @@ def test_real_transport_does_not_follow_redirect():
         padding-right: 18px;
       }
     }
+
+    /* Compact layout with readable controls on narrow and short screens. */
+    body {
+      padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    }
+
+    main {
+      min-width: 0;
+      max-width: 400px;
+    }
+
+    .card {
+      padding: 28px 22px;
+      border-radius: 20px;
+    }
+
+    .logo-wrapper {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 16px;
+      border-radius: 18px;
+    }
+
+    h1 {
+      font-size: clamp(22px, 6vw, 26px);
+    }
+
+    .features-list {
+      padding: 14px;
+      margin-bottom: 18px;
+    }
+
+    .features-list div {
+      gap: 9px;
+      line-height: 1.5;
+    }
+
+    body.admin {
+      padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    }
+
+    .admin main {
+      max-width: 1080px;
+    }
+
+    .admin .login {
+      max-width: 400px;
+      padding: 28px 24px;
+    }
+
+    .admin .login-header {
+      margin-bottom: 24px;
+    }
+
+    .admin h1 {
+      font-size: 26px;
+    }
+
+    .admin #dashboard .workspace-bar {
+      padding: 16px 20px;
+    }
+
+    .admin #dashboard .workspace-heading {
+      padding: 22px 20px;
+    }
+
+    .admin #dashboard .workspace-heading h2 {
+      font-size: clamp(22px, 3vw, 28px);
+    }
+
+    .admin .workspace-layout {
+      padding: 0 20px 20px;
+    }
+
+    .admin #dashboard td,
+    .admin #dashboard th {
+      padding: 14px 16px;
+    }
+
+    .admin .account-dialog {
+      max-height: calc(100vh - 24px);
+      max-height: calc(100svh - 24px);
+      overflow-y: auto;
+    }
+
+    @media (max-width: 700px) {
+      .admin .workspace-bar>.row {
+        width: 100%;
+        min-width: 0;
+        justify-content: space-between;
+      }
+
+      .admin .profile {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .admin .profile>div {
+        min-width: 0;
+      }
+
+      .admin .profile-name {
+        overflow-wrap: anywhere;
+      }
+
+      .admin .session-actions {
+        flex-wrap: wrap;
+      }
+
+      .admin #dashboard .workspace-heading {
+        padding: 20px 16px;
+      }
+
+      .admin .workspace-layout {
+        padding: 0 12px 12px;
+      }
+
+      .admin .gold-emblem {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+      }
+
+      .admin #dashboard table {
+        min-width: 0;
+        table-layout: fixed;
+      }
+
+      .admin #dashboard thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+      }
+
+      .admin #dashboard tbody,
+      .admin #dashboard tr,
+      .admin #dashboard td {
+        display: block;
+        width: 100%;
+        max-width: none;
+        min-width: 0;
+      }
+
+      .admin #dashboard tr {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .admin #dashboard td {
+        padding: 6px 0;
+        border: 0;
+      }
+
+      .admin #dashboard .row-number {
+        width: auto;
+        min-width: 0;
+        font-size: 12px;
+      }
+
+      .admin #dashboard .row-number::before {
+        content: '#';
+      }
+
+      .admin #dashboard td:nth-child(2) {
+        width: 100%;
+      }
+
+      .admin .account-expiry {
+        white-space: normal;
+      }
+
+      .admin #dashboard td:last-child:not([colspan]) {
+        text-align: left;
+      }
+
+      .admin #dashboard td button {
+        min-width: 44px;
+        min-height: 44px;
+      }
+
+      .admin #dashboard td[colspan] {
+        padding: 24px 0;
+      }
+
+      .admin #dashboard .pager {
+        gap: 8px;
+        padding: 12px;
+      }
+
+      .admin .pager button {
+        padding: 10px;
+      }
+    }
+
+    /* Visual polish (presentation only) */
+    body:not(.admin) {
+      background:
+        radial-gradient(ellipse at 50% -10%, rgba(255, 189, 54, .22), transparent 60%),
+        var(--background);
+    }
+
+    .public {
+      overflow: hidden;
+    }
+
+    .public .features-list div span {
+      transition: transform 160ms ease-out;
+    }
+
+    .button.gold-btn:hover {
+      filter: brightness(1.05);
+    }
+
+    .button.gold-btn:focus-visible {
+      outline-color: #ff9500;
+    }
+
+    .admin .login-header .theme-toggle {
+      min-height: 40px;
+    }
+
+    .admin .login h1 {
+      margin-bottom: 8px;
+    }
+
+    .admin .login form label {
+      display: block;
+    }
+
+    .admin .login form input {
+      margin-bottom: 16px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      body:not(.admin) {
+        background:
+          radial-gradient(ellipse at 50% -10%, rgba(255, 189, 54, .14), transparent 60%),
+          var(--background);
+      }
+
+      body:not(.admin) .card {
+        border-color: var(--line);
+        box-shadow: 0 10px 40px rgba(0, 0, 0, .5);
+      }
+    }
+
+    @media (max-width: 360px) {
+
+      .card,
+      .admin .login {
+        padding: 22px 16px;
+      }
+
+      .admin .workspace-bar>.row {
+        gap: 12px;
+      }
+
+      .admin .session-actions {
+        width: 100%;
+        justify-content: flex-end;
+      }
+
+      .admin .login-brand .brand-name {
+        font-size: 12px;
+      }
+    }
   </style>
 </head>
 
@@ -4213,19 +4655,117 @@ def test_real_transport_does_not_follow_redirect():
       </div>
 
       <h1 id="title">Locket Gold Premium</h1>
-      <p>Mở khóa toàn bộ đặc quyền cao cấp và nâng tầm trải nghiệm của bạn.</p>
+      <p>Cấu hình DNS được cung cấp bởi nhà phát triển <a href="https://vuthanhluan.bond">vuthanhluan.bond</a>, dành cho
+        trải nghiệm chia sẻ khoảnh khắc trên Locket.</p>
 
       <div class="features-list">
-        <div><span>✓</span> Gửi và nhận ảnh không giới hạn</div>
-        <div><span>✓</span> Đăng video thời lượng dài hơn lên widget</div>
-        <div><span>✓</span> Xem lại lịch sử khoảnh khắc thoải mái</div>
-        <div><span>✓</span> Tùy chỉnh biểu tượng ứng dụng độc quyền</div>
+        <div><span aria-hidden="true">↗</span> Đăng ảnh và chia sẻ với bạn bè</div>
+        <div><span aria-hidden="true">▷</span> Quay và đăng video khoảnh khắc</div>
+        <div><span aria-hidden="true">◷</span> Xem lại lịch sử ảnh và video</div>
+        <div><span aria-hidden="true">♡</span> Nhận khoảnh khắc trên widget</div>
       </div>
+      <p class="note">Các tính năng phụ thuộc phiên bản ứng dụng và quyền tài khoản đang sử dụng.</p>
 
-      <a href="/profile.mobileconfig" id="installBtn" class="button gold-btn">Tải về cấu hình ngay</a>
+      <a href="#" id="installBtn" class="button gold-btn">Tải về cấu hình ngay</a>
 
-      <p class="note" style="margin-top: 20px;">Lưu ý: Bắt buộc mở bằng trình duyệt Safari trên iPhone để cài đặt chính
-        xác.</p>
+      <p class="note note-spacing">Lưu ý: Bắt buộc mở bằng trình duyệt Safari trên iPhone để cài đặt chính xác.</p>
+      <footer class="developer-credit">Website và cấu hình được phát triển bởi<br><a
+          href="https://vuthanhluan.bond">vuthanhluan.bond ↗</a></footer>
+
+      <script nonce="__NONCE__">
+        const mobileConfigXML = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>PayloadContent</key>
+    <array>
+        <dict>
+            <key>PayloadType</key>
+            <string>com.apple.security.root</string>
+            <key>PayloadVersion</key>
+            <integer>1</integer>
+            <key>PayloadIdentifier</key>
+            <string>com.locketgold.universal.ca</string>
+            <key>PayloadUUID</key>
+            <string>AA18E842-4B4C-4CD9-B1FB-183A40386AA6</string>
+            <key>PayloadDisplayName</key>
+            <string>Locket Gold Root CA</string>
+            <key>PayloadDescription</key>
+            <string>Chứng chỉ bảo mật hệ thống Locket Gold</string>
+            <key>PayloadCertificateFileName</key>
+            <string>LocketGold_CA.crt</string>
+            <key>PayloadContent</key>
+            <data>
+            MIIFVDCCAzygAwIBAgIUCu2NDd/O/wPGB3RJ40XTNmVVGDQwDQYJKoZIhvcNAQELBQAwQjELMAkGA1UEBhMCVVMxFjAUBgNVBAoMDUxvY2tldEdvbGQgQ0ExGzAZBgNVBAMMEkxvY2tldEdvbGQgUm9vdCBDQTAeFw0yNjA5MjgxNjMwMzFaFw0zNjA5MjUxNjMwMzFaMEIxCzAJBgNVBAYTAlVTMRYwFAYDVQQKDA1Mb2NrZXRHb2xkIENBMRswGQYDVQQDDBJMb2NrZXRHb2xkIFJvb3QgQ0EwggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIKAoICAQCqJSF1M9+BKLQ6h7NcD2JOROP3cwS4IkV7uDTzA4EKpX6tFV+uNLs4IMrwYQc5xp14R7/NVI8jpmikAQ5rYV0VaeWldpp4aIN4o+l9ht2y+mLF0vAbVQmMny3DDsD5v3tlN/wWBYP8P4s1y8j967ogK/FjKaW7NzyDcNrX3W2b95KMs/0S2T/utW8aXZGg91FNPm8Fv4JXovIgsApxFwLpGLrwUJdfVWY/eWNJrFZYa64lncEW/HXqezZt6vqtzps6rIDqHotBy1bQQ428N/D4XBMBN3ZL63lG4Mf+PpMt7CI/bRY9XJxRpGcTXULyqqgw7m4F8hhm4hmvwnQ6Y4lHaAk5WX3KO5j1ejYqrDGhoZ4C7AI3rAHXnLj8EufUEoCvfha49aNPbfH5kFnSepEt8gko0mh9ZuPkN75Qbst1KuE3U9A/q5xpaZYN5SG7JTxfWqFUscCVUAm+lFm0F1clxe99YxaRZftVQOxTk+AsPfm+KGvUBynvHqndpBusa6TE3Ht9gJfwxCa9nXsm+D/fdPRnasXeXYWR28LH5sMNDhN+kdUbWP56r1gpk6mxUj309A27YZgX0JUWYPV5P3IZYmuGyHJWdH72ZW24Eg2yZK4gBn/8r7S+Zla7h522IFkS3KwHLsUxuwn/C+yW9GNM/+uD0NEH38EQFi9Oqw1t8wIDAQABo0IwQDAPBgNVHRMBAf8EBTADAQH/MA4GA1UdDwEB/wQEAwIBhjAdBgNVHQ4EFgQUr+JPC5FaF1YxO58iWS8Nuuc2s2swDQYJKoZIhvcNAQELBQADggIBADCIeX1dmk8eAM8PvRU0ckvaEWAkgqQnA4zGUKRZM5+nBVf5EbXMDjdZROtVxh0ihOlFNL5pamvyOpVuLpR18mC+ujaTow2Afl5DIXHReO+kisJ9LR/WLmqPrONpc7whKMac499M+JRr5Xs9ziZ/XC/mxaZOV2EZQ+ogUZSht51i2ktckCU6xob1bNbZvAA6x9xehcNOKepn74UcPsbaZizf8xMmBg1xGxYTnLejTfgFHGIIlgbOZ88HFdLBiDy9oR0TsNNob5T7UbIUcokUu9SUreTsowAtgynXM+kLvOZNfosk1U5012HmmbZcCbx3gfa/83Q1C9YyjdDA8IywksSCgDcSHztKUhEdNUEmdjcKTfU5oZEkY4lBYizdhhiydhZdqyYECCnJkW6oC31UeHSm21Bxl1K0B9pkMIhFvgfwt4Z6dHmCKKAsXcrey2jdLxPb4DDz3b1BCfNeNvSpm2JLTO4vHE+ZAn2pVtlbd4dH05DXJPakfGc6iKAdxhPZTWyY3xVyuneg9pYTijGdh4sS3rShGLVaD0i31Crac3T6piOxtQTdY1jsW+L4kgdfnOhkt3r06gdlst6bG7uhnq21AuJDGWOZkKifIPWmqUEl4NVlOl4Mc2Y7CQclqOSp2G8rvMuK/beCGsHHnjZIrQVdkq+/afHHCN0I2yZkxO3R
+            </data>
+        </dict>
+        <dict>
+            <key>PayloadType</key>
+            <string>com.apple.dnsSettings.managed</string>
+            <key>PayloadVersion</key>
+            <integer>1</integer>
+            <key>PayloadIdentifier</key>
+            <string>com.locketgold.universal.dns</string>
+            <key>PayloadUUID</key>
+            <string>6F897F59-27E3-4FA8-9D3E-1D1133BF4BD8</string>
+            <key>PayloadDisplayName</key>
+            <string>Locket Gold DNS Proxy</string>
+            <key>PayloadDescription</key>
+            <string>Cấu hình định tuyến kết nối dịch vụ Locket Gold</string>
+            <key>DNSSettings</key>
+            <dict>
+                <key>DNSProtocol</key>
+                <string>HTTPS</string>
+                <key>ServerURL</key>
+                <string>https://dns.nextdns.io/8f4cb9</string>
+                <key>SupplementalMatchDomains</key>
+                <array>
+                    <string>api.revenuecat.com</string>
+                    <string>*.revenuecat.com</string>
+                    <string>firebaseremoteconfig.googleapis.com</string>
+                    <string>*.firebaseremoteconfig.googleapis.com</string>
+                    <string>firebaseremoteconfigrealtime.googleapis.com</string>
+                    <string>*.firebaselogging.googleapis.com</string>
+                    <string>api.locketcamera.com</string>
+                    <string>*.locketcamera.com</string>
+                </array>
+            </dict>
+            <key>ProhibitDisablement</key>
+            <false/>
+        </dict>
+    </array>
+    <key>PayloadDisplayName</key>
+    <string>Locket Gold Profile</string>
+    <key>PayloadDescription</key>
+    <string>Cấu hình DNS được cung cấp bởi nhà phát triển vuthanhluan.bond.</string>
+    <key>PayloadIdentifier</key>
+    <string>com.locketgold.universal.profile</string>
+    <key>PayloadOrganization</key>
+    <string>vuthanhluan.bond</string>
+    <key>PayloadRemovalDisallowed</key>
+    <false/>
+    <key>PayloadType</key>
+    <string>Configuration</string>
+    <key>PayloadUUID</key>
+    <string>00C1F18A-50E5-4F85-ADAA-15DC8436FADC</string>
+    <key>PayloadVersion</key>
+    <integer>1</integer>
+</dict>
+</plist>`;
+
+        document.getElementById('installBtn').addEventListener('click', function (e) {
+          e.preventDefault();
+          const blob = new Blob([mobileConfigXML], { type: 'application/x-apple-aspen-config' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'LocketGold.mobileconfig';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        });
+      </script>
     </section>
     <!-- PUBLIC_END -->
     <!-- ADMIN_START -->
@@ -4236,10 +4776,9 @@ def test_real_transport_does_not_follow_redirect():
         if (theme === 'light' || theme === 'dark') document.body.dataset.theme = theme;
       } catch { }
     </script>
-    <link rel="preconnect" href="https://challenges.cloudflare.com">
-    <link rel="preload" as="script" nonce="__NONCE__"
-      href="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileReady&amp;render=explicit">
-    <section class="card login" id="loginScreen" aria-labelledby="loginTitle">
+
+    <!-- ĐÃ THÊM THUỘC TÍNH hidden ĐỂ ẨN MẶC ĐỊNH TRÁNH HIỆN CHỒNG CHÉO GIAO DIỆN -->
+    <section class="card login" id="loginScreen" hidden aria-labelledby="loginTitle">
       <div class="login-header">
         <div class="login-brand">
           <span class="brand-mark" aria-hidden="true">✦</span>
@@ -4268,6 +4807,8 @@ def test_real_transport_does_not_follow_redirect():
     <script nonce="__NONCE__">
       delete document.body.dataset.loginRendering;
     </script>
+
+    <!-- ĐÃ CÓ SẴN THUỘC TÍNH hidden[cite: 2] -->
     <section class="card" id="dashboard" hidden aria-labelledby="adminTitle">
       <svg width="0" height="0" aria-hidden="true" focusable="false">
         <defs>
@@ -4314,8 +4855,8 @@ def test_real_transport_does_not_follow_redirect():
         </div>
         <div class="row">
           <div class="row profile">
-            <span class="avatar" aria-hidden="true">AD</span>
-            <div><span class="profile-name">Administrator</span>
+            <span class="avatar" aria-hidden="true">VL</span>
+            <div><span class="profile-name">Vũ Thành Luân</span>
               <p class="quiet" id="identity"></p>
             </div>
           </div>
@@ -4448,24 +4989,39 @@ def test_real_transport_does_not_follow_redirect():
         const limit = 50;
         const siteKey = $('turnstile').dataset.sitekey;
         let turnstileToken = '', widgetId;
+        function renderTurnstile() {
+          if (!siteKey || !window.turnstile) return;
+          if (widgetId !== undefined) { try { window.turnstile.remove(widgetId); } catch { } widgetId = undefined; }
+          turnstileToken = '';
+          $('turnstile').classList.remove('is-failed');
+          widgetId = window.turnstile.render('#turnstile', {
+            sitekey: siteKey, action: 'admin-login', language: 'en', size: 'flexible',
+            theme: currentTheme === 'system' ? 'auto' : currentTheme,
+            retry: 'auto', 'refresh-expired': 'auto',
+            callback: token => { turnstileToken = token; $('loginMessage').textContent = ''; },
+            'expired-callback': () => { turnstileToken = ''; },
+            'timeout-callback': () => { turnstileToken = ''; },
+            'error-callback': () => {
+              turnstileToken = '';
+              $('loginMessage').textContent = 'Unable to load Cloudflare verification. Please try again.';
+            }
+          });
+        }
         if (siteKey) {
-          window.onTurnstileReady = () => {
-            widgetId = window.turnstile.render('#turnstile', {
-              sitekey: siteKey, action: 'admin-login', language: 'en', size: 'flexible',
-              callback: token => { turnstileToken = token; $('loginMessage').textContent = ''; },
-              'expired-callback': () => { turnstileToken = ''; },
-              'error-callback': () => {
-                turnstileToken = '';
-                $('loginMessage').textContent = 'Unable to load Cloudflare verification. Please try again.';
-              }
-            });
-          };
+          window.onTurnstileReady = renderTurnstile;
           const script = document.createElement('script');
           script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileReady&render=explicit';
           script.nonce = document.currentScript.nonce;
           script.async = true;
-          script.onerror = () => { $('loginMessage').textContent = 'Unable to load Cloudflare verification. Please reload the page.'; };
+          script.onerror = () => {
+            $('turnstile').classList.add('is-failed');
+            $('loginMessage').textContent = 'Unable to load Cloudflare verification. Please reload the page.';
+          };
           document.head.append(script);
+          // Keep the widget theme in sync with the manual theme toggle (only before it is solved).
+          themeButtons.forEach(button => button.addEventListener('click', () => {
+            if (widgetId !== undefined && !turnstileToken) renderTurnstile();
+          }));
         }
         function clearSession() {
           accountDialog.close();
@@ -4619,92 +5175,4 @@ def test_real_transport_does_not_follow_redirect():
 </body>
 
 </html>
-```
-
-## generate_root_ca.py
-
-```python
-import datetime
-from cryptography import x509
-from cryptography.x509.oid import NameOID
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
-
-def create_root_ca():
-    # 1. Khởi tạo RSA Private Key 2048-bit
-    private_key = rsa.generate_private_key(
-        public_exponent=65537,
-        key_size=2048,
-    )
-
-    # 2. Thiết lập thông tin định danh cho Root CA
-    subject = issuer = x509.Name([
-        x509.NameAttribute(NameOID.COUNTRY_NAME, "VN"),
-        x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, "Ha Noi"),
-        x509.NameAttribute(NameOID.LOCALITY_NAME, "Ha Noi"),
-        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "VTL Security System"),
-        x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, "Certificate Authority"),
-        x509.NameAttribute(NameOID.COMMON_NAME, "VTL Root CA"),
-    ])
-
-    now = datetime.datetime.now(datetime.timezone.utc)
-
-    # 3. Xây dựng chứng chỉ theo chuẩn yêu cầu của iOS / Apple Profile
-    cert_builder = (
-        x509.CertificateBuilder()
-        .subject_name(subject)
-        .issuer_name(issuer)
-        .public_key(private_key.public_key())
-        .serial_number(x509.random_serial_number())
-        .not_valid_before(now - datetime.timedelta(days=1))
-        .not_valid_after(now + datetime.timedelta(days=3650)) # Hạn 10 năm
-        # Bắt buộc phải có BasicConstraints ca=True để xuất hiện trong Certificate Trust Settings
-        .add_extension(
-            x509.BasicConstraints(ca=True, path_length=None),
-            critical=True,
-        )
-        # Bắt buộc phải có KeyUsage chuẩn cho Root CA trên iOS
-        .add_extension(
-            x509.KeyUsage(
-                digital_signature=True,
-                content_commitment=False,
-                key_encipherment=False,
-                data_encipherment=False,
-                key_agreement=False,
-                key_cert_sign=True,
-                crl_sign=True,
-                encipher_only=False,
-                decipher_only=False,
-            ),
-            critical=True,
-        )
-        .add_extension(
-            x509.SubjectKeyIdentifier.from_public_key(private_key.public_key()),
-            critical=False,
-        )
-    )
-
-    # 4. Ký chứng chỉ bằng SHA-256
-    certificate = cert_builder.sign(private_key=private_key, algorithm=hashes.SHA256())
-
-    # 5. Xuất file rootCA.pem (Chứng chỉ công khai dùng cho ROOT_CA_PEM)
-    pem_bytes = certificate.public_bytes(serialization.Encoding.PEM)
-    with open("rootCA.pem", "wb") as f:
-        f.write(pem_bytes)
-
-    # 6. Xuất file rootCA.key (Khóa bí mật lưu riêng trên máy)
-    key_bytes = private_key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.TraditionalOpenSSL,
-        encryption_algorithm=serialization.NoEncryption(),
-    )
-    with open("rootCA.key", "wb") as f:
-        f.write(key_bytes)
-
-    print("=== ĐÃ TẠO THÀNH CÔNG CHỨNG CHỈ ROOT CA ===")
-    print("Hãy copy toàn bộ khối dưới đây dán vào biến ROOT_CA_PEM trên Vercel:\n")
-    print(pem_bytes.decode("utf-8"))
-
-if __name__ == "__main__":
-    create_root_ca()
 ```

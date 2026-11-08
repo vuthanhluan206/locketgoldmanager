@@ -478,13 +478,45 @@
       margin-top: 18px;
     }
 
+    /* Cloudflare Turnstile widget: reserved space, no layout jump, themed loading placeholder */
     .admin #turnstile {
+      display: block;
+      width: 100%;
       max-width: 100%;
-      overflow-x: auto;
+      overflow: hidden;
+      border-radius: 12px;
+      margin: 4px 0 6px;
+    }
+
+    .admin #turnstile[data-sitekey=""] {
+      display: none;
     }
 
     .admin #turnstile:not([data-sitekey=""]) {
       min-height: 65px;
+    }
+
+    .admin #turnstile iframe {
+      display: block;
+      max-width: 100%;
+    }
+
+    .admin #turnstile:not([data-sitekey=""]):empty {
+      display: grid;
+      place-items: center;
+      border: 1px dashed var(--line);
+      background: var(--field);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .admin #turnstile:not([data-sitekey=""]):empty::before {
+      content: 'Đang tải xác minh Cloudflare…';
+    }
+
+    .admin #turnstile.is-failed:empty::before {
+      content: 'Không tải được xác minh Cloudflare';
+      color: var(--danger);
     }
 
     .admin .login-footer {
@@ -1566,6 +1598,58 @@
       }
     }
 
+    /* Visual polish (presentation only) */
+    body:not(.admin) {
+      background:
+        radial-gradient(ellipse at 50% -10%, rgba(255, 189, 54, .22), transparent 60%),
+        var(--background);
+    }
+
+    .public {
+      overflow: hidden;
+    }
+
+    .public .features-list div span {
+      transition: transform 160ms ease-out;
+    }
+
+    .button.gold-btn:hover {
+      filter: brightness(1.05);
+    }
+
+    .button.gold-btn:focus-visible {
+      outline-color: #ff9500;
+    }
+
+    .admin .login-header .theme-toggle {
+      min-height: 40px;
+    }
+
+    .admin .login h1 {
+      margin-bottom: 8px;
+    }
+
+    .admin .login form label {
+      display: block;
+    }
+
+    .admin .login form input {
+      margin-bottom: 16px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      body:not(.admin) {
+        background:
+          radial-gradient(ellipse at 50% -10%, rgba(255, 189, 54, .14), transparent 60%),
+          var(--background);
+      }
+
+      body:not(.admin) .card {
+        border-color: var(--line);
+        box-shadow: 0 10px 40px rgba(0, 0, 0, .5);
+      }
+    }
+
     @media (max-width: 360px) {
 
       .card,
@@ -1936,24 +2020,39 @@
         const limit = 50;
         const siteKey = $('turnstile').dataset.sitekey;
         let turnstileToken = '', widgetId;
+        function renderTurnstile() {
+          if (!siteKey || !window.turnstile) return;
+          if (widgetId !== undefined) { try { window.turnstile.remove(widgetId); } catch { } widgetId = undefined; }
+          turnstileToken = '';
+          $('turnstile').classList.remove('is-failed');
+          widgetId = window.turnstile.render('#turnstile', {
+            sitekey: siteKey, action: 'admin-login', language: 'en', size: 'flexible',
+            theme: currentTheme === 'system' ? 'auto' : currentTheme,
+            retry: 'auto', 'refresh-expired': 'auto',
+            callback: token => { turnstileToken = token; $('loginMessage').textContent = ''; },
+            'expired-callback': () => { turnstileToken = ''; },
+            'timeout-callback': () => { turnstileToken = ''; },
+            'error-callback': () => {
+              turnstileToken = '';
+              $('loginMessage').textContent = 'Unable to load Cloudflare verification. Please try again.';
+            }
+          });
+        }
         if (siteKey) {
-          window.onTurnstileReady = () => {
-            widgetId = window.turnstile.render('#turnstile', {
-              sitekey: siteKey, action: 'admin-login', language: 'en', size: 'flexible',
-              callback: token => { turnstileToken = token; $('loginMessage').textContent = ''; },
-              'expired-callback': () => { turnstileToken = ''; },
-              'error-callback': () => {
-                turnstileToken = '';
-                $('loginMessage').textContent = 'Unable to load Cloudflare verification. Please try again.';
-              }
-            });
-          };
+          window.onTurnstileReady = renderTurnstile;
           const script = document.createElement('script');
           script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileReady&render=explicit';
           script.nonce = document.currentScript.nonce;
           script.async = true;
-          script.onerror = () => { $('loginMessage').textContent = 'Unable to load Cloudflare verification. Please reload the page.'; };
+          script.onerror = () => {
+            $('turnstile').classList.add('is-failed');
+            $('loginMessage').textContent = 'Unable to load Cloudflare verification. Please reload the page.';
+          };
           document.head.append(script);
+          // Keep the widget theme in sync with the manual theme toggle (only before it is solved).
+          themeButtons.forEach(button => button.addEventListener('click', () => {
+            if (widgetId !== undefined && !turnstileToken) renderTurnstile();
+          }));
         }
         function clearSession() {
           accountDialog.close();
