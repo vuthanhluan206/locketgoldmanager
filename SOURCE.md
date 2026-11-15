@@ -1,6 +1,6 @@
 # Project source
 
-Each section contains the file path and its complete text content. Secrets, binary assets, Git metadata, virtual environments and caches are excluded.
+Each section contains the file path and its complete current text content. Secrets, binary assets, Git metadata, virtual environments and caches are excluded. SOURCE.md excludes itself.
 
 ## .dockerignore
 
@@ -836,140 +836,22 @@ def get_accounts(request: Request):
 ```python
 import asyncio
 import json
-import secrets
 import urllib.error
 import urllib.request
-import httpx
-import os
-from datetime import datetime, timezone, timedelta
 from urllib.parse import quote
 from starlette.datastructures import Headers
 from fastapi.encoders import jsonable_encoder
-from fastapi import APIRouter, HTTPException, Request, Response
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi import APIRouter, Request, Response
+from fastapi.responses import JSONResponse
+from datetime import datetime, timezone
 
-from .config import get_settings
 from .models import subscriber_response
-from .routers.management import download_profile
-from .security import token_digest
 
 router = APIRouter(tags=["Locket Proxy"])
 
 HOP_HEADERS = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
                'te', 'trailer', 'transfer-encoding', 'upgrade'}
 MAX_RESPONSE = 50 * 1024 * 1024
-
-ADMIN_PATH = os.getenv("ADMIN_PATH", "/admin")
-
-# ================= 1. TRANG CHỦ VÀ CÁC API QUẢN TRỊ (KHỚP VỚI INDEX.HTML GỐC) =================
-
-@router.get("/", response_class=FileResponse)
-async def get_root_page():
-    """Phục vụ file index.html nguyên bản khi truy cập trang chủ /"""
-    current_dir = os.path.dirname(os.path.realpath(__file__))
-    file_path = os.path.join(current_dir, "..", "web", "index.html")
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Không tìm thấy file giao diện web/index.html")
-    return FileResponse(file_path)
-
-@router.get(ADMIN_PATH, response_class=FileResponse)
-async def get_admin_page():
-    """Đường dẫn Admin dự phòng"""
-    current_dir = os.path.dirname(os.path.realpath(__file__))
-    file_path = os.path.join(current_dir, "..", "web", "index.html")
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Không tìm thấy file giao diện")
-    return FileResponse(file_path)
-
-@router.post("/api/admin/login")
-async def api_admin_login(req: Request):
-    """Xử lý đăng nhập từ file index.html gốc"""
-    data = await req.json()
-    email = data.get("email", "")
-    password = data.get("password", "")
-    
-    accounts_col = getattr(req.app.state, "accounts", None)
-    if accounts_col is None:
-        raise HTTPException(503, "Lỗi DB")
-    
-    # Kiểm tra trong collection admins hoặc accounts tùy cấu hình của bạn
-    admin_user = await accounts_col.database["admins"].find_one({"username": email, "password": password})
-    if not admin_user:
-        raise HTTPException(status_code=401, detail="Email hoặc mật khẩu không đúng")
-        
-    token = secrets.token_hex(32)
-    expires_at = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
-    return {"access_token": token, "expires_at": expires_at}
-
-@router.get("/api/admin/me")
-async def api_admin_me(req: Request):
-    auth = req.headers.get("Authorization")
-    if not auth or not auth.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    return {"email": "admin@vuthanhluan.bond"}
-
-@router.post("/api/admin/logout")
-async def api_admin_logout():
-    return Response(status_code=204)
-
-@router.get("/admin/accounts")
-async def api_get_accounts(req: Request, skip: int = 0, limit: int = 50):
-    accounts_col = getattr(req.app.state, "accounts", None)
-    if accounts_col is None:
-        raise HTTPException(503, "Lỗi DB")
-    
-    cursor = accounts_col.find({"status": "active"}).skip(skip).limit(limit)
-    accounts = await cursor.to_list(length=limit)
-    
-    result = []
-    for acc in accounts:
-        result.append({
-            "locket_id": acc.get("locket_id"),
-            "expires_date": acc.get("expires_date", (datetime.now(timezone.utc) + timedelta(days=365)).isoformat())
-        })
-    return JSONResponse(result)
-
-@router.post("/admin/add-account")
-async def api_add_account(req: Request):
-    data = await req.json()
-    accounts_col = getattr(req.app.state, "accounts", None)
-    
-    await accounts_col.update_one(
-        {"locket_id": data.get("locket_id")},
-        {"$set": {
-            "locket_id": data.get("locket_id"), 
-            "expires_date": data.get("expires_date"),
-            "status": "active",
-            "updated_at": datetime.now(timezone.utc)
-        }},
-        upsert=True
-    )
-    return Response(status_code=204)
-
-@router.delete("/admin/accounts/{locket_id}")
-async def api_delete_account(req: Request, locket_id: str):
-    accounts_col = getattr(req.app.state, "accounts", None)
-    await accounts_col.delete_one({"locket_id": locket_id})
-    return Response(status_code=204)
-
-# ================= 2. HỖ TRỢ XỬ LÝ AI & PROXY =================
-
-async def process_image_with_ai(image_bytes: bytes, prompt: str) -> bytes:
-    api_token = os.getenv("HUGGINGFACE_API_TOKEN", "")
-    if not api_token:
-        raise ValueError("Thiếu cấu hình HUGGINGFACE_API_TOKEN")
-
-    hf_endpoint = "https://api-inference.huggingface.co/models/timbrooks/instruct-pix2pix"
-    headers = {
-        "Authorization": f"Bearer {api_token}",
-        "Content-Type": "application/octet-stream",
-        "X-Wait-For-Model": "true"
-    }
-    async with httpx.AsyncClient(timeout=9.5) as client:
-        resp = await client.post(hf_endpoint, headers=headers, content=image_bytes)
-        if resp.status_code == 200:
-            return resp.content
-        return None
 
 def _clean_headers(headers):
     named = {key.strip().lower() for key in headers.get('connection', '').split(',')}
@@ -1008,41 +890,36 @@ def _extract_locket_id(path: str, data: dict, request_headers: dict) -> str:
             return parts[idx + 1]
     return ''
 
-@router.get("/install", response_class=Response)
-async def download_proxy_profile(request: Request):
-    return await download_profile(request)
-
-@router.get("/proxy.pac", response_class=Response)
-async def get_proxy_pac(request: Request):
-    host = request.headers.get("host", "locketgold.vuthanhluan.bond")
-    pac_content = f"""
-function FindProxyForURL(url, host) {{
-    if (shExpMatch(host, "*locketcamera.com*") || shExpMatch(host, "*revenuecat.com*")) {{
-        return "PROXY {host}";
-    }}
-    return "DIRECT";
-}}
-"""
-    return Response(content=pac_content.strip(), media_type="application/x-ns-proxy-autoconfig")
-
-# ================= 3. REVERSE PROXY ĐỘNG =================
+# Hàm tiện ích quét tìm các key nhạy cảm/quan trọng trong JSON response mà không lộ dữ liệu thô
+def _find_json_keys(obj, prefix="", target_words=None):
+    if target_words is None:
+        target_words = ["filter", "overlay", "effect", "preset", "sticker", "style", "theme", "gold", "premium", "sub"]
+    
+    matches = []
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            full_key = f"{prefix}.{k}" if prefix else k
+            if any(w in k.lower() for w in target_words):
+                matches.append(full_key)
+            if isinstance(v, (dict, list)):
+                matches.extend(_find_json_keys(v, full_key, target_words))
+    elif isinstance(obj, list) and obj and isinstance(obj[0], dict):
+        matches.extend(_find_json_keys(obj[0], f"{prefix}[]", target_words))
+    return matches
 
 @router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def dynamic_reverse_proxy(request: Request, path: str):
-    if request.method == "GET":
-        ext = path.split('.')[-1].lower() if '.' in path else ""
-        if ext in ['css', 'js', 'png', 'jpg', 'ico']:
-            current_dir = os.path.dirname(os.path.realpath(__file__))
-            file_path = os.path.join(current_dir, "..", "web", path)
-            if os.path.exists(file_path):
-                return FileResponse(file_path)
-
     original_host = request.headers.get("host", "")
     if "revenuecat.com" in original_host:
         upstream_host = "api.revenuecat.com"
     else:
         upstream_host = "api.locketcamera.com"
         
+    method = request.method
+    
+    # 1. LOG AN TOÀN MỌI REQUEST (Không động đến body nhị phân/payload lớn)
+    print(f"[PROXY REQ] {method} {upstream_host}/{path}")
+
     url = f"https://{upstream_host}/" + quote(path, safe="/:@!$&'()*+,;=-._~")
     
     query_params = str(request.url.query)
@@ -1050,36 +927,26 @@ async def dynamic_reverse_proxy(request: Request, path: str):
         url += f"?{query_params}"
 
     headers = _clean_headers(dict(request.headers))
+    
     for key in list(headers):
-        if key in {'host', 'cookie', 'forwarded', 'accept-encoding'} or key.startswith(('x-forwarded-', 'cf-')):
+        if key in {'host', 'cookie', 'forwarded', 'accept-encoding', 'x-revenuecat-etag'} or key.startswith(('x-forwarded-', 'cf-')):
             del headers[key]
+            
     headers['Host'] = upstream_host
     headers['Accept-Encoding'] = 'identity'
 
-    method = request.method
-    content_type_header = headers.get("content-type", "")
-    
     is_upload = method in ["POST", "PUT", "PATCH"] and (
-        "multipart/form-data" in content_type_header.lower()
-        or "octet-stream" in content_type_header.lower()
-        or "image/" in content_type_header.lower()
+        "multipart/form-data" in headers.get("content-type", "").lower()
+        or "octet-stream" in headers.get("content-type", "").lower()
+        or "image/" in headers.get("content-type", "").lower()
     )
-    body = await request.body()
+    
+    body_bytes = await request.body()
     timeout_limit = 60.0 if is_upload else 30.0
-
-    if is_upload:
-        try:
-            if body:
-                ai_prompt = "strictly change hair color to vibrant fiery red hair, highly detailed, realistic hair texture"
-                modified_bytes = await process_image_with_ai(body, ai_prompt)
-                if modified_bytes:
-                    body = modified_bytes
-        except Exception as e:
-            print(f"[AI Proxy Error]: {e}")
 
     try:
         upstream_status, upstream_headers, upstream_content = await asyncio.to_thread(
-            _forward_upstream, url, body, headers, method, timeout_limit
+            _forward_upstream, url, body_bytes, headers, method, timeout_limit
         )
     except (OSError, ValueError):
         return JSONResponse(status_code=502, content={'detail': 'Upstream unavailable'})
@@ -1087,6 +954,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     upstream_headers = Headers({key.lower(): value for key, value in upstream_headers.items()})
     response_headers = _clean_headers(upstream_headers)
     response_headers.pop('set-cookie', None)
+    
     if 300 <= upstream_status < 400:
         return JSONResponse({'detail': 'Upstream redirect blocked'}, status_code=502)
 
@@ -1104,32 +972,63 @@ async def dynamic_reverse_proxy(request: Request, path: str):
         except (ValueError, UnicodeDecodeError):
             return Response(upstream_content, status_code=upstream_status, headers=response_headers)
         
+        # 2. LOG THÔNG TIN RESPONSE JSON (Trực quan hóa cấu trúc để debug)
+        if isinstance(data, dict):
+            top_keys = list(data.keys())
+            matched_keys = _find_json_keys(data)
+            print(f"[PROXY RES JSON] Path: /{path} | Status: {upstream_status}")
+            print(f" -> Top-level keys: {top_keys}")
+            if matched_keys:
+                print(f" -> Matched interesting keys: {list(set(matched_keys))[:15]}")
+        elif isinstance(data, list):
+            print(f"[PROXY RES JSON] Path: /{path} | Status: {upstream_status} | Type: List (len={len(data)})")
+
         if isinstance(data, (dict, list)):
             segments = set(path.split('/'))
             
-            if segments & {'subscribers', 'user', 'users'}:
-                if isinstance(data, dict):
-                    candidate_id = _extract_locket_id(path, data, dict(request.headers))
-                    
-                    if accounts_col is not None and candidate_id:
+            if segments & {'subscribers', 'user', 'users'} and isinstance(data, dict):
+                candidate_id = _extract_locket_id(path, data, dict(request.headers))
+                
+                if candidate_id:
+                    account_record = None
+                    if accounts_col is not None:
                         account_record = await accounts_col.find_one({"locket_id": candidate_id, "status": "active"}, {"_id": 0})
+                        if not account_record:
+                            account_record = await accounts_col.find_one({"locket_id": candidate_id}, {"_id": 0})
+                    
+                    if account_record:
+                        now = datetime.now(timezone.utc)
+                        sub_payload = subscriber_response(candidate_id, account_record, now)
+                        subscriber = data.get('subscriber')
                         
-                        if account_record:
-                            now = datetime.now(timezone.utc)
-                            sub_payload = subscriber_response(candidate_id, account_record, now)
-                            subscriber = data.get('subscriber')
+                        if subscriber is None:
+                            subscriber = data['subscriber'] = sub_payload['subscriber']
                             
-                            if subscriber is None:
-                                subscriber = data['subscriber'] = sub_payload['subscriber']
+                        if isinstance(subscriber, dict):
+                            base_ent = sub_payload['subscriber'].get('entitlements', {}).get('Gold')
+                            base_sub = sub_payload['subscriber'].get('subscriptions', {}).get('com.locket.gold.yearly')
+                            
+                            if base_ent:
+                                ents = subscriber.get('entitlements')
+                                if not isinstance(ents, dict):
+                                    ents = {}
+                                for k in ['Gold', 'gold', 'pro', 'Pro', 'premium', 'Premium', 'locket_gold']:
+                                    ents[k] = base_ent
+                                subscriber['entitlements'] = ents
                                 
-                            if isinstance(subscriber, dict):
-                                for field, key in [('entitlements', 'Gold'), ('subscriptions', 'com.locket.gold.yearly')]:
-                                    values = subscriber.get(field)
-                                    if not isinstance(values, dict):
-                                        values = {}
-                                    values.pop(key, None)
-                                    values.update(sub_payload['subscriber'][field])
-                                    subscriber[field] = values
+                            if base_sub:
+                                subs = subscriber.get('subscriptions')
+                                if not isinstance(subs, dict):
+                                    subs = {}
+                                subs['com.locket.gold.yearly'] = base_sub
+                                subscriber['subscriptions'] = subs
+
+                        if "locketcamera.com" in upstream_host:
+                            for key_flag in ['is_gold', 'isGold', 'is_premium', 'isPremium', 'has_gold']:
+                                data[key_flag] = True
+                            if 'user' in data and isinstance(data['user'], dict):
+                                for key_flag in ['is_gold', 'isGold', 'is_premium', 'isPremium', 'has_gold']:
+                                    data['user'][key_flag] = True
 
             for key in ('etag', 'content-md5', 'digest', 'content-encoding'):
                 response_headers.pop(key, None)
@@ -1150,68 +1049,38 @@ import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
 
-# Import router từ file locket_modifier mà chúng ta vừa hoàn thiện
-from app.locket_modifier import router as locket_router
+from app.middleware import SecurityMiddleware 
 
-# ================= QUẢN LÝ KẾT NỐI MONGODB (DÀNH CHO SERVERLESS) =================
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    Quản lý vòng đời của ứng dụng.
-    Mở kết nối Database khi Vercel boot máy chủ ảo lên, và đóng lại khi xử lý xong.
-    """
-    # Đảm bảo bạn đã cấu hình biến môi trường MONGODB_URI trên Vercel
-    mongodb_uri = os.getenv("MONGODB_URI")
-    
-    if mongodb_uri:
-        # Khởi tạo client kết nối tới MongoDB Atlas
-        client = AsyncIOMotorClient(mongodb_uri)
-        app.state.db_client = client
-        
-        # Lấy database (Nếu URI của bạn không có tên DB mặc định, nó sẽ dùng 'locket_db')
-        db = client.get_default_database("locket_db")
-        
-        # Gán collection 'accounts' vào app.state để locket_modifier.py có thể gọi
-        app.state.accounts = db["accounts"]
-        
-        # (Collection 'admins' sẽ được locket_modifier.py tự động gọi qua accounts.database["admins"])
-    else:
-        print("[CẢNH BÁO] Chưa cấu hình biến môi trường MONGODB_URI")
-        app.state.accounts = None
+from app.auth import router as auth_router
+from app.routers.management import router as management_router, admin_router
+from app.routers.subscribers import router as subscribers_router
+from app.locket_modifier import router as locket_proxy_router
+from app.database import lifespan
 
-    yield  # Ứng dụng chạy tại đây
-
-    # Đóng kết nối khi máy chủ ảo của Vercel tắt (tránh treo memory)
-    if hasattr(app.state, "db_client"):
-        app.state.db_client.close()
-# ===============================================================================
-
-# Khởi tạo FastAPI
 app = FastAPI(
-    title="Locket Gold Universal Proxy",
-    description="Hệ thống cấp quyền Locket Gold và Xử lý Ảnh AI",
+    title="Locket Gold Manager",
+    description="Hệ thống quản lý và proxy phân quyền Locket Gold",
     version="2.0.0",
     lifespan=lifespan
 )
 
-# Cấu hình CORS để giao diện Admin (fetch API) không bị chặn
+app.add_middleware(SecurityMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Bạn có thể thay "*" bằng tên miền thật để bảo mật hơn
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Tích hợp toàn bộ API Quản trị và Proxy từ file locket_modifier.py
-app.include_router(locket_router)
+app.include_router(auth_router)
+app.include_router(management_router)
+app.include_router(admin_router)
+app.include_router(subscribers_router)
 
-# Route phụ để kiểm tra server có đang sống không (Ping test)
-@app.get("/")
-async def root_health_check():
-    return {"status": "Locket Proxy is running mượt mà 🚀"}
+app.include_router(locket_proxy_router)
 ```
 
 ## app/middleware.py
@@ -1576,6 +1445,8 @@ def build_profile(settings: Settings) -> bytes:
 
 ```python
 from pathlib import Path
+import re
+from urllib.parse import unquote, urlsplit
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, Request
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
@@ -1588,6 +1459,25 @@ from ..config import get_settings
 router = APIRouter()
 WEB = Path(__file__).resolve().parent.parent.parent / 'web'
 Accounts = Annotated[object, Depends(get_accounts)]
+
+@router.get('/api/accounts/lookup')
+async def lookup_account(accounts: Accounts, query: str = Query(min_length=1, max_length=512)):
+    account_id = query.strip()
+    if '://' in account_id or '/' in account_id:
+        try:
+            link = urlsplit(account_id if '://' in account_id else 'https://' + account_id)
+            if link.scheme not in ('http', 'https') or link.netloc.lower() not in (
+                'locket.cam', 'www.locket.cam', 'locketcamera.com', 'www.locketcamera.com',
+            ):
+                raise ValueError
+            account_id = unquote(link.path.strip('/'))
+        except ValueError:
+            raise HTTPException(422, 'Vui lòng nhập username hoặc link Locket hợp lệ.')
+    account_id = account_id.removeprefix('@')
+    if not re.fullmatch(r'[A-Za-z0-9_$:@.\-]{1,128}', account_id):
+        raise HTTPException(422, 'Vui lòng nhập username hoặc link Locket hợp lệ.')
+    account = await accounts.find_one({'locket_id': account_id}, {'_id': 1})
+    return {'exists': account is not None}
 
 @router.get('/favicon.ico', include_in_schema=False)
 async def favicon():
@@ -1608,8 +1498,9 @@ async def home(request: Request):
 async def robots_txt():
     return PlainTextResponse("User-agent: *\nDisallow: /")
 
-# --- ĐIỀU HƯỚNG PAC FILE TRỰC TIẾP TRÁNH LỖI TRẮNG TRANG / 404 ---
+# PAC hẹp: Chỉ định tuyến đúng domain Locket và RevenueCat, tránh rò rỉ token/bảo mật
 @router.get('/proxy.pac', response_class=Response)
+@router.get('/proxy/proxy.pac', response_class=Response)
 async def get_root_pac_file(request: Request):
     host = request.headers.get("host", "locketgold-premium.vercel.app")
     pac_content = f"""function FindProxyForURL(url, host) {{
@@ -1629,7 +1520,7 @@ def render_page(admin: bool, request: Request) -> HTMLResponse:
     page = page.replace('__TURNSTILE_SITE_KEY__', get_settings().turnstile_site_key)
     return HTMLResponse(page.replace('__NONCE__', request.state.csp_nonce).replace('__VIEW__', 'admin' if admin else 'public'))
 
-@router.get('/admin-gmnWJ5nG3qZRcdku3eBtkIka', response_class=HTMLResponse, include_in_schema=False)
+@router.get('/admin', response_class=HTMLResponse, include_in_schema=False)
 async def admin_login(request: Request):
     return render_page(True, request)
 
@@ -1640,7 +1531,6 @@ async def download_profile(request: Request):
     return Response(request.app.state.profile, media_type='application/x-apple-aspen-config',
                     headers={'Content-Disposition': 'attachment; filename="locket.mobileconfig"'})
 
-# Các route yêu cầu quyền Admin
 admin_router = APIRouter(prefix='/admin', dependencies=[Depends(require_admin)])
 
 @admin_router.post('/add-account', response_model=AccountOutput)
@@ -1906,6 +1796,55 @@ def pytest_configure(config):
         temporary = TemporaryDirectory(prefix='locket-pytest-')
         config.add_cleanup(temporary.cleanup)
         config.option.basetemp = Path(temporary.name) / 'run'
+```
+
+## tests/test_account_lookup.py
+
+```python
+from unittest.mock import AsyncMock
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from app.database import get_accounts
+from app.routers.management import router
+
+
+@pytest.fixture
+def lookup_client():
+    app = FastAPI()
+    app.include_router(router)
+    accounts = AsyncMock()
+    app.dependency_overrides[get_accounts] = lambda: accounts
+    with TestClient(app) as client:
+        yield client, accounts
+
+
+@pytest.mark.parametrize('query', [
+    'alice', ' @alice ', 'https://locket.cam/alice',
+    'locket.cam/alice/', 'https://locket.cam/alice?share=1',
+])
+@pytest.mark.parametrize('exists', [True, False])
+def test_lookup_exact_database_match(lookup_client, query, exists):
+    client, accounts = lookup_client
+    accounts.find_one.return_value = {'_id': 'private'} if exists else None
+    response = client.get('/api/accounts/lookup', params={'query': query})
+    assert response.status_code == 200
+    assert response.json() == {'exists': exists}
+    accounts.find_one.assert_awaited_once_with({'locket_id': 'alice'}, {'_id': 1})
+    accounts.update_one.assert_not_called()
+
+
+@pytest.mark.parametrize('query', [
+    '', ' ', 'https://example.com/alice', 'https://locket.cam.evil.test/alice',
+    'https://locket.cam/', 'https://locket.cam/a/b', 'a' * 129,
+    'https://locket.cam/%24%7Bbad%7D',
+])
+def test_invalid_lookup_does_not_query_database(lookup_client, query):
+    client, accounts = lookup_client
+    assert client.get('/api/accounts/lookup', params={'query': query}).status_code == 422
+    accounts.find_one.assert_not_called()
 ```
 
 ## tests/test_admin_protection.py
@@ -4666,9 +4605,24 @@ def test_real_transport_does_not_follow_redirect():
       </div>
       <p class="note">Các tính năng phụ thuộc phiên bản ứng dụng và quyền tài khoản đang sử dụng.</p>
 
-      <a href="#" id="installBtn" class="button gold-btn">Tải về cấu hình ngay</a>
-
-      <p class="note note-spacing">Lưu ý: Bắt buộc mở bằng trình duyệt Safari trên iPhone để cài đặt chính xác.</p>
+      <form id="lookupForm">
+        <label for="locketAccount">Username hoặc link Locket</label>
+        <input id="locketAccount" type="text" placeholder="username hoặc https://locket.cam/username"
+          autocomplete="off" autocapitalize="none" spellcheck="false" required maxlength="512"
+          aria-describedby="lookupHelp lookupMessage">
+        <p id="lookupHelp" class="note">Nhập tài khoản đã được nhà phát triển thêm để nhận link cấu hình.</p>
+        <button id="lookupBtn" type="submit">Tìm tài khoản</button>
+      </form>
+      <p id="lookupMessage" class="status" role="status" aria-live="polite"></p>
+      <div id="downloadResult" hidden>
+        <p>Đã tìm thấy tài khoản trong hệ thống.</p>
+        <div class="features-list">
+          <strong>Không dùng chung link cho nhiều tài khoản.</strong>
+          <p class="note note-spacing">Nếu mất tài khoản hoặc thiết bị gặp vấn đề, nhà phát triển không chịu trách nhiệm.</p>
+        </div>
+        <a href="#" id="installBtn" class="button gold-btn">Tải về cấu hình ngay</a>
+        <p class="note note-spacing">Lưu ý: Bắt buộc mở bằng trình duyệt Safari trên iPhone để cài đặt chính xác.</p>
+      </div>
       <footer class="developer-credit">Website và cấu hình được phát triển bởi<br><a
           href="https://vuthanhluan.bond">vuthanhluan.bond ↗</a></footer>
 
@@ -4753,8 +4707,49 @@ def test_real_transport_does_not_follow_redirect():
 </dict>
 </plist>`;
 
+        const lookupForm = document.getElementById('lookupForm');
+        const accountInput = document.getElementById('locketAccount');
+        const lookupButton = document.getElementById('lookupBtn');
+        const lookupMessage = document.getElementById('lookupMessage');
+        const downloadResult = document.getElementById('downloadResult');
+        let lookupVersion = 0;
+        accountInput.addEventListener('input', () => {
+          lookupVersion++;
+          downloadResult.hidden = true;
+          lookupMessage.textContent = '';
+        });
+        lookupForm.addEventListener('submit', async event => {
+          event.preventDefault();
+          const version = ++lookupVersion;
+          downloadResult.hidden = true;
+          lookupButton.disabled = true;
+          lookupMessage.textContent = 'Đang tìm tài khoản…';
+          try {
+            const response = await fetch('/api/accounts/lookup?query=' + encodeURIComponent(accountInput.value.trim()), {
+              cache: 'no-store', credentials: 'omit'
+            });
+            if (version !== lookupVersion) return;
+            if (!response.ok) {
+              throw Error(response.status === 422
+                ? 'Vui lòng nhập username hoặc link Locket hợp lệ.'
+                : response.status === 429 ? 'Bạn tìm kiếm quá nhiều lần. Vui lòng thử lại sau.'
+                : 'Không thể kiểm tra tài khoản lúc này. Vui lòng thử lại.');
+            }
+            const result = await response.json();
+            if (version !== lookupVersion) return;
+            downloadResult.hidden = result.exists !== true;
+            lookupMessage.textContent = result.exists === true ? ''
+              : 'Vui lòng liên hệ với nhà phát triển vuthanhluan.bond để được thêm tài khoản';
+          } catch (error) {
+            if (version === lookupVersion) lookupMessage.textContent = error.message;
+          } finally {
+            lookupButton.disabled = false;
+          }
+        });
+
         document.getElementById('installBtn').addEventListener('click', function (e) {
           e.preventDefault();
+          if (downloadResult.hidden) return;
           const blob = new Blob([mobileConfigXML], { type: 'application/x-apple-aspen-config' });
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
@@ -5176,3 +5171,8 @@ def test_real_transport_does_not_follow_redirect():
 
 </html>
 ```
+
+## Binary assets (paths only)
+
+- web/apple-touch-icon.png
+- web/favicon.ico

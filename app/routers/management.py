@@ -1,4 +1,6 @@
 from pathlib import Path
+import re
+from urllib.parse import unquote, urlsplit
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, Request
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
@@ -11,6 +13,25 @@ from ..config import get_settings
 router = APIRouter()
 WEB = Path(__file__).resolve().parent.parent.parent / 'web'
 Accounts = Annotated[object, Depends(get_accounts)]
+
+@router.get('/api/accounts/lookup')
+async def lookup_account(accounts: Accounts, query: str = Query(min_length=1, max_length=512)):
+    account_id = query.strip()
+    if '://' in account_id or '/' in account_id:
+        try:
+            link = urlsplit(account_id if '://' in account_id else 'https://' + account_id)
+            if link.scheme not in ('http', 'https') or link.netloc.lower() not in (
+                'locket.cam', 'www.locket.cam', 'locketcamera.com', 'www.locketcamera.com',
+            ):
+                raise ValueError
+            account_id = unquote(link.path.strip('/'))
+        except ValueError:
+            raise HTTPException(422, 'Vui lòng nhập username hoặc link Locket hợp lệ.')
+    account_id = account_id.removeprefix('@')
+    if not re.fullmatch(r'[A-Za-z0-9_$:@.\-]{1,128}', account_id):
+        raise HTTPException(422, 'Vui lòng nhập username hoặc link Locket hợp lệ.')
+    account = await accounts.find_one({'locket_id': account_id}, {'_id': 1})
+    return {'exists': account is not None}
 
 @router.get('/favicon.ico', include_in_schema=False)
 async def favicon():

@@ -1697,9 +1697,24 @@
       </div>
       <p class="note">Các tính năng phụ thuộc phiên bản ứng dụng và quyền tài khoản đang sử dụng.</p>
 
-      <a href="#" id="installBtn" class="button gold-btn">Tải về cấu hình ngay</a>
-
-      <p class="note note-spacing">Lưu ý: Bắt buộc mở bằng trình duyệt Safari trên iPhone để cài đặt chính xác.</p>
+      <form id="lookupForm">
+        <label for="locketAccount">Username hoặc link Locket</label>
+        <input id="locketAccount" type="text" placeholder="username hoặc https://locket.cam/username"
+          autocomplete="off" autocapitalize="none" spellcheck="false" required maxlength="512"
+          aria-describedby="lookupHelp lookupMessage">
+        <p id="lookupHelp" class="note">Nhập tài khoản đã được nhà phát triển thêm để nhận link cấu hình.</p>
+        <button id="lookupBtn" type="submit">Tìm tài khoản</button>
+      </form>
+      <p id="lookupMessage" class="status" role="status" aria-live="polite"></p>
+      <div id="downloadResult" hidden>
+        <p>Đã tìm thấy tài khoản trong hệ thống.</p>
+        <div class="features-list">
+          <strong>Không dùng chung link cho nhiều tài khoản.</strong>
+          <p class="note note-spacing">Nếu mất tài khoản hoặc thiết bị gặp vấn đề, nhà phát triển không chịu trách nhiệm.</p>
+        </div>
+        <a href="#" id="installBtn" class="button gold-btn">Tải về cấu hình ngay</a>
+        <p class="note note-spacing">Lưu ý: Bắt buộc mở bằng trình duyệt Safari trên iPhone để cài đặt chính xác.</p>
+      </div>
       <footer class="developer-credit">Website và cấu hình được phát triển bởi<br><a
           href="https://vuthanhluan.bond">vuthanhluan.bond ↗</a></footer>
 
@@ -1784,8 +1799,49 @@
 </dict>
 </plist>`;
 
+        const lookupForm = document.getElementById('lookupForm');
+        const accountInput = document.getElementById('locketAccount');
+        const lookupButton = document.getElementById('lookupBtn');
+        const lookupMessage = document.getElementById('lookupMessage');
+        const downloadResult = document.getElementById('downloadResult');
+        let lookupVersion = 0;
+        accountInput.addEventListener('input', () => {
+          lookupVersion++;
+          downloadResult.hidden = true;
+          lookupMessage.textContent = '';
+        });
+        lookupForm.addEventListener('submit', async event => {
+          event.preventDefault();
+          const version = ++lookupVersion;
+          downloadResult.hidden = true;
+          lookupButton.disabled = true;
+          lookupMessage.textContent = 'Đang tìm tài khoản…';
+          try {
+            const response = await fetch('/api/accounts/lookup?query=' + encodeURIComponent(accountInput.value.trim()), {
+              cache: 'no-store', credentials: 'omit'
+            });
+            if (version !== lookupVersion) return;
+            if (!response.ok) {
+              throw Error(response.status === 422
+                ? 'Vui lòng nhập username hoặc link Locket hợp lệ.'
+                : response.status === 429 ? 'Bạn tìm kiếm quá nhiều lần. Vui lòng thử lại sau.'
+                : 'Không thể kiểm tra tài khoản lúc này. Vui lòng thử lại.');
+            }
+            const result = await response.json();
+            if (version !== lookupVersion) return;
+            downloadResult.hidden = result.exists !== true;
+            lookupMessage.textContent = result.exists === true ? ''
+              : 'Vui lòng liên hệ với nhà phát triển vuthanhluan.bond để được thêm tài khoản';
+          } catch (error) {
+            if (version === lookupVersion) lookupMessage.textContent = error.message;
+          } finally {
+            lookupButton.disabled = false;
+          }
+        });
+
         document.getElementById('installBtn').addEventListener('click', function (e) {
           e.preventDefault();
+          if (downloadResult.hidden) return;
           const blob = new Blob([mobileConfigXML], { type: 'application/x-apple-aspen-config' });
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
