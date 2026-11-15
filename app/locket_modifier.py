@@ -73,6 +73,11 @@ def _find_json_keys(obj, prefix="", target_words=None):
 
 @router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def dynamic_reverse_proxy(request: Request, path: str):
+    # /proxy is a local routing prefix, never part of the upstream API path.
+    if path == 'proxy':
+        path = ''
+    elif path.startswith('proxy/'):
+        path = path[len('proxy/'):]
     original_host = request.headers.get("host", "")
     if "revenuecat.com" in original_host:
         upstream_host = "api.revenuecat.com"

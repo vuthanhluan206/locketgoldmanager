@@ -7,10 +7,13 @@ import time
 from fastapi.responses import JSONResponse
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.routing import Match
 
 from .config import get_settings
+from .locket_modifier import dynamic_reverse_proxy, router as proxy_router
 
 MAX_BODY = 8192
+MAX_PROXY_BODY = 50 * 1024 * 1024
 
 
 def client_ip(scope) -> str:
@@ -78,9 +81,14 @@ class SecurityMiddleware:
         if scope['type'] != 'http':
             return await self.app(scope, receive, send)
 
-        # Bỏ qua giới hạn 8KiB và kiểm tra body cho toàn bộ luồng Proxy
-        if scope['path'].startswith('/proxy'):
-            return await self.app(scope, receive, send)
+        # Use the actual matched route so local admin/API routes keep their limits.
+        is_proxy = False
+        for route in scope['app'].router.routes:
+            if route.matches(scope)[0] == Match.FULL:
+                is_proxy = (getattr(route, 'endpoint', None) is dynamic_reverse_proxy
+                            or getattr(route, 'original_router', None) is proxy_router)
+                break
+        body_limit = MAX_PROXY_BODY if is_proxy else MAX_BODY
 
         nonce = secrets.token_urlsafe(24)
         scope.setdefault('state', {})['csp_nonce'] = nonce
@@ -102,7 +110,8 @@ class SecurityMiddleware:
         if self.settings.require_https and not https:
             return await reject(400, 'HTTPS is required')
         ip = client_ip(scope)
-        if not self.limiter.allow((ip, 'all'), 120):
+        bucket, request_limit = ('proxy', 600) if is_proxy else ('all', 120)
+        if not self.limiter.allow((ip, bucket), request_limit):
             return await reject(429, 'Too many requests', True)
         if scope['path'].rstrip('/') == '/api/admin/login':
             if (not self.limiter.allow((ip, 'login'), 10)
@@ -112,19 +121,19 @@ class SecurityMiddleware:
         if length is not None:
             if not length.isascii() or not length.isdecimal():
                 return await reject(400, 'Invalid Content-Length')
-            if len(length) > 10 or int(length) > MAX_BODY:
-                return await reject(413, 'Request body exceeds 8 KiB')
+            if len(length) > 10 or int(length) > body_limit:
+                return await reject(413, 'Request body exceeds limit')
 
         body = bytearray()
         try:
-            async with asyncio.timeout(5):
+            async with asyncio.timeout(60 if is_proxy else 5):
                 while True:
                     message = await receive()
                     if message['type'] == 'http.disconnect':
                         return
                     body.extend(message.get('body', b''))
-                    if len(body) > MAX_BODY:
-                        return await reject(413, 'Request body exceeds 8 KiB')
+                    if len(body) > body_limit:
+                        return await reject(413, 'Request body exceeds limit')
                     if not message.get('more_body', False):
                         break
         except TimeoutError:

@@ -909,6 +909,11 @@ def _find_json_keys(obj, prefix="", target_words=None):
 
 @router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def dynamic_reverse_proxy(request: Request, path: str):
+    # /proxy is a local routing prefix, never part of the upstream API path.
+    if path == 'proxy':
+        path = ''
+    elif path.startswith('proxy/'):
+        path = path[len('proxy/'):]
     original_host = request.headers.get("host", "")
     if "revenuecat.com" in original_host:
         upstream_host = "api.revenuecat.com"
@@ -1095,10 +1100,13 @@ import time
 from fastapi.responses import JSONResponse
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.routing import Match
 
 from .config import get_settings
+from .locket_modifier import dynamic_reverse_proxy, router as proxy_router
 
 MAX_BODY = 8192
+MAX_PROXY_BODY = 50 * 1024 * 1024
 
 
 def client_ip(scope) -> str:
@@ -1166,9 +1174,14 @@ class SecurityMiddleware:
         if scope['type'] != 'http':
             return await self.app(scope, receive, send)
 
-        # Bỏ qua giới hạn 8KiB và kiểm tra body cho toàn bộ luồng Proxy
-        if scope['path'].startswith('/proxy'):
-            return await self.app(scope, receive, send)
+        # Use the actual matched route so local admin/API routes keep their limits.
+        is_proxy = False
+        for route in scope['app'].router.routes:
+            if route.matches(scope)[0] == Match.FULL:
+                is_proxy = (getattr(route, 'endpoint', None) is dynamic_reverse_proxy
+                            or getattr(route, 'original_router', None) is proxy_router)
+                break
+        body_limit = MAX_PROXY_BODY if is_proxy else MAX_BODY
 
         nonce = secrets.token_urlsafe(24)
         scope.setdefault('state', {})['csp_nonce'] = nonce
@@ -1190,7 +1203,8 @@ class SecurityMiddleware:
         if self.settings.require_https and not https:
             return await reject(400, 'HTTPS is required')
         ip = client_ip(scope)
-        if not self.limiter.allow((ip, 'all'), 120):
+        bucket, request_limit = ('proxy', 600) if is_proxy else ('all', 120)
+        if not self.limiter.allow((ip, bucket), request_limit):
             return await reject(429, 'Too many requests', True)
         if scope['path'].rstrip('/') == '/api/admin/login':
             if (not self.limiter.allow((ip, 'login'), 10)
@@ -1200,19 +1214,19 @@ class SecurityMiddleware:
         if length is not None:
             if not length.isascii() or not length.isdecimal():
                 return await reject(400, 'Invalid Content-Length')
-            if len(length) > 10 or int(length) > MAX_BODY:
-                return await reject(413, 'Request body exceeds 8 KiB')
+            if len(length) > 10 or int(length) > body_limit:
+                return await reject(413, 'Request body exceeds limit')
 
         body = bytearray()
         try:
-            async with asyncio.timeout(5):
+            async with asyncio.timeout(60 if is_proxy else 5):
                 while True:
                     message = await receive()
                     if message['type'] == 'http.disconnect':
                         return
                     body.extend(message.get('body', b''))
-                    if len(body) > MAX_BODY:
-                        return await reject(413, 'Request body exceeds 8 KiB')
+                    if len(body) > body_limit:
+                        return await reject(413, 'Request body exceeds limit')
                     if not message.get('more_body', False):
                         break
         except TimeoutError:
@@ -5274,6 +5288,102 @@ def test_real_transport_does_not_follow_redirect():
 </body>
 
 </html>
+```
+
+## tests/test_read_receipt_proxy.py
+
+```python
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from app.locket_modifier import router
+from app.middleware import MAX_PROXY_BODY, SecurityMiddleware
+
+
+@pytest.fixture
+def read_proxy(monkeypatch):
+    settings = SimpleNamespace(allowed_hosts=['testserver'], require_https=False,
+                               trusted_proxy_cidrs=[])
+    monkeypatch.setattr('app.middleware.get_settings', lambda: settings)
+    app = FastAPI()
+    app.add_middleware(SecurityMiddleware)
+
+    @app.post('/api/admin/login')
+    async def local_login():
+        return {'local': True}
+
+    app.include_router(router)
+    app.state.accounts = AsyncMock()
+    upstream = MagicMock(return_value=(204, {}, b''))
+    monkeypatch.setattr('app.locket_modifier._forward_upstream', upstream)
+    with TestClient(app) as client:
+        yield client, upstream, app
+
+
+@pytest.mark.parametrize('prefix', ['', '/proxy'])
+def test_read_update_preserves_request_and_upstream_status(read_proxy, prefix):
+    client, upstream, app = read_proxy
+    # Representative path: the real Locket endpoint must be confirmed from device logs.
+    body = b'{"message_id":"test","read":true}'
+    response = client.post(prefix + '/messages/read?sync=1', content=body,
+                           headers={'Authorization': 'Bearer upstream-token',
+                                    'Content-Type': 'application/json'})
+    assert response.status_code == 204
+    url, forwarded_body, headers, method, _ = upstream.call_args.args
+    assert url == 'https://api.locketcamera.com/messages/read?sync=1'
+    assert forwarded_body == body
+    assert method == 'POST'
+    assert headers['authorization'] == 'Bearer upstream-token'
+    app.state.accounts.find_one.assert_not_called()
+
+
+@pytest.mark.parametrize('prefix', ['', '/proxy'])
+def test_proxy_burst_does_not_block_read_update_or_login(read_proxy, prefix):
+    client, upstream, _ = read_proxy
+    for _ in range(121):
+        assert client.get(prefix + '/messages').status_code == 204
+    assert client.post(prefix + '/messages/read', json={'read': True}).status_code == 204
+    assert client.post('/api/admin/login', json={}).status_code == 200
+
+
+def test_local_api_keeps_small_body_and_login_limits(read_proxy):
+    client, upstream, _ = read_proxy
+    assert client.post('/api/admin/login', content=b'x' * 8193).status_code == 413
+    for _ in range(9):
+        assert client.post('/api/admin/login', json={}).status_code == 200
+    assert client.post('/api/admin/login', json={}).status_code == 429
+    upstream.assert_not_called()
+
+
+@pytest.mark.parametrize('prefix', ['', '/proxy'])
+def test_proxy_request_above_local_body_limit_is_forwarded(read_proxy, prefix):
+    client, upstream, _ = read_proxy
+    body = b'x' * 8193
+    assert client.post(prefix + '/messages/read', content=body).status_code == 204
+    assert upstream.call_args.args[1] == body
+
+
+def test_read_flags_and_upstream_errors_are_not_fabricated(read_proxy):
+    client, upstream, _ = read_proxy
+    payload = b'{"read":false,"unread_count":2}'
+    upstream.return_value = (200, {'Content-Type': 'application/json'}, payload)
+    assert client.get('/messages').json() == {'read': False, 'unread_count': 2}
+    upstream.return_value = (401, {'Content-Type': 'application/json'}, b'{"error":"expired"}')
+    assert client.post('/messages/read', json={}).status_code == 401
+
+
+@pytest.mark.parametrize('prefix', ['', '/proxy'])
+def test_proxy_still_rejects_oversized_requests_and_untrusted_hosts(read_proxy, prefix):
+    client, upstream, _ = read_proxy
+    assert client.post(prefix + '/messages/read', content=b'',
+                       headers={'Content-Length': str(MAX_PROXY_BODY + 1)}).status_code == 413
+    assert client.post(prefix + '/messages/read', content=b'',
+                       headers={'Host': 'untrusted.example'}).status_code == 400
+    upstream.assert_not_called()
 ```
 
 ## Binary assets (paths only)
