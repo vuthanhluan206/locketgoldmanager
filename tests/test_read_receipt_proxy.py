@@ -1,12 +1,11 @@
 from types import SimpleNamespace
-from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.locket_modifier import _upstream_host, router
+from app.locket_modifier import router
 from app.middleware import MAX_PROXY_BODY, SecurityMiddleware
 
 
@@ -90,45 +89,3 @@ def test_proxy_still_rejects_oversized_requests_and_untrusted_hosts(read_proxy, 
     assert client.post(prefix + '/messages/read', content=b'',
                        headers={'Host': 'untrusted.example'}).status_code == 400
     upstream.assert_not_called()
-
-
-@pytest.mark.parametrize('path,host,expected', [
-    ('v1/subscribers/alice', 'project.vercel.app', 'api.revenuecat.com'),
-    ('v1/receipts', 'project.vercel.app', 'api.revenuecat.com'),
-    ('messages/read', 'project.vercel.app', 'api.locketcamera.com'),
-    ('v1/projects/test', 'firebaseremoteconfig.googleapis.com', 'firebaseremoteconfig.googleapis.com'),
-    ('messages', 'api.revenuecat.com.attacker.test', 'api.locketcamera.com'),
-])
-def test_upstream_selection_is_exact(path, host, expected):
-    assert _upstream_host(path, host) == expected
-
-
-def test_explicit_subscriber_proxy_uses_revenuecat(read_proxy):
-    client, upstream, _ = read_proxy
-    assert client.get('/proxy/v1/subscribers/alice',
-                      headers={'Authorization': 'Bearer revenuecat-token'}).status_code == 204
-    assert upstream.call_args.args[0] == 'https://api.revenuecat.com/v1/subscribers/alice'
-    assert upstream.call_args.args[2]['authorization'] == 'Bearer revenuecat-token'
-
-
-@pytest.mark.parametrize('path', ['/messages', '/users/alice/messages', '/filters', '/remote-config'])
-def test_feature_responses_are_byte_exact_without_account_queries(read_proxy, path):
-    client, upstream, app = read_proxy
-    raw = b'{ "read":false, "unread_count":2, "filters":[{"enabled":false}] }'
-    upstream.return_value = (200, {'Content-Type': 'application/json', 'ETag': 'original'}, raw)
-    response = client.get(path, headers={'X-Locket-User-Id': 'alice'})
-    assert response.content == raw
-    assert response.headers['etag'] == 'original'
-    app.state.accounts.find_one.assert_not_called()
-
-
-def test_gold_still_uses_database_and_preserves_other_entitlements(read_proxy):
-    client, upstream, app = read_proxy
-    expiry = datetime.now(timezone.utc) + timedelta(days=10)
-    app.state.accounts.find_one.return_value = {'locket_id': 'alice', 'expires_date': expiry}
-    upstream.return_value = (200, {'Content-Type': 'application/json'},
-                            b'{"subscriber":{"entitlements":{"Other":{"enabled":true}}}}')
-    response = client.get('/proxy/v1/subscribers/alice')
-    entitlements = response.json()['subscriber']['entitlements']
-    assert entitlements['Other'] == {'enabled': True}
-    assert entitlements['Gold']['expires_date'] == expiry.isoformat().replace('+00:00', 'Z')

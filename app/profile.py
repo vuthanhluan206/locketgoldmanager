@@ -19,15 +19,7 @@ def build_profile(settings: Settings) -> bytes:
         raise HTTPException(503, 'Chưa cấu hình NEXTDNS_ID trên server.')
     dns = payload('com.apple.dnsSettings.managed', 'NextDNS')
     dns['DNSSettings'] = {'DNSProtocol': 'HTTPS',
-                          'ServerURL': f'https://dns.nextdns.io/{settings.nextdns_id}',
-                          'SupplementalMatchDomains': [
-                              'api.revenuecat.com', '*.revenuecat.com',
-                              'firebaseremoteconfig.googleapis.com',
-                              '*.firebaseremoteconfig.googleapis.com',
-                              'firebaseremoteconfigrealtime.googleapis.com',
-                              '*.firebaselogging.googleapis.com',
-                              'api.locketcamera.com', '*.locketcamera.com',
-                          ]}
+                          'ServerURL': f'https://dns.nextdns.io/{settings.nextdns_id}'}
     contents = [dns]
     if settings.root_ca_path and settings.root_ca_pem:
         raise ValueError('Set only one of ROOT_CA_PATH or ROOT_CA_PEM')

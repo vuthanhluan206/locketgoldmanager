@@ -52,8 +52,6 @@ def test_profile_contains_dns_and_der_root_ca(settings, tmp_path, source):
     dns, root = profile['PayloadContent']
     assert dns['PayloadType'] == 'com.apple.dnsSettings.managed'
     assert dns['DNSSettings']['ServerURL'] == 'https://dns.nextdns.io/abc123'
-    assert 'api.locketcamera.com' in dns['DNSSettings']['SupplementalMatchDomains']
-    assert 'firebaseremoteconfig.googleapis.com' in dns['DNSSettings']['SupplementalMatchDomains']
     assert root['PayloadType'] == 'com.apple.security.root'
     assert root['PayloadContent'] == cert.public_bytes(Encoding.DER)
     uuids = [item['PayloadUUID'] for item in (profile, dns, root)]
