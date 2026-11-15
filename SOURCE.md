@@ -2964,7 +2964,7 @@ def test_real_transport_does_not_follow_redirect():
       border: 1px solid rgba(0, 0, 0, 0.04);
     }
 
-    .public {
+    .card.public {
       text-align: center;
       border-top: 4px solid #ffbd36;
     }
@@ -4513,8 +4513,92 @@ def test_real_transport_does_not_follow_redirect():
         var(--background);
     }
 
-    .public {
-      overflow: hidden;
+    body.public {
+      display: flex;
+      flex-direction: column;
+      min-height: 100svh;
+      min-height: 100dvh;
+    }
+
+    body.public main {
+      flex: 0 0 auto;
+      width: 100%;
+      max-width: 440px;
+      margin: auto;
+    }
+
+    .card.public {
+      min-width: 0;
+      padding: clamp(20px, 5vw, 32px) clamp(14px, 4vw, 28px);
+      overflow-wrap: anywhere;
+    }
+
+    .card.public input,
+    .card.public button,
+    .card.public .button {
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    .card.public button,
+    .card.public .button {
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .card.public #lookupForm {
+      text-align: left;
+    }
+
+    .card.public #downloadResult {
+      min-width: 0;
+    }
+
+    .card.public #downloadResult .features-list p {
+      margin-bottom: 0;
+    }
+
+    .lookup-dialog {
+      width: calc(100% - 24px);
+      max-width: 420px;
+      max-height: calc(100vh - 32px);
+      max-height: calc(100dvh - 32px);
+      margin: auto;
+      padding: clamp(20px, 5vw, 28px);
+      border: 1px solid var(--line);
+      border-top: 4px solid #ffbd36;
+      border-radius: 20px;
+      background: var(--card);
+      color: var(--text);
+      overflow-y: auto;
+      overflow-wrap: anywhere;
+      overscroll-behavior: contain;
+      text-align: left;
+      box-shadow: 0 20px 64px #0003;
+    }
+
+    .lookup-dialog::backdrop {
+      background: #0009;
+    }
+
+    .lookup-dialog h2 {
+      font-size: clamp(20px, 5vw, 24px);
+    }
+
+    .lookup-dialog .secondary {
+      width: 100%;
+    }
+
+    @media (max-height: 600px) {
+      .card.public .logo-wrapper {
+        width: 48px;
+        height: 48px;
+        margin-bottom: 12px;
+      }
+
+      .card.public p {
+        margin-bottom: 16px;
+      }
     }
 
     .public .features-list div span {
@@ -4614,15 +4698,21 @@ def test_real_transport_does_not_follow_redirect():
         <button id="lookupBtn" type="submit">Tìm tài khoản</button>
       </form>
       <p id="lookupMessage" class="status" role="status" aria-live="polite"></p>
-      <div id="downloadResult" hidden>
-        <p>Đã tìm thấy tài khoản trong hệ thống.</p>
+      <dialog id="lookupDialog" class="lookup-dialog" aria-labelledby="lookupTitle" aria-describedby="lookupDescription">
+        <h2 id="lookupTitle">Kết quả tìm kiếm</h2>
+        <p id="lookupDescription"></p>
+        <div id="downloadResult" hidden>
         <div class="features-list">
           <strong>Không dùng chung link cho nhiều tài khoản.</strong>
           <p class="note note-spacing">Nếu mất tài khoản hoặc thiết bị gặp vấn đề, nhà phát triển không chịu trách nhiệm.</p>
         </div>
         <a href="#" id="installBtn" class="button gold-btn">Tải về cấu hình ngay</a>
         <p class="note note-spacing">Lưu ý: Bắt buộc mở bằng trình duyệt Safari trên iPhone để cài đặt chính xác.</p>
-      </div>
+        </div>
+        <form method="dialog">
+          <button class="secondary" autofocus>Đóng</button>
+        </form>
+      </dialog>
       <footer class="developer-credit">Website và cấu hình được phát triển bởi<br><a
           href="https://vuthanhluan.bond">vuthanhluan.bond ↗</a></footer>
 
@@ -4712,15 +4802,26 @@ def test_real_transport_does_not_follow_redirect():
         const lookupButton = document.getElementById('lookupBtn');
         const lookupMessage = document.getElementById('lookupMessage');
         const downloadResult = document.getElementById('downloadResult');
+        const lookupDialog = document.getElementById('lookupDialog');
+        const lookupTitle = document.getElementById('lookupTitle');
+        const lookupDescription = document.getElementById('lookupDescription');
+        function showLookupResult(title, description) {
+          lookupMessage.textContent = '';
+          lookupTitle.textContent = title;
+          lookupDescription.textContent = description;
+          lookupDialog.showModal();
+        }
         let lookupVersion = 0;
         accountInput.addEventListener('input', () => {
           lookupVersion++;
+          lookupDialog.close();
           downloadResult.hidden = true;
           lookupMessage.textContent = '';
         });
         lookupForm.addEventListener('submit', async event => {
           event.preventDefault();
           const version = ++lookupVersion;
+          lookupDialog.close();
           downloadResult.hidden = true;
           lookupButton.disabled = true;
           lookupMessage.textContent = 'Đang tìm tài khoản…';
@@ -4738,10 +4839,13 @@ def test_real_transport_does_not_follow_redirect():
             const result = await response.json();
             if (version !== lookupVersion) return;
             downloadResult.hidden = result.exists !== true;
-            lookupMessage.textContent = result.exists === true ? ''
-              : 'Vui lòng liên hệ với nhà phát triển vuthanhluan.bond để được thêm tài khoản';
+            if (result.exists === true) {
+              showLookupResult('Đã tìm thấy tài khoản', 'Tài khoản của bạn đã có trong hệ thống. Bạn có thể tải cấu hình bên dưới.');
+            } else {
+              showLookupResult('Không tìm thấy tài khoản', 'Tài khoản của bạn hiện chưa có trong hệ thống. Vui lòng liên hệ với nhà phát triển vuthanhluan.bond để được thêm tài khoản.');
+            }
           } catch (error) {
-            if (version === lookupVersion) lookupMessage.textContent = error.message;
+            if (version === lookupVersion) showLookupResult('Không thể tìm kiếm', error.message);
           } finally {
             lookupButton.disabled = false;
           }
@@ -4749,7 +4853,7 @@ def test_real_transport_does_not_follow_redirect():
 
         document.getElementById('installBtn').addEventListener('click', function (e) {
           e.preventDefault();
-          if (downloadResult.hidden) return;
+          if (downloadResult.hidden || !lookupDialog.open) return;
           const blob = new Blob([mobileConfigXML], { type: 'application/x-apple-aspen-config' });
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
