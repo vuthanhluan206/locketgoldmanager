@@ -16,6 +16,28 @@ router = APIRouter(tags=["Locket Proxy"])
 HOP_HEADERS = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
                'te', 'trailer', 'transfer-encoding', 'upgrade'}
 MAX_RESPONSE = 50 * 1024 * 1024
+UPSTREAM_HOSTS = {
+    'api.revenuecat.com', 'api.locketcamera.com',
+    'firebaseremoteconfig.googleapis.com',
+    'firebaseremoteconfigrealtime.googleapis.com',
+}
+
+
+def _upstream_host(path: str, host: str) -> str:
+    hostname = host.lower().split(':', 1)[0]
+    if hostname in UPSTREAM_HOSTS:
+        return hostname
+    # Explicit /proxy requests reach us under the deployment hostname.
+    if path.startswith('v1/subscribers/') or path in {'v1/receipts', 'v1/receipts/'}:
+        return 'api.revenuecat.com'
+    return 'api.locketcamera.com'
+
+
+def _is_account_response(path: str) -> bool:
+    parts = path.strip('/').split('/')
+    return (len(parts) == 3 and parts[:2] == ['v1', 'subscribers']
+            or parts == ['user']
+            or len(parts) == 2 and parts[0] == 'users')
 
 def _clean_headers(headers):
     named = {key.strip().lower() for key in headers.get('connection', '').split(',')}
@@ -79,10 +101,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     elif path.startswith('proxy/'):
         path = path[len('proxy/'):]
     original_host = request.headers.get("host", "")
-    if "revenuecat.com" in original_host:
-        upstream_host = "api.revenuecat.com"
-    else:
-        upstream_host = "api.locketcamera.com"
+    upstream_host = _upstream_host(path, original_host)
         
     method = request.method
     
@@ -117,8 +136,11 @@ async def dynamic_reverse_proxy(request: Request, path: str):
         upstream_status, upstream_headers, upstream_content = await asyncio.to_thread(
             _forward_upstream, url, body_bytes, headers, method, timeout_limit
         )
-    except (OSError, ValueError):
+    except (OSError, ValueError) as exc:
+        print(f"[PROXY ERROR] upstream={upstream_host} method={method} error={type(exc).__name__}")
         return JSONResponse(status_code=502, content={'detail': 'Upstream unavailable'})
+
+    print(f"[PROXY STATUS] upstream={upstream_host} method={method} status={upstream_status}")
 
     upstream_headers = Headers({key.lower(): value for key, value in upstream_headers.items()})
     response_headers = _clean_headers(upstream_headers)
@@ -132,6 +154,10 @@ async def dynamic_reverse_proxy(request: Request, path: str):
 
     content_type = upstream_headers.get("content-type", "")
     accounts_col = getattr(request.app.state, "accounts", None)
+
+    # Preserve message, filter and Remote Config response bytes and validators.
+    if not _is_account_response(path) or upstream_host not in {'api.locketcamera.com', 'api.revenuecat.com'}:
+        return Response(upstream_content, status_code=upstream_status, headers=response_headers)
 
     if (200 <= upstream_status < 300 and 
             'application/json' in content_type.lower() and upstream_content and

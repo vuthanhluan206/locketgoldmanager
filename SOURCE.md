@@ -852,6 +852,28 @@ router = APIRouter(tags=["Locket Proxy"])
 HOP_HEADERS = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
                'te', 'trailer', 'transfer-encoding', 'upgrade'}
 MAX_RESPONSE = 50 * 1024 * 1024
+UPSTREAM_HOSTS = {
+    'api.revenuecat.com', 'api.locketcamera.com',
+    'firebaseremoteconfig.googleapis.com',
+    'firebaseremoteconfigrealtime.googleapis.com',
+}
+
+
+def _upstream_host(path: str, host: str) -> str:
+    hostname = host.lower().split(':', 1)[0]
+    if hostname in UPSTREAM_HOSTS:
+        return hostname
+    # Explicit /proxy requests reach us under the deployment hostname.
+    if path.startswith('v1/subscribers/') or path in {'v1/receipts', 'v1/receipts/'}:
+        return 'api.revenuecat.com'
+    return 'api.locketcamera.com'
+
+
+def _is_account_response(path: str) -> bool:
+    parts = path.strip('/').split('/')
+    return (len(parts) == 3 and parts[:2] == ['v1', 'subscribers']
+            or parts == ['user']
+            or len(parts) == 2 and parts[0] == 'users')
 
 def _clean_headers(headers):
     named = {key.strip().lower() for key in headers.get('connection', '').split(',')}
@@ -915,10 +937,7 @@ async def dynamic_reverse_proxy(request: Request, path: str):
     elif path.startswith('proxy/'):
         path = path[len('proxy/'):]
     original_host = request.headers.get("host", "")
-    if "revenuecat.com" in original_host:
-        upstream_host = "api.revenuecat.com"
-    else:
-        upstream_host = "api.locketcamera.com"
+    upstream_host = _upstream_host(path, original_host)
         
     method = request.method
     
@@ -953,8 +972,11 @@ async def dynamic_reverse_proxy(request: Request, path: str):
         upstream_status, upstream_headers, upstream_content = await asyncio.to_thread(
             _forward_upstream, url, body_bytes, headers, method, timeout_limit
         )
-    except (OSError, ValueError):
+    except (OSError, ValueError) as exc:
+        print(f"[PROXY ERROR] upstream={upstream_host} method={method} error={type(exc).__name__}")
         return JSONResponse(status_code=502, content={'detail': 'Upstream unavailable'})
+
+    print(f"[PROXY STATUS] upstream={upstream_host} method={method} status={upstream_status}")
 
     upstream_headers = Headers({key.lower(): value for key, value in upstream_headers.items()})
     response_headers = _clean_headers(upstream_headers)
@@ -968,6 +990,10 @@ async def dynamic_reverse_proxy(request: Request, path: str):
 
     content_type = upstream_headers.get("content-type", "")
     accounts_col = getattr(request.app.state, "accounts", None)
+
+    # Preserve message, filter and Remote Config response bytes and validators.
+    if not _is_account_response(path) or upstream_host not in {'api.locketcamera.com', 'api.revenuecat.com'}:
+        return Response(upstream_content, status_code=upstream_status, headers=response_headers)
 
     if (200 <= upstream_status < 300 and 
             'application/json' in content_type.lower() and upstream_content and
@@ -1401,7 +1427,15 @@ def build_profile(settings: Settings) -> bytes:
         raise HTTPException(503, 'Chưa cấu hình NEXTDNS_ID trên server.')
     dns = payload('com.apple.dnsSettings.managed', 'NextDNS')
     dns['DNSSettings'] = {'DNSProtocol': 'HTTPS',
-                          'ServerURL': f'https://dns.nextdns.io/{settings.nextdns_id}'}
+                          'ServerURL': f'https://dns.nextdns.io/{settings.nextdns_id}',
+                          'SupplementalMatchDomains': [
+                              'api.revenuecat.com', '*.revenuecat.com',
+                              'firebaseremoteconfig.googleapis.com',
+                              '*.firebaseremoteconfig.googleapis.com',
+                              'firebaseremoteconfigrealtime.googleapis.com',
+                              '*.firebaselogging.googleapis.com',
+                              'api.locketcamera.com', '*.locketcamera.com',
+                          ]}
     contents = [dns]
     if settings.root_ca_path and settings.root_ca_pem:
         raise ValueError('Set only one of ROOT_CA_PATH or ROOT_CA_PEM')
@@ -2677,6 +2711,8 @@ def test_profile_contains_dns_and_der_root_ca(settings, tmp_path, source):
     dns, root = profile['PayloadContent']
     assert dns['PayloadType'] == 'com.apple.dnsSettings.managed'
     assert dns['DNSSettings']['ServerURL'] == 'https://dns.nextdns.io/abc123'
+    assert 'api.locketcamera.com' in dns['DNSSettings']['SupplementalMatchDomains']
+    assert 'firebaseremoteconfig.googleapis.com' in dns['DNSSettings']['SupplementalMatchDomains']
     assert root['PayloadType'] == 'com.apple.security.root'
     assert root['PayloadContent'] == cert.public_bytes(Encoding.DER)
     uuids = [item['PayloadUUID'] for item in (profile, dns, root)]
@@ -4720,7 +4756,7 @@ def test_real_transport_does_not_follow_redirect():
           <strong>Không dùng chung link cho nhiều tài khoản.</strong>
           <p class="note note-spacing">Nếu mất tài khoản hoặc thiết bị gặp vấn đề, nhà phát triển không chịu trách nhiệm.</p>
         </div>
-        <a href="#" id="installBtn" class="button gold-btn">Tải về cấu hình ngay</a>
+        <a href="/profile.mobileconfig" id="installBtn" class="button gold-btn">Tải về cấu hình ngay</a>
         <p class="note note-spacing">Lưu ý: Bắt buộc mở bằng trình duyệt Safari trên iPhone để cài đặt chính xác.</p>
         </div>
         <form method="dialog">
@@ -4731,86 +4767,6 @@ def test_real_transport_does_not_follow_redirect():
           href="https://vuthanhluan.bond">vuthanhluan.bond ↗</a></footer>
 
       <script nonce="__NONCE__">
-        const mobileConfigXML = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>PayloadContent</key>
-    <array>
-        <dict>
-            <key>PayloadType</key>
-            <string>com.apple.security.root</string>
-            <key>PayloadVersion</key>
-            <integer>1</integer>
-            <key>PayloadIdentifier</key>
-            <string>com.locketgold.universal.ca</string>
-            <key>PayloadUUID</key>
-            <string>AA18E842-4B4C-4CD9-B1FB-183A40386AA6</string>
-            <key>PayloadDisplayName</key>
-            <string>Locket Gold Root CA</string>
-            <key>PayloadDescription</key>
-            <string>Chứng chỉ bảo mật hệ thống Locket Gold</string>
-            <key>PayloadCertificateFileName</key>
-            <string>LocketGold_CA.crt</string>
-            <key>PayloadContent</key>
-            <data>
-            MIIFVDCCAzygAwIBAgIUCu2NDd/O/wPGB3RJ40XTNmVVGDQwDQYJKoZIhvcNAQELBQAwQjELMAkGA1UEBhMCVVMxFjAUBgNVBAoMDUxvY2tldEdvbGQgQ0ExGzAZBgNVBAMMEkxvY2tldEdvbGQgUm9vdCBDQTAeFw0yNjA5MjgxNjMwMzFaFw0zNjA5MjUxNjMwMzFaMEIxCzAJBgNVBAYTAlVTMRYwFAYDVQQKDA1Mb2NrZXRHb2xkIENBMRswGQYDVQQDDBJMb2NrZXRHb2xkIFJvb3QgQ0EwggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIKAoICAQCqJSF1M9+BKLQ6h7NcD2JOROP3cwS4IkV7uDTzA4EKpX6tFV+uNLs4IMrwYQc5xp14R7/NVI8jpmikAQ5rYV0VaeWldpp4aIN4o+l9ht2y+mLF0vAbVQmMny3DDsD5v3tlN/wWBYP8P4s1y8j967ogK/FjKaW7NzyDcNrX3W2b95KMs/0S2T/utW8aXZGg91FNPm8Fv4JXovIgsApxFwLpGLrwUJdfVWY/eWNJrFZYa64lncEW/HXqezZt6vqtzps6rIDqHotBy1bQQ428N/D4XBMBN3ZL63lG4Mf+PpMt7CI/bRY9XJxRpGcTXULyqqgw7m4F8hhm4hmvwnQ6Y4lHaAk5WX3KO5j1ejYqrDGhoZ4C7AI3rAHXnLj8EufUEoCvfha49aNPbfH5kFnSepEt8gko0mh9ZuPkN75Qbst1KuE3U9A/q5xpaZYN5SG7JTxfWqFUscCVUAm+lFm0F1clxe99YxaRZftVQOxTk+AsPfm+KGvUBynvHqndpBusa6TE3Ht9gJfwxCa9nXsm+D/fdPRnasXeXYWR28LH5sMNDhN+kdUbWP56r1gpk6mxUj309A27YZgX0JUWYPV5P3IZYmuGyHJWdH72ZW24Eg2yZK4gBn/8r7S+Zla7h522IFkS3KwHLsUxuwn/C+yW9GNM/+uD0NEH38EQFi9Oqw1t8wIDAQABo0IwQDAPBgNVHRMBAf8EBTADAQH/MA4GA1UdDwEB/wQEAwIBhjAdBgNVHQ4EFgQUr+JPC5FaF1YxO58iWS8Nuuc2s2swDQYJKoZIhvcNAQELBQADggIBADCIeX1dmk8eAM8PvRU0ckvaEWAkgqQnA4zGUKRZM5+nBVf5EbXMDjdZROtVxh0ihOlFNL5pamvyOpVuLpR18mC+ujaTow2Afl5DIXHReO+kisJ9LR/WLmqPrONpc7whKMac499M+JRr5Xs9ziZ/XC/mxaZOV2EZQ+ogUZSht51i2ktckCU6xob1bNbZvAA6x9xehcNOKepn74UcPsbaZizf8xMmBg1xGxYTnLejTfgFHGIIlgbOZ88HFdLBiDy9oR0TsNNob5T7UbIUcokUu9SUreTsowAtgynXM+kLvOZNfosk1U5012HmmbZcCbx3gfa/83Q1C9YyjdDA8IywksSCgDcSHztKUhEdNUEmdjcKTfU5oZEkY4lBYizdhhiydhZdqyYECCnJkW6oC31UeHSm21Bxl1K0B9pkMIhFvgfwt4Z6dHmCKKAsXcrey2jdLxPb4DDz3b1BCfNeNvSpm2JLTO4vHE+ZAn2pVtlbd4dH05DXJPakfGc6iKAdxhPZTWyY3xVyuneg9pYTijGdh4sS3rShGLVaD0i31Crac3T6piOxtQTdY1jsW+L4kgdfnOhkt3r06gdlst6bG7uhnq21AuJDGWOZkKifIPWmqUEl4NVlOl4Mc2Y7CQclqOSp2G8rvMuK/beCGsHHnjZIrQVdkq+/afHHCN0I2yZkxO3R
-            </data>
-        </dict>
-        <dict>
-            <key>PayloadType</key>
-            <string>com.apple.dnsSettings.managed</string>
-            <key>PayloadVersion</key>
-            <integer>1</integer>
-            <key>PayloadIdentifier</key>
-            <string>com.locketgold.universal.dns</string>
-            <key>PayloadUUID</key>
-            <string>6F897F59-27E3-4FA8-9D3E-1D1133BF4BD8</string>
-            <key>PayloadDisplayName</key>
-            <string>Locket Gold DNS Proxy</string>
-            <key>PayloadDescription</key>
-            <string>Cấu hình định tuyến kết nối dịch vụ Locket Gold</string>
-            <key>DNSSettings</key>
-            <dict>
-                <key>DNSProtocol</key>
-                <string>HTTPS</string>
-                <key>ServerURL</key>
-                <string>https://dns.nextdns.io/8f4cb9</string>
-                <key>SupplementalMatchDomains</key>
-                <array>
-                    <string>api.revenuecat.com</string>
-                    <string>*.revenuecat.com</string>
-                    <string>firebaseremoteconfig.googleapis.com</string>
-                    <string>*.firebaseremoteconfig.googleapis.com</string>
-                    <string>firebaseremoteconfigrealtime.googleapis.com</string>
-                    <string>*.firebaselogging.googleapis.com</string>
-                    <string>api.locketcamera.com</string>
-                    <string>*.locketcamera.com</string>
-                </array>
-            </dict>
-            <key>ProhibitDisablement</key>
-            <false/>
-        </dict>
-    </array>
-    <key>PayloadDisplayName</key>
-    <string>Locket Gold Profile</string>
-    <key>PayloadDescription</key>
-    <string>Cấu hình DNS được cung cấp bởi nhà phát triển vuthanhluan.bond.</string>
-    <key>PayloadIdentifier</key>
-    <string>com.locketgold.universal.profile</string>
-    <key>PayloadOrganization</key>
-    <string>vuthanhluan.bond</string>
-    <key>PayloadRemovalDisallowed</key>
-    <false/>
-    <key>PayloadType</key>
-    <string>Configuration</string>
-    <key>PayloadUUID</key>
-    <string>00C1F18A-50E5-4F85-ADAA-15DC8436FADC</string>
-    <key>PayloadVersion</key>
-    <integer>1</integer>
-</dict>
-</plist>`;
-
         const lookupForm = document.getElementById('lookupForm');
         const accountInput = document.getElementById('locketAccount');
         const lookupButton = document.getElementById('lookupBtn');
@@ -4866,17 +4822,7 @@ def test_real_transport_does_not_follow_redirect():
         });
 
         document.getElementById('installBtn').addEventListener('click', function (e) {
-          e.preventDefault();
-          if (downloadResult.hidden || !lookupDialog.open) return;
-          const blob = new Blob([mobileConfigXML], { type: 'application/x-apple-aspen-config' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'LocketGold.mobileconfig';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
+          if (downloadResult.hidden || !lookupDialog.open) e.preventDefault();
         });
       </script>
     </section>
@@ -5294,13 +5240,14 @@ def test_real_transport_does_not_follow_redirect():
 
 ```python
 from types import SimpleNamespace
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.locket_modifier import router
+from app.locket_modifier import _upstream_host, router
 from app.middleware import MAX_PROXY_BODY, SecurityMiddleware
 
 
@@ -5384,6 +5331,48 @@ def test_proxy_still_rejects_oversized_requests_and_untrusted_hosts(read_proxy, 
     assert client.post(prefix + '/messages/read', content=b'',
                        headers={'Host': 'untrusted.example'}).status_code == 400
     upstream.assert_not_called()
+
+
+@pytest.mark.parametrize('path,host,expected', [
+    ('v1/subscribers/alice', 'project.vercel.app', 'api.revenuecat.com'),
+    ('v1/receipts', 'project.vercel.app', 'api.revenuecat.com'),
+    ('messages/read', 'project.vercel.app', 'api.locketcamera.com'),
+    ('v1/projects/test', 'firebaseremoteconfig.googleapis.com', 'firebaseremoteconfig.googleapis.com'),
+    ('messages', 'api.revenuecat.com.attacker.test', 'api.locketcamera.com'),
+])
+def test_upstream_selection_is_exact(path, host, expected):
+    assert _upstream_host(path, host) == expected
+
+
+def test_explicit_subscriber_proxy_uses_revenuecat(read_proxy):
+    client, upstream, _ = read_proxy
+    assert client.get('/proxy/v1/subscribers/alice',
+                      headers={'Authorization': 'Bearer revenuecat-token'}).status_code == 204
+    assert upstream.call_args.args[0] == 'https://api.revenuecat.com/v1/subscribers/alice'
+    assert upstream.call_args.args[2]['authorization'] == 'Bearer revenuecat-token'
+
+
+@pytest.mark.parametrize('path', ['/messages', '/users/alice/messages', '/filters', '/remote-config'])
+def test_feature_responses_are_byte_exact_without_account_queries(read_proxy, path):
+    client, upstream, app = read_proxy
+    raw = b'{ "read":false, "unread_count":2, "filters":[{"enabled":false}] }'
+    upstream.return_value = (200, {'Content-Type': 'application/json', 'ETag': 'original'}, raw)
+    response = client.get(path, headers={'X-Locket-User-Id': 'alice'})
+    assert response.content == raw
+    assert response.headers['etag'] == 'original'
+    app.state.accounts.find_one.assert_not_called()
+
+
+def test_gold_still_uses_database_and_preserves_other_entitlements(read_proxy):
+    client, upstream, app = read_proxy
+    expiry = datetime.now(timezone.utc) + timedelta(days=10)
+    app.state.accounts.find_one.return_value = {'locket_id': 'alice', 'expires_date': expiry}
+    upstream.return_value = (200, {'Content-Type': 'application/json'},
+                            b'{"subscriber":{"entitlements":{"Other":{"enabled":true}}}}')
+    response = client.get('/proxy/v1/subscribers/alice')
+    entitlements = response.json()['subscriber']['entitlements']
+    assert entitlements['Other'] == {'enabled': True}
+    assert entitlements['Gold']['expires_date'] == expiry.isoformat().replace('+00:00', 'Z')
 ```
 
 ## Binary assets (paths only)
